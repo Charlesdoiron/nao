@@ -217,7 +217,7 @@ export const useAgent = ({ disableNavigation = false }: { disableNavigation?: bo
 					queryClient.invalidateQueries({ queryKey: trpc.account.getManagedCreditStatus.queryKey() });
 					queryClient.invalidateQueries({ queryKey: trpc.account.getCreditSummary.queryKey() });
 					queryClient.invalidateQueries({ queryKey: trpc.account.listCreditLedger.queryKey() });
-					queryClient.invalidateQueries({ queryKey: trpc.account.listAiUsage.queryKey() });
+					queryClient.invalidateQueries({ queryKey: trpc.account.listManagedAiUsage.queryKey() });
 					queryClient.invalidateQueries({
 						queryKey: trpc.project.listAvailableTranscribeModels.queryKey(),
 					});

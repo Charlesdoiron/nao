@@ -426,8 +426,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.ai_usage": {
-      "name": "ai_usage",
+    "public.managed_ai_usage": {
+      "name": "managed_ai_usage",
       "schema": "",
       "columns": {
         "id": {
@@ -580,26 +580,26 @@
           "primaryKey": false,
           "notNull": false
         },
-        "input_no_cache_rate_micro_usd": {
-          "name": "input_no_cache_rate_micro_usd",
+        "input_no_cache_rate_micro_usd_per_million_tokens": {
+          "name": "input_no_cache_rate_micro_usd_per_million_tokens",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
-        "input_cache_read_rate_micro_usd": {
-          "name": "input_cache_read_rate_micro_usd",
+        "input_cache_read_rate_micro_usd_per_million_tokens": {
+          "name": "input_cache_read_rate_micro_usd_per_million_tokens",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
-        "input_cache_write_rate_micro_usd": {
-          "name": "input_cache_write_rate_micro_usd",
+        "input_cache_write_rate_micro_usd_per_million_tokens": {
+          "name": "input_cache_write_rate_micro_usd_per_million_tokens",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
-        "output_rate_micro_usd": {
-          "name": "output_rate_micro_usd",
+        "output_rate_micro_usd_per_million_tokens": {
+          "name": "output_rate_micro_usd_per_million_tokens",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
@@ -663,8 +663,8 @@
         }
       },
       "indexes": {
-        "ai_usage_orgId_createdAt_idx": {
-          "name": "ai_usage_orgId_createdAt_idx",
+        "managed_ai_usage_orgId_startedAt_idx": {
+          "name": "managed_ai_usage_orgId_startedAt_idx",
           "columns": [
             {
               "expression": "org_id",
@@ -690,8 +690,8 @@
           "method": "btree",
           "with": {}
         },
-        "ai_usage_userId_createdAt_idx": {
-          "name": "ai_usage_userId_createdAt_idx",
+        "managed_ai_usage_userId_startedAt_idx": {
+          "name": "managed_ai_usage_userId_startedAt_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -717,8 +717,8 @@
           "method": "btree",
           "with": {}
         },
-        "ai_usage_userId_runId_idx": {
-          "name": "ai_usage_userId_runId_idx",
+        "managed_ai_usage_userId_runId_idx": {
+          "name": "managed_ai_usage_userId_runId_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -738,8 +738,8 @@
           "method": "btree",
           "with": {}
         },
-        "ai_usage_projectId_createdAt_idx": {
-          "name": "ai_usage_projectId_createdAt_idx",
+        "managed_ai_usage_projectId_startedAt_idx": {
+          "name": "managed_ai_usage_projectId_startedAt_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -765,8 +765,8 @@
           "method": "btree",
           "with": {}
         },
-        "ai_usage_chatMessageId_idx": {
-          "name": "ai_usage_chatMessageId_idx",
+        "managed_ai_usage_chatMessageId_idx": {
+          "name": "managed_ai_usage_chatMessageId_idx",
           "columns": [
             {
               "expression": "chat_message_id",
@@ -780,8 +780,8 @@
           "method": "btree",
           "with": {}
         },
-        "ai_usage_status_idx": {
-          "name": "ai_usage_status_idx",
+        "managed_ai_usage_status_idx": {
+          "name": "managed_ai_usage_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -797,9 +797,9 @@
         }
       },
       "foreignKeys": {
-        "ai_usage_wallet_id_credit_wallet_id_fk": {
-          "name": "ai_usage_wallet_id_credit_wallet_id_fk",
-          "tableFrom": "ai_usage",
+        "managed_ai_usage_wallet_id_credit_wallet_id_fk": {
+          "name": "managed_ai_usage_wallet_id_credit_wallet_id_fk",
+          "tableFrom": "managed_ai_usage",
           "tableTo": "credit_wallet",
           "columnsFrom": [
             "wallet_id"
@@ -810,9 +810,9 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "ai_usage_user_id_user_id_fk": {
-          "name": "ai_usage_user_id_user_id_fk",
-          "tableFrom": "ai_usage",
+        "managed_ai_usage_user_id_user_id_fk": {
+          "name": "managed_ai_usage_user_id_user_id_fk",
+          "tableFrom": "managed_ai_usage",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -823,9 +823,9 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "ai_usage_org_id_organization_id_fk": {
-          "name": "ai_usage_org_id_organization_id_fk",
-          "tableFrom": "ai_usage",
+        "managed_ai_usage_org_id_organization_id_fk": {
+          "name": "managed_ai_usage_org_id_organization_id_fk",
+          "tableFrom": "managed_ai_usage",
           "tableTo": "organization",
           "columnsFrom": [
             "org_id"
@@ -836,9 +836,9 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "ai_usage_project_id_project_id_fk": {
-          "name": "ai_usage_project_id_project_id_fk",
-          "tableFrom": "ai_usage",
+        "managed_ai_usage_project_id_project_id_fk": {
+          "name": "managed_ai_usage_project_id_project_id_fk",
+          "tableFrom": "managed_ai_usage",
           "tableTo": "project",
           "columnsFrom": [
             "project_id"
@@ -849,9 +849,9 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "ai_usage_chat_id_chat_id_fk": {
-          "name": "ai_usage_chat_id_chat_id_fk",
-          "tableFrom": "ai_usage",
+        "managed_ai_usage_chat_id_chat_id_fk": {
+          "name": "managed_ai_usage_chat_id_chat_id_fk",
+          "tableFrom": "managed_ai_usage",
           "tableTo": "chat",
           "columnsFrom": [
             "chat_id"
@@ -865,8 +865,8 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "ai_usage_operation_id_unique": {
-          "name": "ai_usage_operation_id_unique",
+        "managed_ai_usage_operation_id_unique": {
+          "name": "managed_ai_usage_operation_id_unique",
           "nullsNotDistinct": false,
           "columns": [
             "operation_id"
@@ -3119,10 +3119,10 @@
           "onDelete": "set null",
           "onUpdate": "no action"
         },
-        "credit_ledger_usage_id_ai_usage_id_fk": {
-          "name": "credit_ledger_usage_id_ai_usage_id_fk",
+        "credit_ledger_usage_id_managed_ai_usage_id_fk": {
+          "name": "credit_ledger_usage_id_managed_ai_usage_id_fk",
           "tableFrom": "credit_ledger",
-          "tableTo": "ai_usage",
+          "tableTo": "managed_ai_usage",
           "columnsFrom": [
             "usage_id"
           ],

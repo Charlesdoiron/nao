@@ -23,7 +23,7 @@ const ManagedWelcomeGrantContext = createContext<ManagedWelcomeGrantContextValue
 
 export function ManagedWelcomeGrantProvider({ children }: { children: React.ReactNode }) {
 	const queryClient = useQueryClient();
-	const confirmGrant = useMutation(trpc.account.confirmWelcomeGrant.mutationOptions());
+	const claimGrant = useMutation(trpc.account.claimWelcomeGrant.mutationOptions());
 	const pendingRef = useRef<PendingConfirmation | null>(null);
 	const [pending, setPending] = useState<PendingConfirmation | null>(null);
 	const [error, setError] = useState<string>();
@@ -66,7 +66,7 @@ export function ManagedWelcomeGrantProvider({ children }: { children: React.Reac
 	const handleConfirm = async () => {
 		setError(undefined);
 		try {
-			await confirmGrant.mutateAsync();
+			await claimGrant.mutateAsync();
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: trpc.account.getManagedCreditStatus.queryKey() }),
 				queryClient.invalidateQueries({ queryKey: trpc.account.getCreditSummary.queryKey() }),
@@ -86,7 +86,7 @@ export function ManagedWelcomeGrantProvider({ children }: { children: React.Reac
 			<Dialog
 				open={!!pending}
 				onOpenChange={(open) => {
-					if (!open && !confirmGrant.isPending) {
+					if (!open && !claimGrant.isPending) {
 						settle('cancel');
 					}
 				}}
@@ -104,15 +104,15 @@ export function ManagedWelcomeGrantProvider({ children }: { children: React.Reac
 						<Button
 							variant='outline'
 							className='rounded-full'
-							disabled={confirmGrant.isPending}
+							disabled={claimGrant.isPending}
 							onClick={() => settle('switch-project')}
 						>
 							Switch project
 						</Button>
 						<Button
 							className='rounded-full'
-							disabled={confirmGrant.isPending}
-							isLoading={confirmGrant.isPending}
+							disabled={claimGrant.isPending}
+							isLoading={claimGrant.isPending}
 							onClick={handleConfirm}
 						>
 							Apply $5 and send

@@ -138,8 +138,8 @@ export type NewCreditWallet = typeof sqliteSchema.creditWallet.$inferInsert;
 export type DBCreditLedger = typeof sqliteSchema.creditLedger.$inferSelect;
 export type NewCreditLedger = typeof sqliteSchema.creditLedger.$inferInsert;
 
-export type DBAiUsage = typeof sqliteSchema.aiUsage.$inferSelect;
-export type NewAiUsage = typeof sqliteSchema.aiUsage.$inferInsert;
+export type DBManagedAiUsage = typeof sqliteSchema.managedAiUsage.$inferSelect;
+export type NewManagedAiUsage = typeof sqliteSchema.managedAiUsage.$inferInsert;
 
 export type DBContextRecommendationRun = typeof sqliteSchema.contextRecommendationRun.$inferSelect;
 export type NewContextRecommendationRun = typeof sqliteSchema.contextRecommendationRun.$inferInsert;

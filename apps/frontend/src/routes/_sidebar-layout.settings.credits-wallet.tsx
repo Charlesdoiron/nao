@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 
-import { CreditsAiUsage } from '@/components/settings/credits-ai-usage';
+import { CreditsWalletContent } from '@/components/settings/credits-wallet-content';
 import { SettingsPageWrapper } from '@/components/ui/settings-card';
 import { usePermissions } from '@/hooks/use-permissions';
 import { requireCloud } from '@/lib/require-admin';
@@ -25,7 +25,7 @@ function CreditsWalletPage() {
 							: "View your organization's credit balance, wallet history, and chat usage."}
 					</p>
 				</div>
-				<CreditsAiUsage isAdmin={adminStatus} />
+				<CreditsWalletContent isAdmin={adminStatus} />
 			</div>
 		</SettingsPageWrapper>
 	);

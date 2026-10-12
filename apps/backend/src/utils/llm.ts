@@ -1,7 +1,7 @@
 import { type BackgroundModelCategory, selectBackgroundModel } from '@nao/shared';
 import { type LlmProvider, type LlmSelectedModel, providerKind } from '@nao/shared/types';
 
-import { type AiUsageContext, isManagedAiEnabled, withAiUsageMetering } from '../agents/managed-ai';
+import { isManagedAiEnabled, type ManagedAiUsageContext, withManagedAiUsageMetering } from '../agents/managed-ai';
 import {
 	createProviderModel,
 	getDefaultModelId,
@@ -145,7 +145,7 @@ export async function resolveProviderModel(
 	provider: LlmProvider,
 	modelId: string,
 	applyUserSettings = true,
-	usageContext?: AiUsageContext,
+	usageContext?: ManagedAiUsageContext,
 ): Promise<ProviderModelResult | null> {
 	if (isProviderDisabled(provider)) {
 		return null;
@@ -232,7 +232,7 @@ function meterModel(
 	result: ProviderModelResult,
 	provider: LlmProvider,
 	modelId: string,
-	context?: AiUsageContext,
+	context?: ManagedAiUsageContext,
 	customModels: CustomModelMetadata[] = [],
 ): ProviderModelResult {
 	if (!context) {
@@ -241,7 +241,7 @@ function meterModel(
 	const declaredCosts = customModels.find((model) => model.id === modelId)?.costPerM;
 	return {
 		...result,
-		model: withAiUsageMetering(result.model, provider, modelId, context, declaredCosts),
+		model: withManagedAiUsageMetering(result.model, provider, modelId, context, declaredCosts),
 	};
 }
 

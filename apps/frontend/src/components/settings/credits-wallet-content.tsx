@@ -10,19 +10,20 @@ import { Button } from '@/components/ui/button';
 import { SettingsCard } from '@/components/ui/settings-card';
 import { trpc } from '@/main';
 
-type Cursor = { createdAt: Date; id: string };
+type CreditLedgerCursor = { createdAt: Date; id: string };
+type ManagedAiUsageCursor = { startedAt: Date; id: string };
 
-export function CreditsAiUsage({ isAdmin }: { isAdmin: boolean | undefined }) {
+export function CreditsWalletContent({ isAdmin }: { isAdmin: boolean | undefined }) {
 	const summary = useQuery(trpc.account.getCreditSummary.queryOptions());
-	const [ledgerCursor, setLedgerCursor] = useState<Cursor>();
-	const [usageCursor, setUsageCursor] = useState<Cursor>();
+	const [ledgerCursor, setLedgerCursor] = useState<CreditLedgerCursor>();
+	const [usageCursor, setUsageCursor] = useState<ManagedAiUsageCursor>();
 	const ledger = useQuery({
 		...trpc.account.listCreditLedger.queryOptions({ cursor: ledgerCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
 		enabled: summary.data?.enabled === true && isAdmin === true,
 	});
 	const usage = useQuery({
-		...trpc.account.listAiUsage.queryOptions({ cursor: usageCursor, limit: 10 }),
+		...trpc.account.listManagedAiUsage.queryOptions({ cursor: usageCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
 		enabled: isAdmin === true,
 	});
@@ -43,8 +44,8 @@ export function CreditsAiUsage({ isAdmin }: { isAdmin: boolean | undefined }) {
 					<SettingsCard title='Wallet'>
 						<div className='grid gap-3 sm:grid-cols-3'>
 							<CreditMetric label='Available' value={summary.data.balanceMicroUsd} />
-							<CreditMetric label='Granted' value={summary.data.lifetimeGrantedMicroUsd} />
-							<CreditMetric label='Used' value={summary.data.lifetimeSpentMicroUsd} />
+							<CreditMetric label='Credited' value={summary.data.lifetimeCreditedMicroUsd} />
+							<CreditMetric label='Debited' value={summary.data.lifetimeDebitedMicroUsd} />
 						</div>
 					</SettingsCard>
 
@@ -115,7 +116,7 @@ export function CreditsAiUsage({ isAdmin }: { isAdmin: boolean | undefined }) {
 	);
 }
 
-type UsageRunData = inferRouterOutputs<TrpcRouter>['account']['listAiUsage']['runs'][number];
+type UsageRunData = inferRouterOutputs<TrpcRouter>['account']['listManagedAiUsage']['runs'][number];
 type CreditLedgerGroup = inferRouterOutputs<TrpcRouter>['account']['listCreditLedger']['groups'][number];
 
 function summarizeLedgerGroup(group: CreditLedgerGroup) {

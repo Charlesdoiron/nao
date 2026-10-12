@@ -13,7 +13,7 @@ interface LlmProvidersSectionProps {
 const managedModelIds = PROVIDER_META.nao.models.map((model) => model.id);
 
 export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
-	const managedAi = useQuery({
+	const managedCreditSummary = useQuery({
 		...trpc.account.getCreditSummary.queryOptions(),
 		refetchOnWindowFocus: false,
 	});
@@ -55,11 +55,11 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 
 	return (
 		<div className='grid gap-4'>
-			{managedAi.data?.enabled && (
+			{managedCreditSummary.data?.enabled && (
 				<ProviderCard
 					provider='nao'
 					enabledModels={managedModelIds}
-					status={`Remaining credits: $${(managedAi.data.balanceMicroUsd / 1_000_000).toFixed(2)} of $${(managedAi.data.lifetimeGrantedMicroUsd / 1_000_000).toFixed(2)}.`}
+					status={`Remaining credits: $${(managedCreditSummary.data.balanceMicroUsd / 1_000_000).toFixed(2)} of $${(managedCreditSummary.data.lifetimeCreditedMicroUsd / 1_000_000).toFixed(2)}.`}
 					linkStatusToAccount
 					badges={['MANAGED']}
 					isAdmin={isAdmin}

@@ -6,8 +6,8 @@ import { isManagedAiEnabled } from '../agents/managed-ai';
 import type { DBProject } from '../db/abstractSchema';
 import { isCloud } from '../env';
 import * as accountQueries from '../queries/account.queries';
-import * as aiUsageQueries from '../queries/ai-usage.queries';
 import * as creditWalletQueries from '../queries/credit-wallet.queries';
+import * as managedAiUsageQueries from '../queries/managed-ai-usage.queries';
 import * as orgQueries from '../queries/organization.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
@@ -17,9 +17,16 @@ import { buildResetPasswordEmail } from '../utils/email-builders';
 import { regexPassword } from '../utils/utils';
 import { adminProtectedProcedure, canSendProcedure, projectProtectedProcedure, protectedProcedure } from './trpc';
 
-const paginationInput = z
+const creditLedgerPaginationInput = z
 	.object({
 		cursor: z.object({ createdAt: z.date(), id: z.string() }).optional(),
+		limit: z.number().int().min(1).max(100).default(25),
+	})
+	.default({ limit: 25 });
+
+const managedAiUsagePaginationInput = z
+	.object({
+		cursor: z.object({ startedAt: z.date(), id: z.string() }).optional(),
 		limit: z.number().int().min(1).max(100).default(25),
 	})
 	.default({ limit: 25 });
@@ -33,14 +40,14 @@ export const accountRoutes = {
 	getManagedCreditStatus: projectProtectedProcedure.query(({ ctx }) =>
 		getManagedCreditStatus(ctx.project, ctx.user.id),
 	),
-	confirmWelcomeGrant: canSendProcedure.mutation(async ({ ctx }) => {
+	claimWelcomeGrant: canSendProcedure.mutation(async ({ ctx }) => {
 		if (!isManagedAiEnabled()) {
 			throw new TRPCError({ code: 'BAD_REQUEST', message: 'nao-managed AI is not enabled.' });
 		}
 		if (!ctx.project.orgId) {
 			throw new TRPCError({ code: 'BAD_REQUEST', message: 'The selected project has no organization.' });
 		}
-		await creditWalletService.ensureWelcomeGrant(ctx.project.orgId, ctx.user.id);
+		await creditWalletService.claimWelcomeGrant(ctx.project.orgId, ctx.user.id);
 		const status = await getManagedCreditStatus(ctx.project, ctx.user.id);
 		if (status.welcomeGrantStatus !== 'claimed_here') {
 			throw new TRPCError({
@@ -53,21 +60,21 @@ export const accountRoutes = {
 	getCreditSummary: walletProcedure.query(async ({ ctx }) => {
 		const summary = ctx.membership
 			? await creditWalletQueries.getCreditSummary(ctx.membership.orgId)
-			: { balanceMicroUsd: 0, lifetimeGrantedMicroUsd: 0, lifetimeSpentMicroUsd: 0 };
+			: { balanceMicroUsd: 0, lifetimeCreditedMicroUsd: 0, lifetimeDebitedMicroUsd: 0 };
 		return { ...summary, enabled: isManagedAiEnabled() };
 	}),
-	listCreditLedger: walletProcedure.input(paginationInput).query(({ ctx, input }) => {
+	listCreditLedger: walletProcedure.input(creditLedgerPaginationInput).query(({ ctx, input }) => {
 		if (!ctx.membership) {
 			return { groups: [], nextCursor: null };
 		}
 		return creditWalletQueries.listCreditLedger(ctx.membership.orgId, input);
 	}),
-	listAiUsage: walletProcedure.input(paginationInput).query(({ ctx, input }) => {
+	listManagedAiUsage: walletProcedure.input(managedAiUsagePaginationInput).query(({ ctx, input }) => {
 		if (!ctx.membership) {
 			return { runs: [], nextCursor: null };
 		}
 		const userId = ctx.membership.role === 'admin' ? undefined : ctx.user.id;
-		return aiUsageQueries.listAiUsage({ orgId: ctx.membership.orgId, userId }, input);
+		return managedAiUsageQueries.listManagedAiUsage({ orgId: ctx.membership.orgId, userId }, input);
 	}),
 	resetPassword: adminProtectedProcedure
 		.input(

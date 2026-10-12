@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
 
-export type CreditCursor = { createdAt: Date; id: string };
+export type CreditLedgerCursor = { createdAt: Date; id: string };
 
 export async function getWelcomeGrantClaim(userId: string): Promise<{ orgId: string | null } | null> {
 	const [claim] = await db
@@ -17,39 +17,39 @@ export async function getWelcomeGrantClaim(userId: string): Promise<{ orgId: str
 
 export async function getCreditSummary(orgId: string): Promise<{
 	balanceMicroUsd: number;
-	lifetimeGrantedMicroUsd: number;
-	lifetimeSpentMicroUsd: number;
+	lifetimeCreditedMicroUsd: number;
+	lifetimeDebitedMicroUsd: number;
 }> {
 	const [wallet] = await db.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, orgId)).limit(1);
 	if (!wallet) {
-		return { balanceMicroUsd: 0, lifetimeGrantedMicroUsd: 0, lifetimeSpentMicroUsd: 0 };
+		return { balanceMicroUsd: 0, lifetimeCreditedMicroUsd: 0, lifetimeDebitedMicroUsd: 0 };
 	}
 	const [totals] = await db
 		.select({
-			granted: sql<number>`coalesce(sum(case when ${s.creditLedger.deltaMicroUsd} > 0 then ${s.creditLedger.deltaMicroUsd} else 0 end), 0)`,
-			spent: sql<number>`coalesce(sum(case when ${s.creditLedger.deltaMicroUsd} < 0 then -${s.creditLedger.deltaMicroUsd} else 0 end), 0)`,
+			credited: sql<number>`coalesce(sum(case when ${s.creditLedger.deltaMicroUsd} > 0 then ${s.creditLedger.deltaMicroUsd} else 0 end), 0)`,
+			debited: sql<number>`coalesce(sum(case when ${s.creditLedger.deltaMicroUsd} < 0 then -${s.creditLedger.deltaMicroUsd} else 0 end), 0)`,
 		})
 		.from(s.creditLedger)
 		.where(eq(s.creditLedger.walletId, wallet.id));
 	return {
 		balanceMicroUsd: wallet.balanceMicroUsd,
-		lifetimeGrantedMicroUsd: Number(totals?.granted ?? 0),
-		lifetimeSpentMicroUsd: Number(totals?.spent ?? 0),
+		lifetimeCreditedMicroUsd: Number(totals?.credited ?? 0),
+		lifetimeDebitedMicroUsd: Number(totals?.debited ?? 0),
 	};
 }
 
 export async function listCreditLedger(
 	orgId: string,
-	input: { cursor?: CreditCursor; limit: number },
-): Promise<{ groups: CreditLedgerGroup[]; nextCursor: CreditCursor | null }> {
-	const groupId = sql<string>`coalesce(${s.aiUsage.runId}, ${s.creditLedger.id})`;
+	input: { cursor?: CreditLedgerCursor; limit: number },
+): Promise<{ groups: CreditLedgerGroup[]; nextCursor: CreditLedgerCursor | null }> {
+	const groupId = sql<string>`coalesce(${s.managedAiUsage.runId}, ${s.creditLedger.id})`;
 	const latestCreatedAt = sql<Date>`max(${s.creditLedger.createdAt})`.mapWith(s.creditLedger.createdAt);
 	const cursorCreatedAt = input.cursor && sql.param(input.cursor.createdAt, s.creditLedger.createdAt);
 	const groupRows = await db
 		.select({ id: groupId, createdAt: latestCreatedAt })
 		.from(s.creditLedger)
 		.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
-		.leftJoin(s.aiUsage, eq(s.creditLedger.usageId, s.aiUsage.id))
+		.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
 		.where(eq(s.creditWallet.orgId, orgId))
 		.groupBy(groupId)
 		.having(
@@ -68,7 +68,7 @@ export async function listCreditLedger(
 					.select({ entry: s.creditLedger, groupId })
 					.from(s.creditLedger)
 					.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
-					.leftJoin(s.aiUsage, eq(s.creditLedger.usageId, s.aiUsage.id))
+					.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
 					.where(
 						and(
 							eq(s.creditWallet.orgId, orgId),

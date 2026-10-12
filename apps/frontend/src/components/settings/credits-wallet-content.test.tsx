@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CreditsAiUsage } from './credits-ai-usage';
+import { CreditsWalletContent } from './credits-wallet-content';
 
 const mocks = vi.hoisted(() => ({
 	getSummary: vi.fn(),
@@ -21,14 +21,14 @@ vi.mock('@/main', () => ({
 			listCreditLedger: {
 				queryOptions: () => ({ queryKey: ['credit-ledger'], queryFn: mocks.listLedger }),
 			},
-			listAiUsage: {
-				queryOptions: () => ({ queryKey: ['ai-usage'], queryFn: mocks.listUsage }),
+			listManagedAiUsage: {
+				queryOptions: () => ({ queryKey: ['managed-ai-usage'], queryFn: mocks.listUsage }),
 			},
 		},
 	},
 }));
 
-describe('CreditsAiUsage', () => {
+describe('CreditsWalletContent', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
@@ -37,14 +37,14 @@ describe('CreditsAiUsage', () => {
 	it('explains a non-admin contribution to the shared organization wallet', async () => {
 		mocks.getSummary.mockResolvedValue({
 			balanceMicroUsd: 0,
-			lifetimeGrantedMicroUsd: 0,
-			lifetimeSpentMicroUsd: 0,
+			lifetimeCreditedMicroUsd: 0,
+			lifetimeDebitedMicroUsd: 0,
 			enabled: true,
 		});
 		mocks.listLedger.mockResolvedValue({ groups: [], nextCursor: null });
 		mocks.listUsage.mockResolvedValue({ runs: [], nextCursor: null });
 
-		renderCreditsAiUsage(false);
+		renderCreditsWalletContent(false);
 
 		expect(await screen.findByText(/You gave your \$5 welcome credit/)).toBeTruthy();
 		expect(screen.queryByText('Available')).toBeNull();
@@ -54,25 +54,25 @@ describe('CreditsAiUsage', () => {
 	it('shows organization wallet totals to admins', async () => {
 		mocks.getSummary.mockResolvedValue({
 			balanceMicroUsd: 5_000_000,
-			lifetimeGrantedMicroUsd: 5_000_000,
-			lifetimeSpentMicroUsd: 0,
+			lifetimeCreditedMicroUsd: 5_000_000,
+			lifetimeDebitedMicroUsd: 0,
 			enabled: true,
 		});
 		mocks.listLedger.mockResolvedValue({ groups: [], nextCursor: null });
 		mocks.listUsage.mockResolvedValue({ runs: [], nextCursor: null });
 
-		renderCreditsAiUsage(true);
+		renderCreditsWalletContent(true);
 
 		await screen.findByText('Available');
 		expect(screen.queryByText(/You gave your \$5 welcome credit/)).toBeNull();
 	});
 });
 
-function renderCreditsAiUsage(isAdmin: boolean) {
+function renderCreditsWalletContent(isAdmin: boolean) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<CreditsAiUsage isAdmin={isAdmin} />
+			<CreditsWalletContent isAdmin={isAdmin} />
 		</QueryClientProvider>,
 	);
 }

@@ -8,7 +8,7 @@ import { ManagedWelcomeGrantProvider, useManagedWelcomeGrant } from './managed-w
 
 const mocks = vi.hoisted(() => ({
 	getStatus: vi.fn(),
-	confirmGrant: vi.fn(),
+	claimGrant: vi.fn(),
 }));
 
 vi.mock('@/main', () => ({
@@ -21,8 +21,8 @@ vi.mock('@/main', () => ({
 					queryFn: mocks.getStatus,
 				}),
 			},
-			confirmWelcomeGrant: {
-				mutationOptions: () => ({ mutationFn: mocks.confirmGrant }),
+			claimWelcomeGrant: {
+				mutationOptions: () => ({ mutationFn: mocks.claimGrant }),
 			},
 			getCreditSummary: {
 				queryKey: () => ['credit-summary'],
@@ -50,7 +50,7 @@ describe('ManagedWelcomeGrantProvider', () => {
 			welcomeGrantStatus: 'unclaimed',
 			balanceMicroUsd: 0,
 		});
-		mocks.confirmGrant.mockResolvedValue({
+		mocks.claimGrant.mockResolvedValue({
 			enabled: true,
 			organization: { id: 'org-1', name: 'Acme' },
 			welcomeGrantStatus: 'claimed_here',
@@ -70,11 +70,11 @@ describe('ManagedWelcomeGrantProvider', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 		expect((await screen.findByRole('dialog')).textContent).toContain('Acme');
 		expect(onDecision).not.toHaveBeenCalled();
-		expect(mocks.confirmGrant).not.toHaveBeenCalled();
+		expect(mocks.claimGrant).not.toHaveBeenCalled();
 
 		fireEvent.click(screen.getByRole('button', { name: 'Apply $5 and send' }));
 
-		await waitFor(() => expect(mocks.confirmGrant).toHaveBeenCalledOnce());
+		await waitFor(() => expect(mocks.claimGrant).toHaveBeenCalledOnce());
 		await waitFor(() => expect(onDecision).toHaveBeenCalledWith('send'));
 	});
 
@@ -86,7 +86,7 @@ describe('ManagedWelcomeGrantProvider', () => {
 		fireEvent.click(await screen.findByRole('button', { name: 'Switch project' }));
 
 		await waitFor(() => expect(onDecision).toHaveBeenCalledWith('switch-project'));
-		expect(mocks.confirmGrant).not.toHaveBeenCalled();
+		expect(mocks.claimGrant).not.toHaveBeenCalled();
 	});
 });
 

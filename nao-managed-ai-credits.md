@@ -17,7 +17,7 @@ V0 excludes checkout, paid top-ups, subscriptions, markup, gateway comparison, a
 
 Managed AI is available when nao runs in cloud mode, the managed upstream key is configured, the `nao` provider is enabled, and the project has no BYOK source. Models remain visible while the user can claim a grant or the organization has a positive balance.
 
-Model discovery and credit reads are side-effect free. The first interactive managed send names the current project's organization; confirming calls `ensureWelcomeGrant(orgId, userId)`. The transaction creates the wallet, inserts a $5 `gift`, and increments the balance only when the globally unique `welcome-user:v1:{userId}` key is inserted.
+Model discovery and credit reads are side-effect free. The first interactive managed send names the current project's organization; confirming calls `claimWelcomeGrant(orgId, userId)`. The transaction creates the wallet, inserts a $5 `gift`, and increments the balance only when the globally unique `welcome-user:v1:{userId}` key is inserted.
 
 ```mermaid
 sequenceDiagram
@@ -58,13 +58,13 @@ flowchart TB
     balance -->|No| blocked["Reject call"]
     balance -->|Yes| provider["Call nao provider"]
     managed -->|No, BYOK| byokProvider["Call customer provider without credit metering"]
-    provider --> usage["Insert ai_usage"]
+    provider --> usage["Insert managed_ai_usage"]
     usage --> charge["Charge wallet and append ledger entry"]
 ```
 
-Each `ai_usage` row records managed-credit attribution, category, provider/model, status and finish reason, provider request ID, detailed input/cache/output/reasoning token usage, snapshotted rates, calculated upstream cost and customer charge, cost source, and start/completion timestamps. Completed calls use provider usage; failed or aborted calls estimate missing tokens from prompt and streamed characters. Duration remains derivable from the timestamps.
+Each `managed_ai_usage` row records managed-credit attribution, category, provider/model, status and finish reason, provider request ID, detailed input/cache/output/reasoning token usage, snapshotted rates, calculated upstream cost and customer charge, cost source, and start/completion timestamps. Completed calls use provider usage; failed or aborted calls estimate missing tokens from prompt and streamed characters. Duration remains derivable from the timestamps.
 
-Usage insertion, wallet charging, and its ledger entry are atomic. The operation ID also makes settlement idempotent. Prompts, model outputs, credentials, and provider error payloads are not copied into the accounting tables. BYOK calls create neither `ai_usage` nor credit-ledger rows.
+Usage insertion, wallet charging, and its ledger entry are atomic. The operation ID also makes settlement idempotent. Prompts, model outputs, credentials, and provider error payloads are not copied into the accounting tables. BYOK calls create neither `managed_ai_usage` nor credit-ledger rows.
 
 ## Data model
 
@@ -74,17 +74,17 @@ PostgreSQL and SQLite use the same accounting model:
 erDiagram
     ORGANIZATION ||--o| CREDIT_WALLET : owns
     CREDIT_WALLET ||--o{ CREDIT_LEDGER : records
-    CREDIT_WALLET ||--o{ AI_USAGE : funds
-    USER ||--o{ AI_USAGE : initiates
-    ORGANIZATION ||--o{ AI_USAGE : billed_for
-    PROJECT ||--o{ AI_USAGE : attributes
-    CHAT ||--o{ AI_USAGE : groups
-    AI_USAGE ||--o| CREDIT_LEDGER : creates
+    CREDIT_WALLET ||--o{ MANAGED_AI_USAGE : funds
+    USER ||--o{ MANAGED_AI_USAGE : initiates
+    ORGANIZATION ||--o{ MANAGED_AI_USAGE : billed_for
+    PROJECT ||--o{ MANAGED_AI_USAGE : attributes
+    CHAT ||--o{ MANAGED_AI_USAGE : groups
+    MANAGED_AI_USAGE ||--o| CREDIT_LEDGER : creates
 ```
 
 - `credit_wallet`: one organization balance stored in micro-USD.
 - `credit_ledger`: append-only `gift` and `usage` movements with unique idempotency keys.
-- `ai_usage`: one row per nao-managed invocation or billable attempt, grouped by `run_id`.
+- `managed_ai_usage`: one row per nao-managed invocation or billable attempt, grouped by `run_id`.
 
 Foreign keys use `ON DELETE SET NULL` so accounting history survives the removal of attributed entities.
 

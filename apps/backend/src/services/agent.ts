@@ -19,7 +19,7 @@ import {
 	UIMessageStreamWriter,
 } from 'ai';
 
-import type { AiUsageContext } from '../agents/managed-ai';
+import type { ManagedAiUsageContext } from '../agents/managed-ai';
 import { disableModelReasoning, fitThinkingBudget, getProviderMeta, ProviderModelResult } from '../agents/providers';
 import { interactiveStopConditions } from '../agents/stop-conditions';
 import { getSystemPromptOverride, hasNaoPromptPlaceholder, injectNaoPrompt } from '../agents/system-prompts';
@@ -36,7 +36,6 @@ import * as imageQueries from '../queries/image.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as storyQueries from '../queries/story.queries';
 import { AgentSettings } from '../types/agent-settings';
-import type { AiUsageCategory } from '../types/ai-usage';
 import {
 	AgentTools,
 	ForkMetadata,
@@ -48,6 +47,7 @@ import {
 	UIMessagePart,
 } from '../types/chat';
 import type { ModelCosts } from '../types/llm';
+import type { ManagedAiUsageCategory } from '../types/managed-ai-usage';
 import { Provider } from '../types/messaging-provider';
 import { McpToolContext, QueryResult, ToolContext } from '../types/tools';
 import {
@@ -319,7 +319,7 @@ export class AgentService {
 			supportsCustomCharts?: boolean;
 			billingAccessVerifiedProjectId?: string;
 			/** Attributes model calls made by non-interactive agent runs. */
-			usageCategory?: AiUsageCategory;
+			usageCategory?: ManagedAiUsageCategory;
 		} = {},
 	): Promise<AgentManager> {
 		if (options.billingAccessVerifiedProjectId !== chat.projectId) {
@@ -332,7 +332,7 @@ export class AgentService {
 			chat.userId,
 		);
 		await assertBudgetNotExceeded(chat.projectId, resolvedLlmSelectedModel.provider, chat.userId);
-		const usageContext: AiUsageContext = {
+		const usageContext: ManagedAiUsageContext = {
 			userId: chat.userId,
 			projectId: chat.projectId,
 			chatId: chat.id,
@@ -433,7 +433,7 @@ export class AgentService {
 	protected async _getModelConfig(
 		projectId: string,
 		modelSelection: LlmSelectedModel,
-		usageContext?: AiUsageContext,
+		usageContext?: ManagedAiUsageContext,
 	): Promise<ProviderModelResult> {
 		const result = await resolveProviderModel(
 			projectId,
@@ -467,7 +467,7 @@ class AgentManager {
 		private readonly _agentTools: AgentTools,
 		private readonly _toolContext: ToolContext,
 		private readonly _userGroupAccess: AgentUserGroupAccess,
-		private readonly _usageContext: AiUsageContext,
+		private readonly _usageContext: ManagedAiUsageContext,
 		stopWhen: StopCondition<AgentTools>[] = interactiveStopConditions,
 		private readonly _systemPromptOverride?: string,
 	) {

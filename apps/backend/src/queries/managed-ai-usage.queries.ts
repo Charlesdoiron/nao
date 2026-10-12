@@ -1,24 +1,23 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
-import s, { type DBAiUsage } from '../db/abstractSchema';
+import s, { type DBManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
-import type { CreditCursor } from './credit-wallet.queries';
 
-export async function listAiUsage(
+export async function listManagedAiUsage(
 	scope: { orgId: string; userId?: string },
-	input: { cursor?: CreditCursor; limit: number },
-): Promise<{ runs: AiUsageRun[]; nextCursor: CreditCursor | null }> {
-	const runId = s.aiUsage.runId;
-	const latestStartedAt = sql<Date>`max(${s.aiUsage.startedAt})`.mapWith(s.aiUsage.startedAt);
-	const cursorStartedAt = input.cursor && sql.param(input.cursor.createdAt, s.aiUsage.startedAt);
+	input: { cursor?: ManagedAiUsageCursor; limit: number },
+): Promise<{ runs: ManagedAiUsageRun[]; nextCursor: ManagedAiUsageCursor | null }> {
+	const runId = s.managedAiUsage.runId;
+	const latestStartedAt = sql<Date>`max(${s.managedAiUsage.startedAt})`.mapWith(s.managedAiUsage.startedAt);
+	const cursorStartedAt = input.cursor && sql.param(input.cursor.startedAt, s.managedAiUsage.startedAt);
 	const scopeFilter = and(
-		eq(s.aiUsage.isManaged, true),
-		eq(s.aiUsage.orgId, scope.orgId),
-		scope.userId ? eq(s.aiUsage.userId, scope.userId) : undefined,
+		eq(s.managedAiUsage.isManaged, true),
+		eq(s.managedAiUsage.orgId, scope.orgId),
+		scope.userId ? eq(s.managedAiUsage.userId, scope.userId) : undefined,
 	);
 	const runRows = await db
 		.select({ id: runId, startedAt: latestStartedAt })
-		.from(s.aiUsage)
+		.from(s.managedAiUsage)
 		.where(scopeFilter)
 		.groupBy(runId)
 		.having(
@@ -34,9 +33,9 @@ export async function listAiUsage(
 		page.length === 0
 			? []
 			: await db
-					.select({ event: s.aiUsage, chatTitle: s.chat.title })
-					.from(s.aiUsage)
-					.leftJoin(s.chat, eq(s.aiUsage.chatId, s.chat.id))
+					.select({ event: s.managedAiUsage, chatTitle: s.chat.title })
+					.from(s.managedAiUsage)
+					.leftJoin(s.chat, eq(s.managedAiUsage.chatId, s.chat.id))
 					.where(
 						and(
 							scopeFilter,
@@ -46,8 +45,8 @@ export async function listAiUsage(
 							),
 						),
 					)
-					.orderBy(s.aiUsage.startedAt, s.aiUsage.id);
-	const eventsByRun = new Map<string, DBAiUsage[]>();
+					.orderBy(s.managedAiUsage.startedAt, s.managedAiUsage.id);
+	const eventsByRun = new Map<string, DBManagedAiUsage[]>();
 	const chatTitlesByRun = new Map<string, string>();
 	for (const { event, chatTitle } of events) {
 		const runEvents = eventsByRun.get(event.runId);
@@ -76,13 +75,15 @@ export async function listAiUsage(
 	const last = runs.at(-1);
 	return {
 		runs,
-		nextCursor: hasNext && last ? { createdAt: last.startedAt, id: last.id } : null,
+		nextCursor: hasNext && last ? { startedAt: last.startedAt, id: last.id } : null,
 	};
 }
 
-export interface AiUsageRun {
+export type ManagedAiUsageCursor = { startedAt: Date; id: string };
+
+export interface ManagedAiUsageRun {
 	id: string;
 	startedAt: Date;
 	chatTitle: string | null;
-	events: DBAiUsage[];
+	events: DBManagedAiUsage[];
 }

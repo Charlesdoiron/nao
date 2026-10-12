@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 
-import s, { type DBAiUsage, type DBCreditWallet, type NewAiUsage } from '../db/abstractSchema';
+import s, { type DBCreditWallet, type DBManagedAiUsage, type NewManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
 import dbConfig, { Dialect } from '../db/dbConfig';
 
@@ -10,7 +10,7 @@ export const WELCOME_GRANT_MICRO_USD = 5_000_000;
  * Every user brings one welcome grant to the organization they first use managed AI in.
  * The ledger key is per user, so later organizations and repeated calls add nothing.
  */
-export async function ensureWelcomeGrant(orgId: string, userId: string): Promise<DBCreditWallet> {
+export async function claimWelcomeGrant(orgId: string, userId: string): Promise<DBCreditWallet> {
 	if (dbConfig.dialect === Dialect.Sqlite) {
 		return db.transaction(
 			(transaction) => {
@@ -83,13 +83,10 @@ export async function ensureWelcomeGrant(orgId: string, userId: string): Promise
 	});
 }
 
-export async function recordUsage(
-	usage: Omit<NewAiUsage, 'id' | 'walletId'>,
+export async function recordManagedAiUsageAndChargeWallet(
+	usage: Omit<NewManagedAiUsage, 'id' | 'walletId' | 'isManaged'>,
 	customerChargeMicroUsd: number,
-): Promise<DBAiUsage | null> {
-	if (!usage.isManaged) {
-		return null;
-	}
+): Promise<DBManagedAiUsage | null> {
 	const billedOrgId = usage.orgId;
 	if (!billedOrgId) {
 		throw new Error('Managed AI usage requires a billed organization.');
@@ -106,12 +103,12 @@ export async function recordUsage(
 					throw new Error(`Managed AI usage has no wallet for organization ${billedOrgId}.`);
 				}
 				const created = transaction
-					.insert(s.aiUsage)
-					.values({ ...usage, walletId: wallet?.id, customerChargeMicroUsd })
+					.insert(s.managedAiUsage)
+					.values({ ...usage, walletId: wallet.id, isManaged: true, customerChargeMicroUsd })
 					.onConflictDoNothing()
 					.returning()
 					.get();
-				if (!created || !wallet || customerChargeMicroUsd <= 0) {
+				if (!created || customerChargeMicroUsd <= 0) {
 					return created ?? null;
 				}
 				const updated = transaction
@@ -147,16 +144,17 @@ export async function recordUsage(
 		}
 
 		const [created] = await transaction
-			.insert(s.aiUsage)
+			.insert(s.managedAiUsage)
 			.values({
 				...usage,
-				walletId: wallet?.id,
+				walletId: wallet.id,
+				isManaged: true,
 				customerChargeMicroUsd,
 			})
 			.onConflictDoNothing()
 			.returning()
 			.execute();
-		if (!created || !wallet || customerChargeMicroUsd <= 0) {
+		if (!created || customerChargeMicroUsd <= 0) {
 			return created ?? null;
 		}
 
