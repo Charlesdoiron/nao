@@ -74,6 +74,7 @@ CREATE INDEX "managed_ai_usage_orgId_startedAt_idx" ON "managed_ai_usage" USING 
 CREATE INDEX "managed_ai_usage_userId_startedAt_idx" ON "managed_ai_usage" USING btree ("user_id","started_at","id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_userId_runId_idx" ON "managed_ai_usage" USING btree ("user_id","run_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_projectId_startedAt_idx" ON "managed_ai_usage" USING btree ("project_id","started_at","id");--> statement-breakpoint
+CREATE INDEX "managed_ai_usage_chatId_idx" ON "managed_ai_usage" USING btree ("chat_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_chatMessageId_idx" ON "managed_ai_usage" USING btree ("chat_message_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_status_idx" ON "managed_ai_usage" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "credit_ledger_walletId_createdAt_idx" ON "credit_ledger" USING btree ("wallet_id","created_at","id");--> statement-breakpoint

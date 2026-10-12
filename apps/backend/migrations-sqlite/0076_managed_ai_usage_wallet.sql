@@ -48,6 +48,7 @@ CREATE INDEX `managed_ai_usage_orgId_startedAt_idx` ON `managed_ai_usage` (`org_
 CREATE INDEX `managed_ai_usage_userId_startedAt_idx` ON `managed_ai_usage` (`user_id`,`started_at`,`id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_userId_runId_idx` ON `managed_ai_usage` (`user_id`,`run_id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_projectId_startedAt_idx` ON `managed_ai_usage` (`project_id`,`started_at`,`id`);--> statement-breakpoint
+CREATE INDEX `managed_ai_usage_chatId_idx` ON `managed_ai_usage` (`chat_id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_chatMessageId_idx` ON `managed_ai_usage` (`chat_message_id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_status_idx` ON `managed_ai_usage` (`status`);--> statement-breakpoint
 CREATE TABLE `credit_ledger` (

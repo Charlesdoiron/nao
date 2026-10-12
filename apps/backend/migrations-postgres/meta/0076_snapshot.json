@@ -765,6 +765,21 @@
           "method": "btree",
           "with": {}
         },
+        "managed_ai_usage_chatId_idx": {
+          "name": "managed_ai_usage_chatId_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "managed_ai_usage_chatMessageId_idx": {
           "name": "managed_ai_usage_chatMessageId_idx",
           "columns": [

@@ -15,6 +15,7 @@ import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { getCreditSummary, getWelcomeGrantClaim, listCreditLedger } from '../src/queries/credit-wallet.queries';
 import { listManagedAiUsage } from '../src/queries/managed-ai-usage.queries';
+import { listProjectChats } from '../src/queries/project.queries';
 import {
 	claimWelcomeGrant,
 	recordManagedAiUsageAndChargeWallet,
@@ -54,6 +55,7 @@ const RACE_ORG_A_ID = 'race-org-a';
 const RACE_ORG_B_ID = 'race-org-b';
 const PROJECT_ID = 'managed-project';
 const CHAT_ID = 'managed-chat';
+const HYBRID_CHAT_ID = 'hybrid-cost-chat';
 const MESSAGE_ID = 'managed-message';
 
 const usage: LanguageModelV3Usage = {
@@ -85,7 +87,10 @@ describe('managed AI usage and organization credits', () => {
 			type: 'local',
 			path: '/tmp/managed-project',
 		});
-		await db.insert(s.chat).values({ id: CHAT_ID, projectId: PROJECT_ID, userId: MANAGED_USER_ID });
+		await db.insert(s.chat).values([
+			{ id: CHAT_ID, projectId: PROJECT_ID, userId: MANAGED_USER_ID },
+			{ id: HYBRID_CHAT_ID, projectId: PROJECT_ID, userId: MANAGED_USER_ID },
+		]);
 		const exhaustedWalletId = 'exhausted-wallet';
 		await db.insert(s.creditWallet).values({
 			id: exhaustedWalletId,
@@ -251,6 +256,51 @@ describe('managed AI usage and organization credits', () => {
 		expect(providerCall).toHaveBeenCalledOnce();
 		expect(rows).toHaveLength(0);
 		expect(await getCreditSummary(ORG_ID)).toEqual(before);
+	});
+
+	it('combines managed credit charges with estimated BYOK cost in chat replay', async () => {
+		await db.insert(s.chatMessage).values([
+			{
+				id: 'hybrid-byok-message',
+				chatId: HYBRID_CHAT_ID,
+				senderUserId: MANAGED_USER_ID,
+				role: 'assistant',
+				llmProvider: 'openai',
+				llmModelId: 'gpt-5.6-luna',
+				inputNoCacheTokens: 1_000_000,
+				totalTokens: 1_000_000,
+			},
+			{
+				id: 'hybrid-managed-message',
+				chatId: HYBRID_CHAT_ID,
+				senderUserId: MANAGED_USER_ID,
+				role: 'assistant',
+				llmProvider: 'nao',
+				llmModelId: 'gpt-5.6-luna',
+				inputNoCacheTokens: 1_000_000,
+				totalTokens: 1_000_000,
+			},
+		]);
+		await recordManagedAiUsageAndChargeWallet(
+			{
+				operationId: 'hybrid-managed-operation',
+				runId: 'hybrid-managed-run',
+				userId: MANAGED_USER_ID,
+				orgId: ORG_ID,
+				projectId: PROJECT_ID,
+				chatId: HYBRID_CHAT_ID,
+				category: 'chat',
+				llmProvider: 'nao',
+				llmModelId: 'gpt-5.6-luna',
+				status: 'completed',
+				costSource: 'price_book',
+				completedAt: new Date(),
+			},
+			2_000_000,
+		);
+
+		const replay = await listProjectChats(PROJECT_ID, { pageSize: 100 });
+		expect(replay.chats.find((chat) => chat.id === HYBRID_CHAT_ID)?.totalCost).toBeCloseTo(2.2);
 	});
 
 	it('records an estimated charge when a stream is aborted', async () => {

@@ -105,7 +105,7 @@ const settingsNavGroups: NavGroup[] = [
 				leavesSettings: true,
 			},
 			{
-				label: 'Usage & costs',
+				label: 'Usage, Costs & Wallet',
 				to: '/settings/usage',
 				visible: ({ isAdmin, isContextAdmin, isCloud, isOrgAdmin }) =>
 					isAdmin || isContextAdmin || (isCloud && isOrgAdmin),

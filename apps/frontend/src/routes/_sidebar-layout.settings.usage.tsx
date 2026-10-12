@@ -127,7 +127,7 @@ function UsagePage() {
 	return (
 		<div className='flex min-h-0 flex-1 flex-col overflow-hidden bg-background'>
 			<div className='shrink-0 px-4 pt-4 md:px-8 md:pt-8'>
-				<h1 className='text-lg font-semibold text-foreground'>Usage & costs</h1>
+				<h1 className='text-lg font-semibold text-foreground'>Usage, Costs & Wallet</h1>
 				<p className='text-sm text-muted-foreground'>{getTabDescription(activeTab)}</p>
 				<TabBar
 					tabs={availableTabs.map((tab) => ({ id: tab, label: usageTabLabels[tab] }))}

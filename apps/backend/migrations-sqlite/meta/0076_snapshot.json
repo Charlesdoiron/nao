@@ -690,6 +690,13 @@
           ],
           "isUnique": false
         },
+        "managed_ai_usage_chatId_idx": {
+          "name": "managed_ai_usage_chatId_idx",
+          "columns": [
+            "chat_id"
+          ],
+          "isUnique": false
+        },
         "managed_ai_usage_chatMessageId_idx": {
           "name": "managed_ai_usage_chatMessageId_idx",
           "columns": [

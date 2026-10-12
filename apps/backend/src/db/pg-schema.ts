@@ -1369,6 +1369,7 @@ export const managedAiUsage = pgTable(
 		index('managed_ai_usage_userId_startedAt_idx').on(t.userId, t.startedAt, t.id),
 		index('managed_ai_usage_userId_runId_idx').on(t.userId, t.runId),
 		index('managed_ai_usage_projectId_startedAt_idx').on(t.projectId, t.startedAt, t.id),
+		index('managed_ai_usage_chatId_idx').on(t.chatId),
 		index('managed_ai_usage_chatMessageId_idx').on(t.chatMessageId),
 		index('managed_ai_usage_status_idx').on(t.status),
 	],
