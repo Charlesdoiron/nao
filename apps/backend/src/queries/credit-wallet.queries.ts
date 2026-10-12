@@ -51,7 +51,7 @@ export async function listCreditLedger(
 		.from(s.creditLedger)
 		.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
 		.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
-		.where(and(eq(s.creditWallet.orgId, orgId), ne(s.creditLedger.entryType, 'reservation')))
+		.where(eq(s.creditWallet.orgId, orgId))
 		.groupBy(groupId)
 		.having(
 			input.cursor
@@ -78,7 +78,6 @@ export async function listCreditLedger(
 					.where(
 						and(
 							eq(s.creditWallet.orgId, orgId),
-							ne(s.creditLedger.entryType, 'reservation'),
 							inArray(
 								groupId,
 								page.map((group) => group.id),

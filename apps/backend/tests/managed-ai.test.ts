@@ -484,6 +484,12 @@ describe('managed AI usage and organization credits', () => {
 		};
 		const before = await getCreditSummary(ORG_ID);
 		await reserveManagedAiCredits(ORG_ID, operationId, 100);
+		const pendingReservation = (await listCreditLedger(ORG_ID, { limit: 100 })).groups.find(
+			(group) => group.entries[0]?.idempotencyKey === operationId,
+		);
+		expect(pendingReservation?.entries).toEqual([
+			expect.objectContaining({ entryType: 'reservation', deltaMicroUsd: -100 }),
+		]);
 		await recordManagedAiUsageAndChargeWallet(input, 100);
 		await recordManagedAiUsageAndChargeWallet(input, 100);
 		const after = await getCreditSummary(ORG_ID);
