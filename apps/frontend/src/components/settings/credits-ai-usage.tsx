@@ -12,23 +12,33 @@ import { trpc } from '@/main';
 
 type Cursor = { createdAt: Date; id: string };
 
-export function CreditsAiUsage() {
+export function CreditsAiUsage({ isAdmin }: { isAdmin: boolean | undefined }) {
 	const summary = useQuery(trpc.account.getCreditSummary.queryOptions());
 	const [ledgerCursor, setLedgerCursor] = useState<Cursor>();
 	const [usageCursor, setUsageCursor] = useState<Cursor>();
 	const ledger = useQuery({
 		...trpc.account.listCreditLedger.queryOptions({ cursor: ledgerCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
-		enabled: summary.data?.enabled === true,
+		enabled: summary.data?.enabled === true && isAdmin === true,
 	});
 	const usage = useQuery({
 		...trpc.account.listAiUsage.queryOptions({ cursor: usageCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
+		enabled: isAdmin === true,
 	});
 
 	return (
 		<div className='flex flex-col gap-4'>
-			{summary.data?.enabled && (
+			{summary.data?.enabled && isAdmin === false && (
+				<SettingsCard title='Wallet'>
+					<p className='text-sm text-muted-foreground'>
+						You gave your $5 welcome credit to your organization. It is now part of the shared wallet
+						managed by your organization's admins.
+					</p>
+				</SettingsCard>
+			)}
+
+			{summary.data?.enabled && isAdmin === true && (
 				<>
 					<SettingsCard title='Wallet'>
 						<div className='grid gap-3 sm:grid-cols-3'>
@@ -86,19 +96,21 @@ export function CreditsAiUsage() {
 				</>
 			)}
 
-			<SettingsCard title='nao credit usage'>
-				<div className='flex flex-col gap-2'>
-					{usage.data?.runs.map((run) => (
-						<UsageRun key={run.id} run={run} />
-					))}
-				</div>
-				<PageControls
-					hasPrevious={usageCursor !== undefined}
-					hasNext={usage.data?.nextCursor !== null}
-					onPrevious={() => setUsageCursor(undefined)}
-					onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
-				/>
-			</SettingsCard>
+			{isAdmin === true && (
+				<SettingsCard title='nao credit usage'>
+					<div className='flex flex-col gap-2'>
+						{usage.data?.runs.map((run) => (
+							<UsageRun key={run.id} run={run} />
+						))}
+					</div>
+					<PageControls
+						hasPrevious={usageCursor !== undefined}
+						hasNext={usage.data?.nextCursor !== null}
+						onPrevious={() => setUsageCursor(undefined)}
+						onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
+					/>
+				</SettingsCard>
+			)}
 		</div>
 	);
 }

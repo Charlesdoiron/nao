@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { CreditsAiUsage } from '@/components/settings/credits-ai-usage';
 import { SettingsPageWrapper } from '@/components/ui/settings-card';
+import { usePermissions } from '@/hooks/use-permissions';
 import { requireCloud } from '@/lib/require-admin';
 
 export const Route = createFileRoute('/_sidebar-layout/settings/credits-wallet')({
@@ -10,16 +11,21 @@ export const Route = createFileRoute('/_sidebar-layout/settings/credits-wallet')
 });
 
 function CreditsWalletPage() {
+	const { isAdmin, role } = usePermissions();
+	const adminStatus = role ? isAdmin : undefined;
+
 	return (
 		<SettingsPageWrapper>
 			<div className='flex flex-col gap-5'>
 				<div>
 					<h1 className='text-lg font-semibold text-foreground'>Credits & wallet</h1>
 					<p className='text-sm text-muted-foreground'>
-						View your organization's credit balance, wallet history, and chat usage.
+						{adminStatus === false
+							? 'See how your welcome credit is shared with your organization.'
+							: "View your organization's credit balance, wallet history, and chat usage."}
 					</p>
 				</div>
-				<CreditsAiUsage />
+				<CreditsAiUsage isAdmin={adminStatus} />
 			</div>
 		</SettingsPageWrapper>
 	);
