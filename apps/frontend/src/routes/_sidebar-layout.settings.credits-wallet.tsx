@@ -11,8 +11,8 @@ export const Route = createFileRoute('/_sidebar-layout/settings/credits-wallet')
 });
 
 function CreditsWalletPage() {
-	const { isAdmin, role } = usePermissions();
-	const adminStatus = role ? isAdmin : undefined;
+	const { isOrgAdmin, role } = usePermissions();
+	const adminStatus = role ? isOrgAdmin : undefined;
 
 	return (
 		<SettingsPageWrapper>

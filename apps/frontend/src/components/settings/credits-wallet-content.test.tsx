@@ -58,12 +58,82 @@ describe('CreditsWalletContent', () => {
 			lifetimeDebitedMicroUsd: 0,
 			enabled: true,
 		});
-		mocks.listLedger.mockResolvedValue({ groups: [], nextCursor: null });
-		mocks.listUsage.mockResolvedValue({ runs: [], nextCursor: null });
+		mocks.listLedger.mockResolvedValue({
+			groups: [
+				{
+					id: 'gift',
+					createdAt: new Date(),
+					grantedForUserName: 'Managed User',
+					usageUserName: null,
+					entries: [
+						{
+							entryType: 'gift',
+							deltaMicroUsd: 5_000_000,
+							balanceAfterMicroUsd: 5_000_000,
+						},
+					],
+				},
+				{
+					id: 'run',
+					createdAt: new Date(),
+					grantedForUserName: null,
+					usageUserName: 'Managed User',
+					entries: [
+						{
+							entryType: 'usage',
+							deltaMicroUsd: -1_000,
+							balanceAfterMicroUsd: 4_999_000,
+						},
+						{
+							entryType: 'usage',
+							deltaMicroUsd: -1_000,
+							balanceAfterMicroUsd: 4_998_000,
+						},
+					],
+				},
+			],
+			nextCursor: null,
+		});
+		mocks.listUsage.mockResolvedValue({
+			runs: [
+				{
+					id: 'run',
+					startedAt: new Date(),
+					chatTitle: 'Sales analysis',
+					userName: 'Managed User',
+					events: [
+						{
+							id: 'usage',
+							category: 'chat',
+							llmModelId: 'gpt-5.6',
+							llmProvider: 'nao',
+							status: 'completed',
+							costSource: 'price_book',
+							totalTokens: 100,
+							upstreamCostMicroUsd: 1_000,
+							customerChargeMicroUsd: 2_000,
+						},
+					],
+				},
+			],
+			nextCursor: null,
+		});
 
 		renderCreditsWalletContent(true);
 
 		await screen.findByText('Available');
+		expect(
+			await screen.findByText(
+				(_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$5 nao gift Managed User',
+			),
+		).toBeTruthy();
+		expect(
+			await screen.findByText(
+				(_, element) =>
+					element?.tagName === 'TD' && element.textContent?.trim() === 'nao AI - Managed User 2 calls',
+			),
+		).toBeTruthy();
+		expect(await screen.findByText(/Managed User · .* · gpt-5\.6/)).toBeTruthy();
 		expect(screen.queryByText(/You gave your \$5 welcome credit/)).toBeNull();
 	});
 });

@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
+import * as userQueries from './user.queries';
 
 export type CreditLedgerCursor = { createdAt: Date; id: string };
 
@@ -65,10 +66,15 @@ export async function listCreditLedger(
 		page.length === 0
 			? []
 			: await db
-					.select({ entry: s.creditLedger, groupId })
+					.select({
+						entry: s.creditLedger,
+						groupId,
+						usageUserName: s.user.name,
+					})
 					.from(s.creditLedger)
 					.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
 					.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
+					.leftJoin(s.user, eq(s.managedAiUsage.userId, s.user.id))
 					.where(
 						and(
 							eq(s.creditWallet.orgId, orgId),
@@ -79,7 +85,12 @@ export async function listCreditLedger(
 						),
 					)
 					.orderBy(s.creditLedger.createdAt, s.creditLedger.id);
+	const grantedForUserIds = rows
+		.map(({ entry }) => getGrantedForUserId(entry))
+		.filter((userId): userId is string => userId !== null);
+	const grantedForUserNames = await userQueries.getUserNames([...new Set(grantedForUserIds)]);
 	const entriesByGroup = new Map<string, (typeof s.creditLedger.$inferSelect)[]>();
+	const usageUserNamesByGroup = new Map<string, string | null>();
 	for (const row of rows) {
 		const entries = entriesByGroup.get(row.groupId);
 		if (entries) {
@@ -87,10 +98,24 @@ export async function listCreditLedger(
 		} else {
 			entriesByGroup.set(row.groupId, [row.entry]);
 		}
+		if (row.entry.entryType === 'usage' && !usageUserNamesByGroup.has(row.groupId)) {
+			usageUserNamesByGroup.set(row.groupId, row.usageUserName);
+		}
 	}
 	const groups = page.flatMap((group) => {
 		const entries = entriesByGroup.get(group.id);
-		return entries ? [{ ...group, entries }] : [];
+		if (!entries) {
+			return [];
+		}
+		const grantedForUserId = entries.map(getGrantedForUserId).find((userId) => userId !== null);
+		return [
+			{
+				...group,
+				entries,
+				grantedForUserName: grantedForUserId ? (grantedForUserNames.get(grantedForUserId) ?? null) : null,
+				usageUserName: usageUserNamesByGroup.get(group.id) ?? null,
+			},
+		];
 	});
 	const last = groups.at(-1);
 	return {
@@ -103,4 +128,11 @@ export interface CreditLedgerGroup {
 	id: string;
 	createdAt: Date;
 	entries: (typeof s.creditLedger.$inferSelect)[];
+	grantedForUserName: string | null;
+	usageUserName: string | null;
+}
+
+function getGrantedForUserId(entry: typeof s.creditLedger.$inferSelect): string | null {
+	const userId = entry.metadata?.grantedForUserId;
+	return typeof userId === 'string' ? userId : null;
 }

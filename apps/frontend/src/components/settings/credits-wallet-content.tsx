@@ -67,11 +67,18 @@ export function CreditsWalletContent({ isAdmin }: { isAdmin: boolean | undefined
 											<tr key={group.id} className='border-t border-border'>
 												<td className='py-2'>{formatDate(group.createdAt)}</td>
 												<td className='py-2'>
-													{ledgerLabel(entry.entryType)}
-													{group.entries.length > 1 && (
-														<span className='text-muted-foreground'>
+													{ledgerLabel(entry.entryType, entry.deltaMicroUsd, group)}
+													{entry.entryType === 'gift' && (
+														<span className='ml-2 text-muted-foreground'>
 															{' '}
-															· {group.entries.length} calls
+															{group.grantedForUserName ?? 'Former user'}
+														</span>
+													)}
+													{entry.entryType === 'usage' && (
+														<span className='ml-2 text-muted-foreground'>
+															{' '}
+															{group.entries.length}{' '}
+															{group.entries.length === 1 ? 'call' : 'calls'}
 														</span>
 													)}
 												</td>
@@ -154,7 +161,7 @@ function UsageRun({ run }: { run: UsageRunData }) {
 						)}
 					</div>
 					<div className='text-xs text-muted-foreground'>
-						{formatDate(run.startedAt)} · {summary.models}
+						{run.userName ?? 'Former user'} · {formatDate(run.startedAt)} · {summary.models}
 					</div>
 				</div>
 				<div className='text-muted-foreground'>
@@ -284,8 +291,21 @@ function PageControls({
 	);
 }
 
-function ledgerLabel(entryType: string): string {
-	return entryType === 'gift' ? 'Gift from nao' : entryType === 'usage' ? 'AI usage' : entryType;
+function ledgerLabel(entryType: string, deltaMicroUsd: number, group: CreditLedgerGroup): string {
+	return entryType === 'gift'
+		? `${formatGiftUsd(deltaMicroUsd)} nao gift`
+		: entryType === 'usage'
+			? `nao AI - ${group.usageUserName ?? 'Former user'}`
+			: entryType;
+}
+
+function formatGiftUsd(microUsd: number): string {
+	return new Intl.NumberFormat(undefined, {
+		style: 'currency',
+		currency: 'USD',
+		minimumFractionDigits: 0,
+		maximumFractionDigits: 2,
+	}).format(microUsd / 1_000_000);
 }
 
 function formatUsd(microUsd: number): string {

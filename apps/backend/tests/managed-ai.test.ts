@@ -136,6 +136,7 @@ describe('managed AI usage and organization credits', () => {
 		});
 		expect(entries).toHaveLength(1);
 		expect(entries[0]?.metadata).toMatchObject({ grantedForUserId: MANAGED_USER_ID });
+		expect((await listCreditLedger(ORG_ID, { limit: 100 })).groups[0]?.grantedForUserName).toBe('Managed User');
 	});
 
 	it('pools one grant per user into the organization they first use', async () => {
@@ -220,9 +221,12 @@ describe('managed AI usage and organization credits', () => {
 		const groupedUsage = await listManagedAiUsage({ orgId: ORG_ID, userId: MANAGED_USER_ID }, { limit: 100 });
 		const usageRun = groupedUsage.runs.find((run) => run.id === rows[0]?.runId);
 		expect(usageRun?.chatTitle).toBe('New Conversation');
+		expect(usageRun?.userName).toBe('Managed User');
 		expect(usageRun?.events).toHaveLength(2);
 		const groupedLedger = await listCreditLedger(ORG_ID, { limit: 100 });
-		expect(groupedLedger.groups.find((group) => group.id === rows[0]?.runId)?.entries).toHaveLength(2);
+		const ledgerGroup = groupedLedger.groups.find((group) => group.id === rows[0]?.runId);
+		expect(ledgerGroup?.entries).toHaveLength(2);
+		expect(ledgerGroup?.usageUserName).toBe('Managed User');
 		const summary = await getCreditSummary(ORG_ID);
 		const [ledgerTotal] = await db
 			.select({ total: sql<number>`coalesce(sum(${s.creditLedger.deltaMicroUsd}), 0)` })

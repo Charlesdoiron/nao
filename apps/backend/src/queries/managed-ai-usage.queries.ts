@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import s, { type DBManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
+import * as userQueries from './user.queries';
 
 export async function listManagedAiUsage(
 	scope: { orgId: string; userId?: string },
@@ -46,6 +47,8 @@ export async function listManagedAiUsage(
 						),
 					)
 					.orderBy(s.managedAiUsage.startedAt, s.managedAiUsage.id);
+	const userIds = events.map(({ event }) => event.userId).filter((userId): userId is string => userId !== null);
+	const userNames = await userQueries.getUserNames([...new Set(userIds)]);
 	const eventsByRun = new Map<string, DBManagedAiUsage[]>();
 	const chatTitlesByRun = new Map<string, string>();
 	for (const { event, chatTitle } of events) {
@@ -61,12 +64,14 @@ export async function listManagedAiUsage(
 	}
 	const runs = page.flatMap((run) => {
 		const runEvents = eventsByRun.get(run.id);
+		const userId = runEvents?.find((event) => event.userId)?.userId;
 		return runEvents
 			? [
 					{
 						id: run.id,
 						startedAt: run.startedAt,
 						chatTitle: chatTitlesByRun.get(run.id) ?? null,
+						userName: userId ? (userNames.get(userId) ?? null) : null,
 						events: runEvents,
 					},
 				]
@@ -85,5 +90,6 @@ export interface ManagedAiUsageRun {
 	id: string;
 	startedAt: Date;
 	chatTitle: string | null;
+	userName: string | null;
 	events: DBManagedAiUsage[];
 }
