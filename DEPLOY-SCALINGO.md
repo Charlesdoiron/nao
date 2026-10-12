@@ -34,7 +34,7 @@ séparer imposerait de patcher le code amont (`execute-sql.ts`, `live-story.ts`)
 | `nao-scalingo.sh` | gère une instance : create / deploy / logs / env / scale / destroy… |
 | `fgp-scopes.json` | scopes de l'accès restreint aux apps `nao-*` (agents, CI) |
 | `.env.fgp.example` | gabarit de `.env.fgp` (clé + blob FGP, jamais commité) |
-| `instances/<produit>/` | (optionnel) fichiers qui écrasent la base pour une instance (ex. `Procfile`) |
+| `instances/<produit>/` | une par instance : `INSTANCE.md` (fiche) + (optionnel) fichiers qui écrasent la base (ex. `Procfile`) |
 | `package.json` | ajout du script `heroku-postbuild` (1/3 retouches d'un fichier amont) |
 | `.gitignore` | ajout de `.env.fgp` (2/3 retouches d'un fichier amont) |
 | `README.md` | bandeau d'entrée vers ce document (3/3 retouches d'un fichier amont) |
@@ -44,6 +44,30 @@ séparer imposerait de patcher le code amont (`execute-sql.ts`, `live-story.ts`)
 1. **CLI Scalingo** installée et authentifiée : `scalingo login`.
 2. **Accès région `osc-secnum-fr1`** (SecNumCloud) activé par le support Scalingo (entité EU requise).
 3. Le repo de déploiement (ce fork) poussé sur GitHub (`incubateur-territoires/nao-scalingo`).
+
+## Inventaire des instances
+
+Trois instances en production, toutes en région **`osc-secnum-fr1`**. Chacune a son dossier
+`instances/<produit>/` avec une fiche `INSTANCE.md` (app, contexte, bases, particularités) :
+
+| Produit | App Scalingo | Contexte | Overlay |
+|---|---|---|---|
+| `inclusion-numerique-prod` | `nao-inclusion-numerique-prod` | `nao-context-inclusion-numerique` | **oui** (tunnel SSH) |
+| `data-transverse` | `nao-data-transverse` | `nao-context-pole-data-ia` | non |
+| `administration-plus-prod` | `nao-administration-plus-prod` | `nao-aplus-context` (privé) | non |
+
+Un dossier `instances/<produit>/` est **toujours** un overlay : au déploiement, tout ce qu'il
+contient est recopié par-dessus la racine de l'app. Les fiches s'appellent donc `INSTANCE.md` (aucun
+fichier de la racine ne porte ce nom) et `.slugignore` les écarte du slug. Déposer un `Procfile`, un
+`Aptfile` ou un `bin/` dans ce dossier écrase celui de la racine — c'est voulu pour
+`inclusion-numerique-prod`, ce serait un accident pour les deux autres.
+
+`list` ne marche pas en mode FGP (le blob refuse `GET /v1/apps`, qui verrait toutes les apps du
+compte) : **ce tableau est la seule source d'inventaire**. Le tenir à jour en ajoutant une instance.
+
+> `nao-test-aplus` (région `osc-fr1`) traîne encore comme remote git `scalingo` de ce dépôt. C'est
+> une ancienne instance de test, dans une **autre région** que le blob FGP ne cible pas. Elle ne
+> fait pas partie des instances à maintenir.
 
 ## Gérer les instances : `nao-scalingo.sh`
 
@@ -313,10 +337,13 @@ git switch -c olaurendeau/sync-upstream-$(date +%F) origin/main
 git merge upstream/main
 ```
 
-Les conflits ne peuvent porter que sur les **trois fichiers amont retouchés** (cf. tableau de
-l'overlay) : `package.json` (garder `heroku-postbuild`), `.gitignore` (garder `.env.fgp`) et
-`README.md` (garder le bandeau). Tout le reste de l'overlay est en fichiers neufs, donc intouchable
-par amont.
+Les conflits ne peuvent venir que de deux endroits. D'abord les **trois fichiers amont retouchés**
+(cf. tableau de l'overlay) : `package.json` (garder `heroku-postbuild`), `.gitignore` (garder
+`.env.fgp`) et `README.md` (garder le bandeau). Ensuite les **workflows d'amont retirés** d'ici
+(`docker.yml`, `publish.yml`, `pr-preview.yml`, `pr-gate.yml`, `issue-gate.yml`,
+`approve-contributor.yml`, `remove-old-artifacts.yml`) : si amont en modifie un, git remonte un
+conflit « deleted by us / modified by them » → **garder supprimé**. Tout le reste de l'overlay est
+en fichiers neufs, donc intouchable par amont.
 
 Avant de pousser, vérifier que l'arbre vaut bien **amont + overlay, et rien d'autre** — c'est le
 contrôle qui attrape une résolution de conflit bancale :
@@ -385,12 +412,12 @@ organization`, et seul un owner de `incubateur-territoires` peut le lever (Setti
 General de l'**organisation**). `js-lint`, `js-test` et `cli-lint` ne tournent donc **pas**, malgré
 la présence des workflows dans `.github/` : aucun run depuis la création du fork.
 
-> **Avant de faire lever ce blocage**, désactiver les workflows hérités d'amont qui n'ont pas de
-> sens ici : les 12 sont enregistrés et marqués `active`, donc ils deviennent vivants d'un coup.
-> `docker.yml` se déclenche **sur chaque push vers `main`** (donc à chaque synchro) et `publish.yml`
-> sur les tags `v*` (publication du paquet) ; `pr-preview.yml` déploie un environnement par PR, et
-> `approve-contributor.yml` / `issue-gate.yml` / `pr-gate.yml` sont la gouvernance des contributions
-> d'amont. À garder : `js-lint`, `js-test`, `cli-lint`, et `caddy`/`helm` (bornés à leurs chemins).
+Le jour où ce blocage est levé, les workflows deviennent vivants **d'un coup** : ils sont tous
+enregistrés et marqués `active`, pas dormants. C'est pourquoi les sept qui n'ont pas de sens sur un
+fork de déploiement ont déjà été **retirés du dépôt** (cf. § 1, ils sont la 2ᵉ source de conflits à
+la synchro) : `docker.yml` se déclenchait sur chaque push vers `main` — donc à chaque synchro — et
+`publish.yml` sur les tags `v*`, que le fork porte déjà. Restent `js-lint`, `js-test`, `cli-lint`,
+plus `caddy` et `helm` bornés à leurs chemins : rien à désactiver avant de lever le blocage.
 
 Conséquence pratique : lancer le lint soi-même (`npm run lint`, et `make lint` dans `cli/`), ce qui
 suppose un toolchain Node/bun sur la machine. À défaut, le garde-fou restant est le build Scalingo
