@@ -35,7 +35,9 @@ séparer imposerait de patcher le code amont (`execute-sql.ts`, `live-story.ts`)
 | `fgp-scopes.json` | scopes de l'accès restreint aux apps `nao-*` (agents, CI) |
 | `.env.fgp.example` | gabarit de `.env.fgp` (clé + blob FGP, jamais commité) |
 | `instances/<produit>/` | (optionnel) fichiers qui écrasent la base pour une instance (ex. `Procfile`) |
-| `package.json` | ajout du script `heroku-postbuild` (seule modif d'un fichier amont) |
+| `package.json` | ajout du script `heroku-postbuild` (1/3 retouches d'un fichier amont) |
+| `.gitignore` | ajout de `.env.fgp` (2/3 retouches d'un fichier amont) |
+| `README.md` | bandeau d'entrée vers ce document (3/3 retouches d'un fichier amont) |
 
 ## Pré-requis
 
@@ -295,11 +297,100 @@ Scalingo (`DB_URI` auto-dérivé) — on **garde** l'addon (pas de `--no-pg`).
 - LLM : `ANTHROPIC_API_KEY` (test initial) ou `MISTRAL_API_KEY` (Mistral est supporté nativement, cf. `cli/.[all]`).
   Le provider effectif se choisit dans le `nao_config.yaml` du repo de contexte.
 
-## Maintenance / suivi upstream
+## Mettre à jour une instance (synchro amont + déploiement)
 
-Tous les ajouts sont des **fichiers neufs** ; seule modif amont = le script `heroku-postbuild` dans
-`package.json`. La synchro se fait via le bouton **« Sync fork »** de GitHub sur `main`. En cas de conflit,
-il ne portera que sur `package.json` (trivial à résoudre).
+Deux étapes : on remet le fork au niveau de `getnao/nao`, puis on redéploie chaque instance.
+
+### 1. Synchroniser le fork
+
+**Le bouton « Sync fork » de GitHub ne convient pas** : `main` porte les commits de l'overlay, donc
+GitHub ne peut que proposer une fusion qu'il ne sait pas résoudre, ou écraser le fork. La synchro se
+fait en ligne de commande, et c'est une **fusion ordinaire** :
+
+```bash
+git fetch upstream --tags
+git switch -c olaurendeau/sync-upstream-$(date +%F) origin/main
+git merge upstream/main
+```
+
+Les conflits ne peuvent porter que sur les **trois fichiers amont retouchés** (cf. tableau de
+l'overlay) : `package.json` (garder `heroku-postbuild`), `.gitignore` (garder `.env.fgp`) et
+`README.md` (garder le bandeau). Tout le reste de l'overlay est en fichiers neufs, donc intouchable
+par amont.
+
+Avant de pousser, vérifier que l'arbre vaut bien **amont + overlay, et rien d'autre** — c'est le
+contrôle qui attrape une résolution de conflit bancale :
+
+```bash
+git diff --name-status upstream/main HEAD
+# attendu : les fichiers de l'overlay en A, et uniquement
+# package.json / .gitignore / README.md en M
+```
+
+Synchroniser sur `upstream/main` ou sur le dernier tag `v*` est un choix : `main` apporte des
+correctifs non publiés (parfois de sécurité), le tag apporte une version éprouvée. Si on prend
+`main`, le dire dans le message de fusion.
+
+> **Historique** — les deux premières synchros écrasaient l'arbre en un commit **sans parent
+> amont** : l'ancêtre commun restait figé à septembre 2026 et chaque synchro devait tout réappliquer
+> à la main. La fusion de `b1510b5a` (12/10/2026) a rétabli une vraie ascendance. Il n'y a plus de
+> raison de revenir à un écrasement.
+
+### 2. Contrôles avant de déployer
+
+Le build Scalingo est long : ces quatre contrôles coûtent une minute et évitent un aller-retour.
+
+```bash
+PREV=v0.3.22   # version d'où l'on vient
+
+# a. Migrations : repérer tout ce qui n'est pas purement additif (DROP / ALTER destructif).
+git diff --name-status $PREV upstream/main -- apps/backend/migrations-postgres
+# b. Nouvelles variables d'env requises (à poser avec set-env AVANT le déploiement).
+git diff $PREV upstream/main -- .env.example | grep -E '^\+[A-Z_]+='
+# c. Cibles de l'overlay toujours en place (un renommage amont casse le boot).
+ls apps/backend/scripts/db.migrate.ts apps/backend/src/cli.ts apps/backend/fastapi/main.py \
+   docker/install-duckdb-extensions.mjs
+# d. Nouvelles dépendances lourdes (limite de slug à 2 GiB).
+git diff $PREV upstream/main -- package.json 'apps/*/package.json' | grep -E '^\+\s+"'
+```
+
+Les paquets front retirés par `bin/build.sh` (étape 3) ne doivent jamais être importés par
+`apps/backend` ni `apps/shared` — sinon le runtime casse :
+
+```bash
+grep -rE "from '(@tabler|mermaid|monaco-editor|maplibre-gl|lucide-react|posthog-js)" \
+  apps/backend/src apps/shared/src   # doit ne rien renvoyer
+```
+
+### 3. Déployer, puis bénir `main`
+
+`deploy` envoie le **dernier commit** du repo courant (`git archive HEAD`), overlay
+`instances/<produit>/` appliqué. On déploie **depuis la branche de synchro** : si le build casse,
+`main` n'a pas bougé et la version en ligne continue de tourner (la phase `release` joue les
+migrations et **bloque** la mise en ligne en cas d'échec).
+
+```bash
+./nao-scalingo.sh deploy <produit>          # suit le statut jusqu'à success/error
+curl -sS -o /dev/null -w '%{http_code}\n' https://nao-<produit>.osc-secnum-fr1.scalingo.io/
+./nao-scalingo.sh logs <produit> 200 | grep -iE 'Migrations|error|✗'
+```
+
+Une fois l'instance saine, et **seulement** là, avancer `main` puis la pousser.
+
+### Vérifier le code : ni CI ni lint ici
+
+**Les GitHub Actions sont désactivées sur ce fork** (comportement par défaut d'un fork ; aucun run
+depuis sa création). `js-lint`, `js-test` et `cli-lint` ne tournent donc **pas** sur les pushes de
+ce dépôt, malgré la présence des workflows dans `.github/`. Il n'y a pas de filet automatique.
+
+Conséquence pratique : lancer le lint soi-même (`npm run lint`, et `make lint` dans `cli/`), ce qui
+suppose un toolchain Node/bun sur la machine. À défaut, le garde-fou restant est le build Scalingo
+(`vite build` + migrations en phase `release`) — il attrape une rupture d'import ou de migration,
+pas une régression de style ou de typage.
+
+Une synchro bien faite limite les dégâts : si `git diff --name-status upstream/main HEAD` ne montre
+que l'overlay, il n'y a **aucun code neuf propre au fork** à linter, et amont a déjà passé sa
+propre CI sur ce contenu. C'est un argument sur le contenu, pas une vérification.
 
 ## À surveiller au premier déploiement
 

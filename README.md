@@ -1,3 +1,18 @@
+> ### ⚠️ Ce dépôt est un fork de déploiement, pas le projet nao
+>
+> `incubateur-territoires/nao-scalingo` sert à **faire tourner [nao](https://github.com/getnao/nao)
+> sur [Scalingo](https://scalingo.com)** (région SecNumCloud), à raison d'**une instance par
+> produit**. Tout ce qui est propre au fork vit dans des fichiers neufs (`nao-scalingo.sh`,
+> `Procfile`, `bin/`, `instances/`…) ; le code amont n'est retouché qu'à deux endroits.
+>
+> **→ Tout est dans [`DEPLOY-SCALINGO.md`](DEPLOY-SCALINGO.md)** : architecture, création d'une
+> instance, accès restreint des agents via FGP, et le **[mode opératoire de mise à jour](DEPLOY-SCALINGO.md#mettre-à-jour-une-instance-synchro-amont--déploiement)**
+> (synchro depuis `getnao/nao` puis redéploiement).
+>
+> Le README ci-dessous est celui du projet amont : il décrit nao, pas ce déploiement.
+
+---
+
 <p align="center">
   <a href="https://getnao.io">
     <picture>
