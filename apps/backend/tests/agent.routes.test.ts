@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -41,6 +43,7 @@ describe('agent route cloud billing access', () => {
 		vi.clearAllMocks();
 		mocks.getChatProjectId.mockResolvedValue('chat-project-id');
 		mocks.getUserRoleInProject.mockResolvedValue('user');
+		mocks.assertProjectCloudBillingAccess.mockResolvedValue(undefined);
 		await agentRoutes({ addHook: mocks.addHook, post: mocks.post } as never);
 	});
 
@@ -49,24 +52,77 @@ describe('agent route cloud billing access', () => {
 		mocks.assertProjectCloudBillingAccess.mockRejectedValue(accessError);
 
 		await expect(
-			handler()({
-				user: { id: 'user-id' },
-				project: { id: 'selected-project-id' },
-				body: { chatId: 'chat-id' },
-				headers: {},
-			}),
+			handler()(
+				{
+					user: { id: 'user-id' },
+					project: { id: 'selected-project-id' },
+					body: { chatId: 'chat-id' },
+					headers: {},
+					raw: new EventEmitter(),
+				},
+				{ raw: createRawReply() },
+			),
 		).rejects.toBe(accessError);
 
 		expect(mocks.assertProjectCloudBillingAccess).toHaveBeenCalledWith('chat-project-id');
 		expect(mocks.handleAgentRoute).not.toHaveBeenCalled();
 	});
+
+	it('stops the agent when the client disconnects while the handler initializes', async () => {
+		const stop = vi.fn();
+		let resolveAgent!: (result: {
+			chatId: string;
+			isNewChat: boolean;
+			modelId: string;
+			stream: ReadableStream;
+			stop: () => void;
+		}) => void;
+		mocks.handleAgentRoute.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					resolveAgent = resolve;
+				}),
+		);
+		const raw = new EventEmitter();
+		const response = handler()(
+			{
+				user: { id: 'user-id' },
+				project: { id: 'project-id' },
+				body: {},
+				headers: {},
+				raw,
+			},
+			{ raw: createRawReply() },
+		);
+
+		await vi.waitFor(() => expect(mocks.handleAgentRoute).toHaveBeenCalledOnce());
+		raw.emit('aborted');
+		resolveAgent({
+			chatId: 'chat-id',
+			isNewChat: true,
+			modelId: 'model-id',
+			stream: new ReadableStream(),
+			stop,
+		});
+		await response;
+
+		expect(stop).toHaveBeenCalledOnce();
+	});
 });
 
 function handler() {
-	return mocks.post.mock.calls[0][2] as (request: {
-		user: { id: string };
-		project: { id: string };
-		body: { chatId: string };
-		headers: Record<string, string>;
-	}) => Promise<unknown>;
+	return mocks.post.mock.calls[0][2] as (
+		request: {
+			user: { id: string };
+			project: { id: string };
+			body: { chatId?: string };
+			headers: Record<string, string>;
+			raw: EventEmitter;
+		},
+		reply: { raw: ReturnType<typeof createRawReply> },
+	) => Promise<unknown>;
+}
+
+function createRawReply() {
+	return Object.assign(new EventEmitter(), { writableEnded: false });
 }

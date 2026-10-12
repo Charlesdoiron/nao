@@ -15,10 +15,7 @@ const managedModelIds = PROVIDER_META.nao.models.map((model) => model.id);
 
 export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 	const { isOrgAdmin } = usePermissions();
-	const managedCreditSummary = useQuery({
-		...trpc.account.getCreditSummary.queryOptions(),
-		refetchOnWindowFocus: false,
-	});
+	const managedCreditSummary = useQuery(trpc.account.getCreditSummary.queryOptions());
 	const {
 		projectConfigs,
 		configProviders,

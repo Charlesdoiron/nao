@@ -16,6 +16,22 @@ export const agentRoutes = async (app: App) => {
 
 	app.post('/', { schema: { body: AgentRequestSchema } }, async (request, reply) => {
 		const { user, project, body, headers } = request;
+		let clientDisconnected = false;
+		let stopAgent: (() => void) | undefined = undefined;
+		const stopAgentOnDisconnect = () => {
+			if (clientDisconnected) {
+				return;
+			}
+			clientDisconnected = true;
+			stopAgent?.();
+		};
+		request.raw.once('aborted', stopAgentOnDisconnect);
+		reply.raw.once('close', () => {
+			if (!reply.raw.writableEnded) {
+				stopAgentOnDisconnect();
+			}
+		});
+
 		const projectId = body.chatId ? await chatQueries.getChatProjectId(body.chatId) : project?.id;
 
 		let canChatWithNaoData = false;
@@ -34,12 +50,10 @@ export const agentRoutes = async (app: App) => {
 			...body,
 			adminMode: body.adminMode && canChatWithNaoData,
 		});
-		request.raw.once('aborted', result.stop);
-		reply.raw.once('close', () => {
-			if (!reply.raw.writableEnded) {
-				result.stop();
-			}
-		});
+		stopAgent = result.stop;
+		if (clientDisconnected) {
+			stopAgent();
+		}
 
 		posthog.capture(user.id, PostHogEvent.MessageSent, {
 			project_id: projectId,

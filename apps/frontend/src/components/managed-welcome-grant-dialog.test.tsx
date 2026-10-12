@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ManagedWelcomeGrantProvider, useManagedWelcomeGrant } from './managed-welcome-grant-dialog';
@@ -87,6 +87,35 @@ describe('ManagedWelcomeGrantProvider', () => {
 
 		await waitFor(() => expect(onDecision).toHaveBeenCalledWith('switch-project'));
 		expect(mocks.claimGrant).not.toHaveBeenCalled();
+	});
+
+	it('shares one confirmation between concurrent managed sends', async () => {
+		const onDecision = vi.fn();
+		let releaseStatus = () => {};
+		mocks.getStatus.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					releaseStatus = () =>
+						resolve({
+							enabled: true,
+							organization: { id: 'org-1', name: 'Acme' },
+							welcomeGrantStatus: 'unclaimed',
+							balanceMicroUsd: 0,
+						});
+				}),
+		);
+		renderProvider(<SendHarness onDecision={onDecision} />);
+
+		const sendButton = screen.getByRole('button', { name: 'Send' });
+		fireEvent.click(sendButton);
+		fireEvent.click(sendButton);
+		await act(async () => releaseStatus());
+		fireEvent.click(await screen.findByRole('button', { name: 'Apply $5 and send' }));
+
+		await waitFor(() => expect(onDecision).toHaveBeenCalledTimes(2));
+		expect(onDecision).toHaveBeenNthCalledWith(1, 'send');
+		expect(onDecision).toHaveBeenNthCalledWith(2, 'send');
+		expect(mocks.claimGrant).toHaveBeenCalledOnce();
 	});
 });
 

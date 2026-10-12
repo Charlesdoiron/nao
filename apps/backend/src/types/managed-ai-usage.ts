@@ -18,5 +18,13 @@ export type ManagedAiUsageStatus = (typeof MANAGED_AI_USAGE_STATUSES)[number];
 export const MANAGED_AI_USAGE_COST_SOURCES = ['provider_reported', 'price_book', 'estimated', 'unknown'] as const;
 export type ManagedAiUsageCostSource = (typeof MANAGED_AI_USAGE_COST_SOURCES)[number];
 
-export const CREDIT_LEDGER_ENTRY_TYPES = ['gift', 'purchase', 'referral', 'usage', 'refund', 'adjustment'] as const;
+export const CREDIT_LEDGER_ENTRY_TYPES = [
+	'gift',
+	'purchase',
+	'referral',
+	'reservation',
+	'usage',
+	'refund',
+	'adjustment',
+] as const;
 export type CreditLedgerEntryType = (typeof CREDIT_LEDGER_ENTRY_TYPES)[number];

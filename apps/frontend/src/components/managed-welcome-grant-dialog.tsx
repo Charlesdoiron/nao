@@ -25,6 +25,7 @@ export function ManagedWelcomeGrantProvider({ children }: { children: React.Reac
 	const queryClient = useQueryClient();
 	const claimGrant = useMutation(trpc.account.claimWelcomeGrant.mutationOptions());
 	const pendingRef = useRef<PendingConfirmation | null>(null);
+	const confirmationPromiseRef = useRef<Promise<ManagedWelcomeGrantDecision> | null>(null);
 	const [pending, setPending] = useState<PendingConfirmation | null>(null);
 	const [error, setError] = useState<string>();
 
@@ -42,23 +43,35 @@ export function ManagedWelcomeGrantProvider({ children }: { children: React.Reac
 	useEffect(() => () => pendingRef.current?.resolve('cancel'), []);
 
 	const confirmBeforeSend = useCallback(
-		async (provider: LlmProvider | undefined): Promise<ManagedWelcomeGrantDecision> => {
+		(provider: LlmProvider | undefined): Promise<ManagedWelcomeGrantDecision> => {
 			if (provider !== 'nao') {
-				return 'send';
+				return Promise.resolve('send');
 			}
-			if (pendingRef.current) {
-				return 'cancel';
+			if (confirmationPromiseRef.current) {
+				return confirmationPromiseRef.current;
 			}
-			const status = await queryClient.fetchQuery(trpc.account.getManagedCreditStatus.queryOptions());
-			const organization = status.organization;
-			if (!status.enabled || status.welcomeGrantStatus !== 'unclaimed' || !organization) {
-				return 'send';
-			}
-			return new Promise((resolve) => {
-				const confirmation = { resolve, organizationName: organization.name };
-				pendingRef.current = confirmation;
-				setPending(confirmation);
-			});
+			const confirmationPromise = (async () => {
+				const status = await queryClient.fetchQuery(trpc.account.getManagedCreditStatus.queryOptions());
+				const organization = status.organization;
+				if (!status.enabled || status.welcomeGrantStatus !== 'unclaimed' || !organization) {
+					return 'send';
+				}
+				return new Promise<ManagedWelcomeGrantDecision>((resolve) => {
+					const confirmation = { resolve, organizationName: organization.name };
+					pendingRef.current = confirmation;
+					setPending(confirmation);
+				});
+			})();
+			confirmationPromiseRef.current = confirmationPromise;
+			void confirmationPromise.then(
+				() => {
+					confirmationPromiseRef.current = null;
+				},
+				() => {
+					confirmationPromiseRef.current = null;
+				},
+			);
+			return confirmationPromise;
 		},
 		[queryClient],
 	);

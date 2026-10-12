@@ -60,7 +60,7 @@ export async function ensureFeedbackCoverage(
 	const dismissedSet = new Set(context.dismissedFingerprints);
 	const existingByFingerprint = new Map(context.existing.map((r) => [r.fingerprint, r]));
 
-	const clusters = await clusterFeedbacks(projectId, context.userId, model, remaining);
+	const clusters = await clusterFeedbacks(projectId, runId, context.userId, model, remaining);
 	if (clusters.length > 0) {
 		await applyFeedbackClusters(projectId, runId, clusters, { dismissedSet, existingByFingerprint });
 	} else {
@@ -161,6 +161,7 @@ function resolveRecommendationForFeedback(
 
 async function clusterFeedbacks(
 	projectId: string,
+	runId: string,
 	userId: string,
 	model: LlmSelectedModel,
 	unlinked: crQueries.UnlinkedFeedback[],
@@ -168,6 +169,7 @@ async function clusterFeedbacks(
 	const providerModel = await resolveProviderModel(projectId, model.provider, model.modelId, true, {
 		userId,
 		projectId,
+		runId,
 		category: 'recommendation',
 	});
 	if (!providerModel) {

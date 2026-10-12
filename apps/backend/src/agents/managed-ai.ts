@@ -13,9 +13,10 @@ import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
 import type { ModelCosts } from '../types/llm';
 import type { ManagedAiUsageCategory, ManagedAiUsageStatus } from '../types/managed-ai-usage';
-import { ManagedCreditsExhaustedError, WelcomeGrantConfirmationRequiredError } from '../utils/error';
-import { logger } from '../utils/logger';
+import { WelcomeGrantConfirmationRequiredError } from '../utils/error';
 import { getProviderMeta } from './providers';
+
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export type ManagedAiUsageContext = {
 	userId?: string;
@@ -61,23 +62,12 @@ function createManagedAiUsageMiddleware(
 	return {
 		specificationVersion: 'v3',
 		wrapGenerate: async ({ doGenerate, params }) => {
-			await prepareCall(context, rates);
 			const operationId = crypto.randomUUID();
+			await prepareCall(context, rates, params, operationId);
 			const startedAt = new Date();
+			let result;
 			try {
-				const result = await doGenerate();
-				await recordManagedAiUsage({
-					operationId,
-					startedAt,
-					modelId,
-					context,
-					status: 'completed',
-					usage: result.usage,
-					rates,
-					finishReason: result.finishReason.unified,
-					providerRequestId: result.response?.id,
-				});
-				return result;
+				result = await doGenerate();
 			} catch (error) {
 				await recordManagedAiUsage({
 					operationId,
@@ -90,26 +80,26 @@ function createManagedAiUsageMiddleware(
 				});
 				throw error;
 			}
+			await recordManagedAiUsage({
+				operationId,
+				startedAt,
+				modelId,
+				context,
+				status: 'completed',
+				usage: result.usage,
+				rates,
+				finishReason: result.finishReason.unified,
+				providerRequestId: result.response?.id,
+			});
+			return result;
 		},
 		wrapStream: async ({ doStream, params }) => {
-			await prepareCall(context, rates);
 			const operationId = crypto.randomUUID();
+			await prepareCall(context, rates, params, operationId);
 			const startedAt = new Date();
+			let result;
 			try {
-				const { stream, ...rest } = await doStream();
-				return {
-					...rest,
-					stream: stream.pipeThrough(
-						createStreamMeter({
-							operationId,
-							startedAt,
-							modelId,
-							context,
-							rates,
-							params,
-						}),
-					),
-				};
+				result = await doStream();
 			} catch (error) {
 				await recordManagedAiUsage({
 					operationId,
@@ -122,6 +112,20 @@ function createManagedAiUsageMiddleware(
 				});
 				throw error;
 			}
+			const { stream, ...rest } = result;
+			return {
+				...rest,
+				stream: stream.pipeThrough(
+					createStreamMeter({
+						operationId,
+						startedAt,
+						modelId,
+						context,
+						rates,
+						params,
+					}),
+				),
+			};
 		},
 	};
 }
@@ -182,9 +186,12 @@ function estimateUsage(params: LanguageModelV3CallOptions, streamedChars: number
 	};
 }
 
-// ponytail: check-then-charge can overspend by one concurrent request. Upgrade to hold/settle
-// before purchased balances are supported.
-async function prepareCall(context: ManagedAiUsageContext, rates: ModelCosts | undefined): Promise<void> {
+async function prepareCall(
+	context: ManagedAiUsageContext,
+	rates: ModelCosts | undefined,
+	params: LanguageModelV3CallOptions,
+	operationId: string,
+): Promise<void> {
 	if (!context.userId) {
 		throw new Error('Managed AI usage requires an initiating user.');
 	}
@@ -194,16 +201,15 @@ async function prepareCall(context: ManagedAiUsageContext, rates: ModelCosts | u
 	if (!rates) {
 		throw new Error('Managed model has no configured token pricing.');
 	}
-	const [claim, summary] = await Promise.all([
-		creditWalletQueries.getWelcomeGrantClaim(context.userId),
-		creditWalletQueries.getCreditSummary(context.orgId),
-	]);
+	const claim = await creditWalletQueries.getWelcomeGrantClaim(context.userId);
 	if (!claim) {
 		throw new WelcomeGrantConfirmationRequiredError();
 	}
-	if (summary.balanceMicroUsd <= 0) {
-		throw new ManagedCreditsExhaustedError();
-	}
+	await creditWalletService.reserveManagedAiCredits(
+		context.orgId,
+		operationId,
+		calculateReservationMicroUsd(params, rates),
+	);
 }
 
 type RecordManagedAiUsageOptions = {
@@ -218,60 +224,47 @@ type RecordManagedAiUsageOptions = {
 	providerRequestId?: string;
 };
 
-// ponytail: a process crash during a provider call can lose its terminal usage row. Upgrade to
-// started rows plus reconciliation when paid balances make that operational cost worthwhile.
+// ponytail: a process crash during a provider call leaves its durable reservation unsettled.
+// Upgrade to provider reconciliation and stale-reservation release before paid balances launch.
 async function recordManagedAiUsage(options: RecordManagedAiUsageOptions): Promise<void> {
-	try {
-		const tokenUsage = toTokenUsage(options.usage);
-		const costs = calculateCosts(tokenUsage, options.rates);
-		const costSource = options.rates ? (options.status === 'completed' ? 'price_book' : 'estimated') : 'unknown';
-		await creditWalletService.recordManagedAiUsageAndChargeWallet(
-			{
-				operationId: options.operationId,
-				runId: options.context.runId ?? options.operationId,
-				userId: options.context.userId,
-				orgId: options.context.orgId,
-				projectId: options.context.projectId,
-				chatId: options.context.chatId,
-				chatMessageId: options.context.messageId,
-				category: options.context.category,
-				llmProvider: 'nao',
-				llmModelId: options.modelId,
-				status: options.status,
-				finishReason: options.finishReason,
-				providerRequestId: options.providerRequestId,
-				inputTotalTokens: tokenUsage.inputTotalTokens,
-				inputNoCacheTokens: tokenUsage.inputNoCacheTokens ?? 0,
-				inputCacheReadTokens: tokenUsage.inputCacheReadTokens ?? 0,
-				inputCacheWriteTokens: tokenUsage.inputCacheWriteTokens ?? 0,
-				outputTotalTokens: tokenUsage.outputTotalTokens ?? 0,
-				outputTextTokens: tokenUsage.outputTextTokens,
-				outputReasoningTokens: tokenUsage.outputReasoningTokens ?? 0,
-				totalTokens: tokenUsage.totalTokens,
-				inputNoCacheRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputNoCache),
-				inputCacheReadRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputCacheRead),
-				inputCacheWriteRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputCacheWrite),
-				outputRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.output),
-				...costs,
-				upstreamCostMicroUsd: costs.total,
-				costSource,
-				startedAt: options.startedAt,
-				completedAt: new Date(),
-			},
-			costs.total ?? 0,
-		);
-	} catch (error) {
-		logger.error(`Managed AI usage was not recorded: ${String(error)}`, {
-			source: 'agent',
+	const tokenUsage = toTokenUsage(options.usage);
+	const costs = calculateCosts(tokenUsage, options.rates);
+	const costSource = options.rates ? (options.status === 'completed' ? 'price_book' : 'estimated') : 'unknown';
+	await creditWalletService.recordManagedAiUsageAndChargeWallet(
+		{
+			operationId: options.operationId,
+			runId: options.context.runId ?? options.operationId,
+			userId: options.context.userId,
+			orgId: options.context.orgId,
 			projectId: options.context.projectId,
-			context: {
-				userId: options.context.userId,
-				chatId: options.context.chatId,
-				modelId: options.modelId,
-				operationId: options.operationId,
-			},
-		});
-	}
+			chatId: options.context.chatId,
+			chatMessageId: options.context.messageId,
+			category: options.context.category,
+			llmProvider: 'nao',
+			llmModelId: options.modelId,
+			status: options.status,
+			finishReason: options.finishReason,
+			providerRequestId: options.providerRequestId,
+			inputTotalTokens: tokenUsage.inputTotalTokens,
+			inputNoCacheTokens: tokenUsage.inputNoCacheTokens ?? 0,
+			inputCacheReadTokens: tokenUsage.inputCacheReadTokens ?? 0,
+			inputCacheWriteTokens: tokenUsage.inputCacheWriteTokens ?? 0,
+			outputTotalTokens: tokenUsage.outputTotalTokens ?? 0,
+			outputTextTokens: tokenUsage.outputTextTokens,
+			outputReasoningTokens: tokenUsage.outputReasoningTokens ?? 0,
+			totalTokens: tokenUsage.totalTokens,
+			inputNoCacheRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputNoCache),
+			inputCacheReadRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputCacheRead),
+			inputCacheWriteRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.inputCacheWrite),
+			outputRateMicroUsdPerMillionTokens: toMicroUsd(options.rates?.output),
+			...costs,
+			upstreamCostMicroUsd: costs.total,
+			costSource,
+			startedAt: options.startedAt,
+			completedAt: new Date(),
+		},
+		costs.total ?? 0,
+	);
 }
 
 function resolveRates(provider: LlmProvider, modelId: string, declaredCosts?: ModelCosts): ModelCosts | undefined {
@@ -303,6 +296,17 @@ function calculateCosts(
 
 function calculateCategoryCost(tokens?: number, rateUsdPerMillion?: number): number {
 	return Math.ceil(((tokens ?? 0) * (rateUsdPerMillion ?? 0) * 1_000_000) / 1_000_000);
+}
+
+function calculateReservationMicroUsd(params: LanguageModelV3CallOptions, rates: ModelCosts): number {
+	const estimatedInputTokens = estimateUsage(params, 0).inputTokens.total ?? 0;
+	const highestInputRate = Math.max(rates.inputNoCache ?? 0, rates.inputCacheRead ?? 0, rates.inputCacheWrite ?? 0);
+	const outputTokens = params.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+	return Math.max(
+		1,
+		calculateCategoryCost(estimatedInputTokens, highestInputRate) +
+			calculateCategoryCost(outputTokens, rates.output),
+	);
 }
 
 function toMicroUsd(rateUsdPerMillion?: number): number | undefined {

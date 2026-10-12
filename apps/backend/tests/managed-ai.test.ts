@@ -1,5 +1,11 @@
 import '../src/env';
 
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import type {
 	LanguageModelV3,
 	LanguageModelV3CallOptions,
@@ -7,8 +13,9 @@ import type {
 	LanguageModelV3StreamPart,
 	LanguageModelV3Usage,
 } from '@ai-sdk/provider';
+import Database from 'better-sqlite3';
 import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { withManagedAiUsageMetering } from '../src/agents/managed-ai';
 import s from '../src/db/abstractSchema';
@@ -16,12 +23,11 @@ import { db } from '../src/db/db';
 import { getCreditSummary, getWelcomeGrantClaim, listCreditLedger } from '../src/queries/credit-wallet.queries';
 import { listManagedAiUsage } from '../src/queries/managed-ai-usage.queries';
 import { listProjectChats } from '../src/queries/project.queries';
-import {
-	claimWelcomeGrant,
-	recordManagedAiUsageAndChargeWallet,
-	WELCOME_GRANT_MICRO_USD,
-} from '../src/services/credit-wallet.service';
+import * as creditWalletService from '../src/services/credit-wallet.service';
 import { ManagedCreditsExhaustedError, WelcomeGrantConfirmationRequiredError } from '../src/utils/error';
+
+const { claimWelcomeGrant, recordManagedAiUsageAndChargeWallet, reserveManagedAiCredits, WELCOME_GRANT_MICRO_USD } =
+	creditWalletService;
 
 vi.mock('../src/db/db', async () => {
 	const { default: Database } = await import('better-sqlite3');
@@ -57,6 +63,18 @@ const PROJECT_ID = 'managed-project';
 const CHAT_ID = 'managed-chat';
 const HYBRID_CHAT_ID = 'hybrid-cost-chat';
 const MESSAGE_ID = 'managed-message';
+
+const CLAIM_WELCOME_GRANT_SCRIPT = `
+import { once } from 'node:events';
+import { db } from './src/db/db.ts';
+import { claimWelcomeGrant } from './src/services/credit-wallet.service.ts';
+
+db.$client.run('PRAGMA busy_timeout = 5000');
+process.stdout.write('claim-ready\\n');
+await once(process.stdin, 'data');
+await claimWelcomeGrant(process.env.CLAIM_ORG_ID!, process.env.CLAIM_USER_ID!);
+db.$client.close();
+`;
 
 const usage: LanguageModelV3Usage = {
 	inputTokens: { total: 1_000, noCache: 1_000, cacheRead: 0, cacheWrite: 0 },
@@ -110,6 +128,10 @@ describe('managed AI usage and organization credits', () => {
 		db.$client.close();
 	});
 
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it('requires confirmation before an unclaimed user can call a managed model', async () => {
 		const providerCall = vi.fn(async () => generateResult());
 		const model = withManagedAiUsageMetering(createModel(providerCall), 'nao', 'gpt-5.6-luna', {
@@ -156,17 +178,53 @@ describe('managed AI usage and organization credits', () => {
 	});
 
 	it('keeps one winning organization when two claims race', async () => {
-		await Promise.all([
-			claimWelcomeGrant(RACE_ORG_A_ID, RACE_USER_ID),
-			claimWelcomeGrant(RACE_ORG_B_ID, RACE_USER_ID),
-		]);
+		const databasePath = path.join(os.tmpdir(), `nao-welcome-grant-race-${crypto.randomUUID()}.sqlite`);
+		await (db.$client as unknown as InstanceType<typeof Database>).backup(databasePath);
+		const claims = [
+			startWelcomeGrantClaim(databasePath, RACE_ORG_A_ID),
+			startWelcomeGrantClaim(databasePath, RACE_ORG_B_ID),
+		];
 
-		const claim = await getWelcomeGrantClaim(RACE_USER_ID);
-		expect([RACE_ORG_A_ID, RACE_ORG_B_ID]).toContain(claim?.orgId);
-		const total =
-			(await getCreditSummary(RACE_ORG_A_ID)).balanceMicroUsd +
-			(await getCreditSummary(RACE_ORG_B_ID)).balanceMicroUsd;
-		expect(total).toBe(WELCOME_GRANT_MICRO_USD);
+		try {
+			await Promise.all(claims.map((claim) => claim.ready));
+			for (const claim of claims) {
+				claim.child.stdin.end('claim\n');
+			}
+			await Promise.all(claims.map((claim) => claim.completed));
+
+			const raceDatabase = new Database(databasePath, { readonly: true });
+			try {
+				const winningClaims = raceDatabase
+					.prepare(
+						`select credit_wallet.org_id as orgId
+						from credit_ledger
+						inner join credit_wallet on credit_wallet.id = credit_ledger.wallet_id
+						where credit_ledger.idempotency_key = ?`,
+					)
+					.all(`welcome-user:v1:${RACE_USER_ID}`) as { orgId: string }[];
+				const { total } = raceDatabase
+					.prepare(
+						`select coalesce(sum(balance_micro_usd), 0) as total
+						from credit_wallet
+						where org_id in (?, ?)`,
+					)
+					.get(RACE_ORG_A_ID, RACE_ORG_B_ID) as { total: number };
+
+				expect(winningClaims).toHaveLength(1);
+				expect([RACE_ORG_A_ID, RACE_ORG_B_ID]).toContain(winningClaims[0]?.orgId);
+				expect(total).toBe(WELCOME_GRANT_MICRO_USD);
+			} finally {
+				raceDatabase.close();
+			}
+		} finally {
+			for (const claim of claims) {
+				if (claim.child.exitCode === null) {
+					claim.child.kill();
+				}
+			}
+			await Promise.allSettled(claims.map((claim) => claim.completed));
+			fs.rmSync(databasePath, { force: true });
+		}
 	});
 
 	it('allows members whose grant was claimed elsewhere to use a funded shared wallet', async () => {
@@ -241,6 +299,23 @@ describe('managed AI usage and organization credits', () => {
 		expect(Number(ledgerTotal.total)).toBe(summary.balanceMicroUsd);
 	});
 
+	it('propagates settlement failures after successful generation', async () => {
+		const settlementError = new Error('wallet settlement failed');
+		const settleUsage = vi
+			.spyOn(creditWalletService, 'recordManagedAiUsageAndChargeWallet')
+			.mockRejectedValueOnce(settlementError);
+		const providerCall = vi.fn(async () => generateResult());
+		const model = withManagedAiUsageMetering(createModel(providerCall), 'nao', 'gpt-5.6-luna', {
+			userId: MANAGED_USER_ID,
+			orgId: ORG_ID,
+			category: 'chat',
+		});
+
+		await expect(model.doGenerate({} as LanguageModelV3CallOptions)).rejects.toBe(settlementError);
+		expect(providerCall).toHaveBeenCalledOnce();
+		expect(settleUsage).toHaveBeenCalledOnce();
+	});
+
 	it('does not log BYOK usage or touch the organization wallet', async () => {
 		const providerCall = vi.fn(async () => generateResult());
 		const model = withManagedAiUsageMetering(createModel(providerCall), 'openai', 'gpt-5.6-luna', {
@@ -281,6 +356,7 @@ describe('managed AI usage and organization credits', () => {
 				totalTokens: 1_000_000,
 			},
 		]);
+		await reserveManagedAiCredits(ORG_ID, 'hybrid-managed-operation', 2_000_000);
 		await recordManagedAiUsageAndChargeWallet(
 			{
 				operationId: 'hybrid-managed-operation',
@@ -360,6 +436,38 @@ describe('managed AI usage and organization credits', () => {
 		expect(providerCall).not.toHaveBeenCalled();
 	});
 
+	it('reserves credits before dispatch and never settles below zero', async () => {
+		await db.update(s.creditWallet).set({ balanceMicroUsd: 2 }).where(eq(s.creditWallet.orgId, EXHAUSTED_ORG_ID));
+		let releaseProvider!: () => void;
+		const firstProviderCall = vi.fn(
+			async () =>
+				await new Promise<LanguageModelV3GenerateResult>((resolve) => {
+					releaseProvider = () => resolve(generateResult());
+				}),
+		);
+		const secondProviderCall = vi.fn(async () => generateResult());
+		const context = { userId: EXHAUSTED_USER_ID, orgId: EXHAUSTED_ORG_ID, category: 'chat' as const };
+		const firstModel = withManagedAiUsageMetering(createModel(firstProviderCall), 'nao', 'gpt-5.6-luna', context);
+		const secondModel = withManagedAiUsageMetering(createModel(secondProviderCall), 'nao', 'gpt-5.6-luna', context);
+		const params = { maxOutputTokens: 1 } as LanguageModelV3CallOptions;
+
+		const firstCall = firstModel.doGenerate(params);
+		await vi.waitFor(() => expect(firstProviderCall).toHaveBeenCalledOnce());
+		await expect(secondModel.doGenerate(params)).rejects.toBeInstanceOf(ManagedCreditsExhaustedError);
+		expect(secondProviderCall).not.toHaveBeenCalled();
+
+		releaseProvider();
+		await firstCall;
+
+		const summary = await getCreditSummary(EXHAUSTED_ORG_ID);
+		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.orgId, EXHAUSTED_ORG_ID));
+		expect(summary.balanceMicroUsd).toBe(0);
+		expect(rows.at(-1)).toMatchObject({
+			customerChargeMicroUsd: 2,
+			upstreamCostMicroUsd: 320,
+		});
+	});
+
 	it('charges a repeated operation only once', async () => {
 		const operationId = crypto.randomUUID();
 		const input = {
@@ -375,6 +483,7 @@ describe('managed AI usage and organization credits', () => {
 			completedAt: new Date(),
 		};
 		const before = await getCreditSummary(ORG_ID);
+		await reserveManagedAiCredits(ORG_ID, operationId, 100);
 		await recordManagedAiUsageAndChargeWallet(input, 100);
 		await recordManagedAiUsageAndChargeWallet(input, 100);
 		const after = await getCreditSummary(ORG_ID);
@@ -406,6 +515,70 @@ describe('managed AI usage and organization credits', () => {
 		expect(secondLedger.groups.map((group) => group.id)).not.toContain(firstLedger.groups[0]?.id);
 	});
 });
+
+function startWelcomeGrantClaim(
+	databasePath: string,
+	orgId: string,
+): {
+	child: ChildProcessWithoutNullStreams;
+	ready: Promise<void>;
+	completed: Promise<void>;
+} {
+	const child = spawn('bun', ['--eval', CLAIM_WELCOME_GRANT_SCRIPT], {
+		cwd: path.resolve(import.meta.dirname, '..'),
+		env: {
+			...process.env,
+			DB_URI: `sqlite:${databasePath}`,
+			CLAIM_ORG_ID: orgId,
+			CLAIM_USER_ID: RACE_USER_ID,
+		},
+	});
+	let stderr = '';
+	child.stderr.setEncoding('utf8');
+	child.stderr.on('data', (chunk: string) => {
+		stderr += chunk;
+	});
+
+	return {
+		child,
+		ready: waitForOutput(child, 'claim-ready'),
+		completed: once(child, 'exit').then(([exitCode]) => {
+			if (exitCode !== 0) {
+				throw new Error(`Welcome grant claim exited with code ${String(exitCode)}: ${stderr}`);
+			}
+		}),
+	};
+}
+
+function waitForOutput(child: ChildProcessWithoutNullStreams, expected: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		let stdout = '';
+		child.stdout.setEncoding('utf8');
+		const onData = (chunk: string) => {
+			stdout += chunk;
+			if (stdout.includes(expected)) {
+				cleanup();
+				resolve();
+			}
+		};
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
+		const onExit = (exitCode: number | null) => {
+			cleanup();
+			reject(new Error(`Process exited with code ${String(exitCode)} before writing "${expected}".`));
+		};
+		const cleanup = () => {
+			child.stdout.off('data', onData);
+			child.off('error', onError);
+			child.off('exit', onExit);
+		};
+		child.stdout.on('data', onData);
+		child.once('error', onError);
+		child.once('exit', onExit);
+	});
+}
 
 function createModel(
 	doGenerate: LanguageModelV3['doGenerate'] = async () => generateResult(),

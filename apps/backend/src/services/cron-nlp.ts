@@ -6,6 +6,7 @@ import { disableModelReasoning, getProviderMeta, type ProviderModelResult } from
 import { llmTelemetry } from '../agents/telemetry';
 import * as llmConfigQueries from '../queries/project-llm-config.queries';
 import { sanitizeCron } from '../utils/cron';
+import { ManagedCreditsExhaustedError, WelcomeGrantConfirmationRequiredError } from '../utils/error';
 import { resolveDefaultModelSelection, resolveProviderModel } from '../utils/llm';
 import { assertProjectCloudBillingAccess } from './cloud-billing-access.service';
 
@@ -46,7 +47,10 @@ export async function naturalLanguageToCron(projectId: string, userId: string, t
 
 		CronExpressionParser.parse(cron);
 		return cron;
-	} catch {
+	} catch (error) {
+		if (error instanceof ManagedCreditsExhaustedError || error instanceof WelcomeGrantConfirmationRequiredError) {
+			throw error;
+		}
 		return null;
 	}
 }
