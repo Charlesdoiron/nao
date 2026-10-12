@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { ArrowUpRight } from 'lucide-react';
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { TrpcRouter } from '@nao/backend/trpc';
@@ -85,7 +86,7 @@ export function CreditsAiUsage() {
 				</>
 			)}
 
-			<SettingsCard title='Chat usage'>
+			<SettingsCard title='nao credit usage'>
 				<div className='flex flex-col gap-2'>
 					{usage.data?.runs.map((run) => (
 						<UsageRun key={run.id} run={run} />
@@ -126,19 +127,15 @@ function UsageRun({ run }: { run: UsageRunData }) {
 					<div className='flex min-w-0 items-center gap-2'>
 						<div className='truncate font-medium'>{summary.title}</div>
 						{summary.chatId && (
-							<Button
-								asChild
-								variant='outline'
-								size='sm'
-								className='h-5 max-w-48 px-1.5 font-mono text-[10px]'
-							>
+							<Button asChild variant='ghost-muted' size='icon-xs'>
 								<Link
 									to='/$chatId'
 									params={{ chatId: summary.chatId }}
 									onClick={(event) => event.stopPropagation()}
-									title={summary.chatId}
+									aria-label='Open chat'
+									title='Open chat'
 								>
-									<span className='truncate'>{summary.chatId}</span>
+									<ArrowUpRight />
 								</Link>
 							</Button>
 						)}

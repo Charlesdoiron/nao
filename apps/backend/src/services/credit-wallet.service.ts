@@ -87,17 +87,22 @@ export async function recordUsage(
 	usage: Omit<NewAiUsage, 'id' | 'walletId'>,
 	customerChargeMicroUsd: number,
 ): Promise<DBAiUsage | null> {
-	const billedOrgId = usage.isManaged ? usage.orgId : undefined;
-	if (usage.isManaged && !billedOrgId) {
+	if (!usage.isManaged) {
+		return null;
+	}
+	const billedOrgId = usage.orgId;
+	if (!billedOrgId) {
 		throw new Error('Managed AI usage requires a billed organization.');
 	}
 	if (dbConfig.dialect === Dialect.Sqlite) {
 		return db.transaction(
 			(transaction) => {
-				const wallet = billedOrgId
-					? transaction.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, billedOrgId)).get()
-					: undefined;
-				if (usage.isManaged && !wallet) {
+				const wallet = transaction
+					.select()
+					.from(s.creditWallet)
+					.where(eq(s.creditWallet.orgId, billedOrgId))
+					.get();
+				if (!wallet) {
 					throw new Error(`Managed AI usage has no wallet for organization ${billedOrgId}.`);
 				}
 				const created = transaction
@@ -132,10 +137,12 @@ export async function recordUsage(
 	}
 
 	return db.transaction(async (transaction) => {
-		const [wallet] = billedOrgId
-			? await transaction.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, billedOrgId)).limit(1)
-			: [];
-		if (usage.isManaged && !wallet) {
+		const [wallet] = await transaction
+			.select()
+			.from(s.creditWallet)
+			.where(eq(s.creditWallet.orgId, billedOrgId))
+			.limit(1);
+		if (!wallet) {
 			throw new Error(`Managed AI usage has no wallet for organization ${billedOrgId}.`);
 		}
 

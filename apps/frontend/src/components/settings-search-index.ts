@@ -28,9 +28,9 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 	{
 		page: '/settings/credits-wallet',
 		pageLabel: 'Credits & wallet',
-		section: 'Wallet and chat usage',
+		section: 'Wallet and nao credit usage',
 		title: 'Credits & wallet',
-		description: "View your organization's nao credit balance, wallet history, chat usage, tokens, and costs.",
+		description: "View your organization's nao credit balance, wallet history, managed usage, tokens, and costs.",
 		keywords: ['wallet', 'gift', 'ledger', 'billing', 'tokens', 'cost', 'model usage', 'organization credits'],
 		cloudOnly: true,
 	},

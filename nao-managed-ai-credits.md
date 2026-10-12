@@ -47,7 +47,7 @@ The upstream credential remains a deployment secret and is never stored in a pro
 
 ## Accounting and settlement
 
-The shared AI SDK wrapper meters every generated or streamed invocation, including nested calls. An agent run has one `run_id`; each model invocation has a unique `operation_id`, preserving per-call detail for chat, subagents, compaction, memory, titles, automations, stories, cron parsing, context recommendations, and test agents.
+The shared AI SDK wrapper meters every nao-managed generated or streamed invocation, including nested calls. BYOK models bypass credit metering and persistence because users can inspect those calls in their provider platform. An agent run has one `run_id`; each managed model invocation has a unique `operation_id`, preserving per-call detail for chat, subagents, compaction, memory, titles, automations, stories, cron parsing, context recommendations, and test agents.
 
 ```mermaid
 flowchart TB
@@ -56,15 +56,15 @@ flowchart TB
     claimed -->|No| confirm["Require confirmation"]
     claimed -->|Yes| balance{"Wallet positive?"}
     balance -->|No| blocked["Reject call"]
-    balance -->|Yes| provider["Call provider"]
-    managed -->|No, BYOK| provider
+    balance -->|Yes| provider["Call nao provider"]
+    managed -->|No, BYOK| byokProvider["Call customer provider without credit metering"]
     provider --> usage["Insert ai_usage"]
-    usage -->|Managed| charge["Charge wallet and append ledger entry"]
+    usage --> charge["Charge wallet and append ledger entry"]
 ```
 
-Each `ai_usage` row records attribution, category, provider/model, managed or BYOK access, status, provider request ID, token usage, snapshotted rates, calculated costs, and timestamps. Completed calls use provider usage; failed or aborted calls estimate missing tokens from prompt and streamed characters.
+Each `ai_usage` row records managed-credit attribution, category, provider/model, status and finish reason, provider request ID, detailed input/cache/output/reasoning token usage, snapshotted rates, calculated upstream cost and customer charge, cost source, and start/completion timestamps. Completed calls use provider usage; failed or aborted calls estimate missing tokens from prompt and streamed characters. Duration remains derivable from the timestamps.
 
-Managed usage insertion, wallet charging, and its ledger entry are atomic. The operation ID also makes settlement idempotent. BYOK calls remain observable but have no wallet movement.
+Usage insertion, wallet charging, and its ledger entry are atomic. The operation ID also makes settlement idempotent. Prompts, model outputs, credentials, and provider error payloads are not copied into the accounting tables. BYOK calls create neither `ai_usage` nor credit-ledger rows.
 
 ## Data model
 
@@ -84,13 +84,13 @@ erDiagram
 
 - `credit_wallet`: one organization balance stored in micro-USD.
 - `credit_ledger`: append-only `gift` and `usage` movements with unique idempotency keys.
-- `ai_usage`: one row per invocation or billable attempt, grouped by `run_id`.
+- `ai_usage`: one row per nao-managed invocation or billable attempt, grouped by `run_id`.
 
 Foreign keys use `ON DELETE SET NULL` so accounting history survives the removal of attributed entities.
 
 ## UI and authorization
 
-The cloud-only **Credits & wallet** page shows the selected organization's balance, grant and spend totals, grouped ledger history, and per-call usage. Admins see all organization usage; other members see only their calls while still seeing the shared wallet.
+The cloud-only **Credits & wallet** page shows the selected organization's balance, grant and spend totals, grouped ledger history, and per-call nao credit usage. Admins see all organization managed usage; other members see only their calls while still seeing the shared wallet.
 
 Chat credit status follows the current project's organization. An eligible user can select managed models before claiming, but the first send pauses for confirmation. Completing a managed chat refreshes balance, ledger, usage, and model queries.
 

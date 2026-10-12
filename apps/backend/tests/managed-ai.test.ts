@@ -228,8 +228,9 @@ describe('AI usage and organization credits', () => {
 		expect(Number(ledgerTotal.total)).toBe(summary.balanceMicroUsd);
 	});
 
-	it('logs BYOK usage without touching the organization wallet', async () => {
-		const model = withAiUsageMetering(createModel(), 'openai', 'gpt-5.6-luna', {
+	it('does not log BYOK usage or touch the organization wallet', async () => {
+		const providerCall = vi.fn(async () => generateResult());
+		const model = withAiUsageMetering(createModel(providerCall), 'openai', 'gpt-5.6-luna', {
 			userId: BYOK_USER_ID,
 			orgId: ORG_ID,
 			projectId: PROJECT_ID,
@@ -238,8 +239,9 @@ describe('AI usage and organization credits', () => {
 		const before = await getCreditSummary(ORG_ID);
 		await model.doGenerate({} as LanguageModelV3CallOptions);
 
-		const [row] = await db.select().from(s.aiUsage).where(eq(s.aiUsage.userId, BYOK_USER_ID));
-		expect(row).toMatchObject({ isManaged: false, customerChargeMicroUsd: 0, walletId: null });
+		const rows = await db.select().from(s.aiUsage).where(eq(s.aiUsage.userId, BYOK_USER_ID));
+		expect(providerCall).toHaveBeenCalledOnce();
+		expect(rows).toHaveLength(0);
 		expect(await getCreditSummary(ORG_ID)).toEqual(before);
 	});
 
@@ -329,9 +331,8 @@ describe('AI usage and organization credits', () => {
 		const otherOrgUsage = await listAiUsage({ orgId: POOL_ORG_ID }, { limit: 100 });
 
 		const orgUserIds = new Set(orgUsage.runs.flatMap((run) => run.events.map((event) => event.userId)));
-		expect(orgUserIds).toEqual(new Set([MANAGED_USER_ID, BYOK_USER_ID, SECOND_USER_ID]));
-		expect(byokUsage.runs).toHaveLength(1);
-		expect(byokUsage.runs[0]?.events[0]?.userId).toBe(BYOK_USER_ID);
+		expect(orgUserIds).toEqual(new Set([MANAGED_USER_ID, SECOND_USER_ID]));
+		expect(byokUsage.runs).toHaveLength(0);
 		expect(otherOrgUsage.runs).toHaveLength(0);
 	});
 

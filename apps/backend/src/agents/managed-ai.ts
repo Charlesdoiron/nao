@@ -42,6 +42,9 @@ export function withAiUsageMetering(
 	context: AiUsageContext,
 	declaredCosts?: ModelCosts,
 ): LanguageModelV3 {
+	if (provider !== 'nao') {
+		return model;
+	}
 	const meteredContext = { ...context, runId: context.runId ?? crypto.randomUUID() };
 	return wrapLanguageModel({
 		model,

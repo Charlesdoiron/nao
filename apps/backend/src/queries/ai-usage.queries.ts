@@ -12,6 +12,7 @@ export async function listAiUsage(
 	const latestStartedAt = sql<Date>`max(${s.aiUsage.startedAt})`.mapWith(s.aiUsage.startedAt);
 	const cursorStartedAt = input.cursor && sql.param(input.cursor.createdAt, s.aiUsage.startedAt);
 	const scopeFilter = and(
+		eq(s.aiUsage.isManaged, true),
 		eq(s.aiUsage.orgId, scope.orgId),
 		scope.userId ? eq(s.aiUsage.userId, scope.userId) : undefined,
 	);
