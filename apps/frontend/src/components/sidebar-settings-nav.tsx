@@ -40,11 +40,6 @@ const settingsNavGroups: NavGroup[] = [
 				to: '/settings/account',
 				exact: true,
 			},
-			{
-				label: 'Credits & wallet',
-				to: '/settings/credits-wallet',
-				visible: ({ isCloud }) => isCloud,
-			},
 		],
 	},
 	{
@@ -110,14 +105,10 @@ const settingsNavGroups: NavGroup[] = [
 				leavesSettings: true,
 			},
 			{
-				label: 'Usage, costs & replay',
+				label: 'Usage & costs',
 				to: '/settings/usage',
-				visible: ({ isAdmin }) => isAdmin,
-			},
-			{
-				label: 'Chats replay',
-				to: '/settings/usage',
-				visible: ({ isAdmin, isContextAdmin }) => !isAdmin && isContextAdmin,
+				visible: ({ isAdmin, isContextAdmin, isCloud, isOrgAdmin }) =>
+					isAdmin || isContextAdmin || (isCloud && isOrgAdmin),
 			},
 			{
 				label: 'Server logs',

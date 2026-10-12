@@ -4,6 +4,7 @@ import { providerKind, providerLabel, providerLabels, providerName } from '@nao/
 import { Link } from '@tanstack/react-router';
 import { LlmProviderIcon } from '../ui/llm-provider-icon';
 import type { LlmProvider } from '@nao/shared/types';
+import { DEFAULT_USAGE_SEARCH } from '@/components/settings/usage-route-search';
 import { Button } from '@/components/ui/button';
 
 interface ProviderCardProps {
@@ -14,7 +15,7 @@ interface ProviderCardProps {
 	envBaseUrl?: string;
 	enabledModels?: string[] | null;
 	status?: string;
-	linkStatusToAccount?: boolean;
+	linkStatusToWallet?: boolean;
 	/** Where this provider comes from, e.g. `ENV` or `nao_config.yaml`. */
 	badges?: string[];
 	isAdmin: boolean;
@@ -33,7 +34,7 @@ export function ProviderCard({
 	envBaseUrl,
 	enabledModels,
 	status,
-	linkStatusToAccount = false,
+	linkStatusToWallet = false,
 	badges = [],
 	isAdmin,
 	isFormActive,
@@ -83,8 +84,12 @@ export function ProviderCard({
 						</div>
 					) : (
 						<div className='flex items-center gap-2 text-xs text-muted-foreground'>
-							{status && linkStatusToAccount ? (
-								<Link to='/settings/account' className='hover:text-foreground hover:underline'>
+							{status && linkStatusToWallet ? (
+								<Link
+									to='/settings/usage'
+									search={{ ...DEFAULT_USAGE_SEARCH, tab: 'wallet' }}
+									className='hover:text-foreground hover:underline'
+								>
 									{status}
 								</Link>
 							) : (

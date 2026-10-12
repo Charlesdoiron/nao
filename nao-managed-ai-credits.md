@@ -90,7 +90,25 @@ Foreign keys use `ON DELETE SET NULL` so accounting history survives the removal
 
 ## UI and authorization
 
-The cloud-only **Credits & wallet** page shows the selected organization's balance, grant and spend totals, grouped ledger history, and per-call nao credit usage. Admins see all organization managed usage; other members see only their calls while still seeing the shared wallet.
+The **Usage & costs** settings page combines two permission-aware tabs without combining their accounting:
+
+- **Usage & replay** keeps the current-project dashboard and chat replay together. Project admins see messages, tokens, estimated provider cost, and replay; context admins see replay without the usage charts.
+- **Wallet** shows the selected organization's balance, grant and spend totals, grouped ledger history, and per-call nao credit charges to organization admins in nao Cloud.
+
+The wallet and managed usage lists are organization-admin-only in both the UI and API. Managed usage rows link to chat replay when the organization admin also has replay access in the current project. The legacy `/settings/credits-wallet` route redirects organization admins to the Wallet tab.
+
+```mermaid
+flowchart TB
+    settings["Usage & costs"] --> projectAdmin{"Project admin?"}
+    projectAdmin -->|Yes| usageTab["Usage and replay tab"]
+    settings --> contextAdmin{"Context admin?"}
+    contextAdmin -->|Yes| usageTab
+    settings --> orgAdmin{"Cloud organization admin?"}
+    orgAdmin -->|Yes| walletTab["Wallet tab"]
+    walletTab --> orgData["Organization-wide credits and managed charges"]
+    usageTab --> projectData["Current-project estimates"]
+    usageTab --> projectChats["Current-project chats"]
+```
 
 Chat credit status follows the current project's organization. An eligible user can select managed models before claiming, but the first send pauses for confirmation. Completing a managed chat refreshes balance, ledger, usage, and model queries.
 

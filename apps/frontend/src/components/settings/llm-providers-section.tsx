@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ProviderCard } from './llm-provider-card';
 import { LlmProviderForm } from './llm-provider-form';
 import { useLlmProviders } from '@/hooks/use-llm-providers';
+import { usePermissions } from '@/hooks/use-permissions';
 import { trpc } from '@/main';
 
 interface LlmProvidersSectionProps {
@@ -13,6 +14,7 @@ interface LlmProvidersSectionProps {
 const managedModelIds = PROVIDER_META.nao.models.map((model) => model.id);
 
 export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
+	const { isOrgAdmin } = usePermissions();
 	const managedCreditSummary = useQuery({
 		...trpc.account.getCreditSummary.queryOptions(),
 		refetchOnWindowFocus: false,
@@ -60,7 +62,7 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 					provider='nao'
 					enabledModels={managedModelIds}
 					status={`Remaining credits: $${(managedCreditSummary.data.balanceMicroUsd / 1_000_000).toFixed(2)} of $${(managedCreditSummary.data.lifetimeCreditedMicroUsd / 1_000_000).toFixed(2)}.`}
-					linkStatusToAccount
+					linkStatusToWallet={isOrgAdmin}
 					badges={['MANAGED']}
 					isAdmin={isAdmin}
 					isFormActive={!!editingState}

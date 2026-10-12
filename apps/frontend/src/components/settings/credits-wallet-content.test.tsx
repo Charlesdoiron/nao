@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CreditsWalletContent } from './credits-wallet-content';
+import type { AnchorHTMLAttributes } from 'react';
 
 const mocks = vi.hoisted(() => ({
 	getSummary: vi.fn(),
@@ -28,27 +29,18 @@ vi.mock('@/main', () => ({
 	},
 }));
 
+vi.mock('@tanstack/react-router', () => ({
+	Link: ({ children, 'aria-label': ariaLabel }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+		<a href='#replay' aria-label={ariaLabel}>
+			{children}
+		</a>
+	),
+}));
+
 describe('CreditsWalletContent', () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
-	});
-
-	it('explains a non-admin contribution to the shared organization wallet', async () => {
-		mocks.getSummary.mockResolvedValue({
-			balanceMicroUsd: 0,
-			lifetimeCreditedMicroUsd: 0,
-			lifetimeDebitedMicroUsd: 0,
-			enabled: true,
-		});
-		mocks.listLedger.mockResolvedValue({ groups: [], nextCursor: null });
-		mocks.listUsage.mockResolvedValue({ runs: [], nextCursor: null });
-
-		renderCreditsWalletContent(false);
-
-		expect(await screen.findByText(/You gave your \$5 welcome credit/)).toBeTruthy();
-		expect(screen.queryByText('Available')).toBeNull();
-		expect(screen.queryByText('nao credit usage')).toBeNull();
 	});
 
 	it('shows organization wallet totals to admins', async () => {
@@ -104,6 +96,7 @@ describe('CreditsWalletContent', () => {
 					events: [
 						{
 							id: 'usage',
+							chatId: 'chat-1',
 							category: 'chat',
 							llmModelId: 'gpt-5.6',
 							llmProvider: 'nao',
@@ -122,6 +115,7 @@ describe('CreditsWalletContent', () => {
 		renderCreditsWalletContent(true);
 
 		await screen.findByText('Available');
+		expect(screen.getByRole('link', { name: 'Open chat replay' })).toBeTruthy();
 		expect(
 			await screen.findByText(
 				(_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$5 nao gift Managed User',
@@ -138,11 +132,11 @@ describe('CreditsWalletContent', () => {
 	});
 });
 
-function renderCreditsWalletContent(isAdmin: boolean) {
+function renderCreditsWalletContent(canViewReplay: boolean) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<CreditsWalletContent isAdmin={isAdmin} />
+			<CreditsWalletContent canViewReplay={canViewReplay} />
 		</QueryClientProvider>,
 	);
 }

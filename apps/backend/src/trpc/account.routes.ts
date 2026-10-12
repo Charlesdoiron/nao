@@ -36,6 +36,13 @@ const walletProcedure = protectedProcedure.use(async ({ ctx, next }) => {
 	return next({ ctx: { membership } });
 });
 
+const walletAdminProcedure = walletProcedure.use(async ({ ctx, next }) => {
+	if (ctx.membership?.role !== 'admin') {
+		throw new TRPCError({ code: 'FORBIDDEN', message: 'Only organization admins can view wallet activity' });
+	}
+	return next({ ctx: { membership: ctx.membership } });
+});
+
 export const accountRoutes = {
 	getManagedCreditStatus: projectProtectedProcedure.query(({ ctx }) =>
 		getManagedCreditStatus(ctx.project, ctx.user.id),
@@ -63,18 +70,11 @@ export const accountRoutes = {
 			: { balanceMicroUsd: 0, lifetimeCreditedMicroUsd: 0, lifetimeDebitedMicroUsd: 0 };
 		return { ...summary, enabled: isManagedAiEnabled() };
 	}),
-	listCreditLedger: walletProcedure.input(creditLedgerPaginationInput).query(({ ctx, input }) => {
-		if (!ctx.membership) {
-			return { groups: [], nextCursor: null };
-		}
+	listCreditLedger: walletAdminProcedure.input(creditLedgerPaginationInput).query(({ ctx, input }) => {
 		return creditWalletQueries.listCreditLedger(ctx.membership.orgId, input);
 	}),
-	listManagedAiUsage: walletProcedure.input(managedAiUsagePaginationInput).query(({ ctx, input }) => {
-		if (!ctx.membership) {
-			return { runs: [], nextCursor: null };
-		}
-		const userId = ctx.membership.role === 'admin' ? undefined : ctx.user.id;
-		return managedAiUsageQueries.listManagedAiUsage({ orgId: ctx.membership.orgId, userId }, input);
+	listManagedAiUsage: walletAdminProcedure.input(managedAiUsagePaginationInput).query(({ ctx, input }) => {
+		return managedAiUsageQueries.listManagedAiUsage({ orgId: ctx.membership.orgId }, input);
 	}),
 	resetPassword: adminProtectedProcedure
 		.input(

@@ -6,6 +6,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 
 import type { TrpcRouter } from '@nao/backend/trpc';
 
+import { DEFAULT_USAGE_SEARCH } from '@/components/settings/usage-route-search';
 import { Button } from '@/components/ui/button';
 import { SettingsCard } from '@/components/ui/settings-card';
 import { trpc } from '@/main';
@@ -13,35 +14,28 @@ import { trpc } from '@/main';
 type CreditLedgerCursor = { createdAt: Date; id: string };
 type ManagedAiUsageCursor = { startedAt: Date; id: string };
 
-export function CreditsWalletContent({ isAdmin }: { isAdmin: boolean | undefined }) {
+export function CreditsWalletContent({ canViewReplay }: { canViewReplay: boolean }) {
 	const summary = useQuery(trpc.account.getCreditSummary.queryOptions());
 	const [ledgerCursor, setLedgerCursor] = useState<CreditLedgerCursor>();
 	const [usageCursor, setUsageCursor] = useState<ManagedAiUsageCursor>();
 	const ledger = useQuery({
 		...trpc.account.listCreditLedger.queryOptions({ cursor: ledgerCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
-		enabled: summary.data?.enabled === true && isAdmin === true,
+		enabled: summary.data?.enabled === true,
 	});
 	const usage = useQuery({
 		...trpc.account.listManagedAiUsage.queryOptions({ cursor: usageCursor, limit: 10 }),
 		placeholderData: keepPreviousData,
-		enabled: isAdmin === true,
 	});
 
 	return (
 		<div className='flex flex-col gap-4'>
-			{summary.data?.enabled && isAdmin === false && (
-				<SettingsCard title='Wallet'>
-					<p className='text-sm text-muted-foreground'>
-						You gave your $5 welcome credit to your organization. It is now part of the shared wallet
-						managed by your organization's admins.
-					</p>
-				</SettingsCard>
-			)}
-
-			{summary.data?.enabled && isAdmin === true && (
+			{summary.data?.enabled && (
 				<>
-					<SettingsCard title='Wallet'>
+					<SettingsCard title='Organization wallet'>
+						<p className='mb-3 text-sm text-muted-foreground'>
+							Shared nao credits available across every project in this organization.
+						</p>
 						<div className='grid gap-3 sm:grid-cols-3'>
 							<CreditMetric label='Available' value={summary.data.balanceMicroUsd} />
 							<CreditMetric label='Credited' value={summary.data.lifetimeCreditedMicroUsd} />
@@ -104,21 +98,22 @@ export function CreditsWalletContent({ isAdmin }: { isAdmin: boolean | undefined
 				</>
 			)}
 
-			{isAdmin === true && (
-				<SettingsCard title='nao credit usage'>
-					<div className='flex flex-col gap-2'>
-						{usage.data?.runs.map((run) => (
-							<UsageRun key={run.id} run={run} />
-						))}
-					</div>
-					<PageControls
-						hasPrevious={usageCursor !== undefined}
-						hasNext={usage.data?.nextCursor !== null}
-						onPrevious={() => setUsageCursor(undefined)}
-						onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
-					/>
-				</SettingsCard>
-			)}
+			<SettingsCard title='Managed AI charges'>
+				<p className='mb-3 text-sm text-muted-foreground'>
+					Organization-wide nao-managed model calls and the credits charged for them.
+				</p>
+				<div className='flex flex-col gap-2'>
+					{usage.data?.runs.map((run) => (
+						<UsageRun key={run.id} run={run} canViewReplay={canViewReplay} />
+					))}
+				</div>
+				<PageControls
+					hasPrevious={usageCursor !== undefined}
+					hasNext={usage.data?.nextCursor !== null}
+					onPrevious={() => setUsageCursor(undefined)}
+					onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
+				/>
+			</SettingsCard>
 		</div>
 	);
 }
@@ -138,7 +133,7 @@ function summarizeLedgerGroup(group: CreditLedgerGroup) {
 	};
 }
 
-function UsageRun({ run }: { run: UsageRunData }) {
+function UsageRun({ run, canViewReplay }: { run: UsageRunData; canViewReplay: boolean }) {
 	const summary = summarizeRun(run);
 	return (
 		<details className='rounded-md border border-border'>
@@ -146,14 +141,15 @@ function UsageRun({ run }: { run: UsageRunData }) {
 				<div className='min-w-0'>
 					<div className='flex min-w-0 items-center gap-2'>
 						<div className='truncate font-medium'>{summary.title}</div>
-						{summary.chatId && (
+						{summary.chatId && canViewReplay && (
 							<Button asChild variant='ghost-muted' size='icon-xs'>
 								<Link
-									to='/$chatId'
+									to='/settings/usage/replay/$chatId'
 									params={{ chatId: summary.chatId }}
+									search={{ ...DEFAULT_USAGE_SEARCH, tab: 'usage' }}
 									onClick={(event) => event.stopPropagation()}
-									aria-label='Open chat'
-									title='Open chat'
+									aria-label='Open chat replay'
+									title='Open chat replay'
 								>
 									<ArrowUpRight />
 								</Link>
@@ -190,7 +186,7 @@ function UsageRun({ run }: { run: UsageRunData }) {
 								<th className='py-2 text-right font-medium'>Cache write</th>
 								<th className='py-2 text-right font-medium'>Output</th>
 								<th className='py-2 text-right font-medium'>Reasoning</th>
-								<th className='py-2 text-right font-medium'>Cost</th>
+								<th className='py-2 text-right font-medium'>Upstream cost</th>
 							</tr>
 						</thead>
 						<tbody>
