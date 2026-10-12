@@ -484,7 +484,9 @@ app_deploy() {  # ARCHIVE SHA
     return
   fi
 
-  source="$(api POST "/v1/sources")"
+  # Corps {} obligatoire : l'instance FGP refuse un POST sans corps JSON dès qu'un scope du
+  # blob porte des filtres de corps, et impute le refus aux scopes (403 scope_denied).
+  source="$(api POST "/v1/sources" '{}')"
   upload_url="$(jq -r '.source.upload_url // empty' <<<"$source")"
   download_url="$(jq -r '.source.download_url // empty' <<<"$source")"
   [ -n "$upload_url" ] && [ -n "$download_url" ] \
