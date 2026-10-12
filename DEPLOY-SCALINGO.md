@@ -379,9 +379,18 @@ Une fois l'instance saine, et **seulement** là, avancer `main` puis la pousser.
 
 ### Vérifier le code : ni CI ni lint ici
 
-**Les GitHub Actions sont désactivées sur ce fork** (comportement par défaut d'un fork ; aucun run
-depuis sa création). `js-lint`, `js-test` et `cli-lint` ne tournent donc **pas** sur les pushes de
-ce dépôt, malgré la présence des workflows dans `.github/`. Il n'y a pas de filet automatique.
+**Les GitHub Actions sont désactivées sur ce dépôt par l'organisation.** Ce n'est pas un réglage du
+dépôt : le toggle local répond `409 Conflict — GitHub Actions is disabled on this repository by the
+organization`, et seul un owner de `incubateur-territoires` peut le lever (Settings → Actions →
+General de l'**organisation**). `js-lint`, `js-test` et `cli-lint` ne tournent donc **pas**, malgré
+la présence des workflows dans `.github/` : aucun run depuis la création du fork.
+
+> **Avant de faire lever ce blocage**, désactiver les workflows hérités d'amont qui n'ont pas de
+> sens ici : les 12 sont enregistrés et marqués `active`, donc ils deviennent vivants d'un coup.
+> `docker.yml` se déclenche **sur chaque push vers `main`** (donc à chaque synchro) et `publish.yml`
+> sur les tags `v*` (publication du paquet) ; `pr-preview.yml` déploie un environnement par PR, et
+> `approve-contributor.yml` / `issue-gate.yml` / `pr-gate.yml` sont la gouvernance des contributions
+> d'amont. À garder : `js-lint`, `js-test`, `cli-lint`, et `caddy`/`helm` (bornés à leurs chemins).
 
 Conséquence pratique : lancer le lint soi-même (`npm run lint`, et `make lint` dans `cli/`), ce qui
 suppose un toolchain Node/bun sur la machine. À défaut, le garde-fou restant est le build Scalingo
