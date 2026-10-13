@@ -20,7 +20,7 @@ import * as orgQueries from './queries/organization.queries';
 import * as projectQueries from './queries/project.queries';
 import * as userQueries from './queries/user.queries';
 import { initializeSelfHostedUserAfterCreation } from './services/auth-user-onboarding.service';
-import { activateUserJoinCandidates } from './services/credit-grant.service';
+import { activateUserJoinCandidates, recordOrganizationJoinCandidate } from './services/credit-grant.service';
 import { emailService } from './services/email';
 import { githubOAuthConfig } from './services/github';
 import * as gitlabService from './services/gitlab';
@@ -304,6 +304,7 @@ async function createAuthInstance(baseURL: string) {
 										userId: user.id,
 										role: env.DEFAULT_USER_ROLE,
 									});
+									await recordOrganizationJoinCandidate(matchedOrg.id, user.id);
 								} else {
 									await orgQueries.initializePersonalOrganization(user.id);
 								}

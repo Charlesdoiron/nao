@@ -32,6 +32,7 @@ vi.mock('../src/db/db', async () => {
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { getCreditGrant, getCreditSummary } from '../src/queries/credit-wallet.queries';
+import * as userQueries from '../src/queries/user.queries';
 import {
 	activateUserJoinCandidates,
 	reconcileOrganizationSetupGrant,
@@ -84,6 +85,41 @@ describe('automatic credit grants', () => {
 		expect(await getCreditGrant('organization_setup', 'setup-org')).toEqual({ orgId: 'setup-org' });
 	});
 
+	it('reconciles join grants when another project becomes ready in a funded organization', async () => {
+		await insertReadyFundedOrganization('multi-project-org', 'funded-project');
+		const projectPath = createProjectDirectory('pending-project', true);
+		await db.insert(s.project).values({
+			id: 'pending-project',
+			orgId: 'multi-project-org',
+			name: 'pending-project',
+			type: 'local',
+			path: projectPath,
+			envVars: {},
+		});
+		await db.insert(s.user).values({
+			id: 'pending-project-user',
+			name: 'Pending Project User',
+			email: 'pending-project@example.com',
+		});
+		await db.insert(s.projectMember).values({
+			projectId: 'pending-project',
+			userId: 'pending-project-user',
+			role: 'user',
+		});
+		await recordOrganizationSetupCandidate('pending-project');
+		await recordProjectJoinCandidate('pending-project', 'pending-project-user');
+		expect(await getCreditGrant('user_join', 'pending-project-user')).toBeNull();
+
+		await db
+			.update(s.project)
+			.set({ envVars: { DATABASE_URL: 'sqlite:///warehouse.db' } })
+			.where(eq(s.project.id, 'pending-project'));
+		await reconcileOrganizationSetupGrant('pending-project');
+
+		expect(await getCreditGrant('user_join', 'pending-project-user')).toEqual({ orgId: 'multi-project-org' });
+		expect((await getCreditSummary('multi-project-org')).balanceMicroUsd).toBe(25_000_000);
+	});
+
 	it('awards an active organization member once they have inherited project access', async () => {
 		await insertReadyFundedOrganization('active-org', 'active-project');
 		await db.insert(s.user).values({
@@ -125,6 +161,32 @@ describe('automatic credit grants', () => {
 
 		expect(await getCreditGrant('user_join', 'invited-user')).toEqual({ orgId: 'invited-org' });
 		expect((await getCreditSummary('invited-org')).balanceMicroUsd).toBe(25_000_000);
+	});
+
+	it('rechecks activity after recording a pending join candidate', async () => {
+		await insertReadyFundedOrganization('concurrent-org', 'concurrent-project');
+		await db.insert(s.user).values({
+			id: 'concurrent-user',
+			name: 'Concurrent User',
+			email: 'concurrent@example.com',
+			requiresPasswordReset: true,
+		});
+		await db.insert(s.projectMember).values({
+			projectId: 'concurrent-project',
+			userId: 'concurrent-user',
+			role: 'user',
+		});
+		const user = await userQueries.getUser({ id: 'concurrent-user' });
+		if (!user) {
+			throw new Error('Expected concurrent user to exist.');
+		}
+		vi.spyOn(userQueries, 'getUser')
+			.mockResolvedValueOnce(user)
+			.mockResolvedValueOnce({ ...user, requiresPasswordReset: false });
+
+		await recordProjectJoinCandidate('concurrent-project', 'concurrent-user');
+
+		expect(await getCreditGrant('user_join', 'concurrent-user')).toEqual({ orgId: 'concurrent-org' });
 	});
 
 	it('reads the current database policy without changing earlier gifts', async () => {

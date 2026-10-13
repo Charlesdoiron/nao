@@ -674,7 +674,7 @@ function BudgetBanner() {
 	const managedMessage =
 		managedError ??
 		(managedExhausted
-			? "Your organization's nao-managed AI credits have been used. Existing projects, chats, and data remain available."
+			? 'Your organization has no nao-managed AI credits available. Existing projects, chats, and data remain available.'
 			: null);
 	const message = isManaged ? managedMessage : budgetMessage;
 

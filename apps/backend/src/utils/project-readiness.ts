@@ -17,8 +17,8 @@ export type ProjectReadiness = {
 export function assessProjectReadiness(project: Pick<DBProject, 'path' | 'envVars'>): ProjectReadiness {
 	const hasPath = isSet(project.path);
 	const directoryExists = hasPath && isDirectory(project.path!);
-	const naoConfigExists = directoryExists && fs.existsSync(path.join(project.path!, 'nao_config.yaml'));
-	const requiredEnvVars = naoConfigExists ? extractRequiredEnvVars(project.path!) : [];
+	const naoConfigExists = directoryExists && isReadableFile(path.join(project.path!, 'nao_config.yaml'));
+	const requiredEnvVars = directoryExists ? extractRequiredEnvVars(project.path!) : [];
 	const setEnvVarNames = Object.keys(project.envVars)
 		.filter((name) => isSet(project.envVars[name]))
 		.sort();
@@ -37,6 +37,18 @@ export function assessProjectReadiness(project: Pick<DBProject, 'path' | 'envVar
 function isDirectory(directoryPath: string): boolean {
 	try {
 		return fs.statSync(directoryPath).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+function isReadableFile(filePath: string): boolean {
+	try {
+		if (!fs.statSync(filePath).isFile()) {
+			return false;
+		}
+		fs.readFileSync(filePath);
+		return true;
 	} catch {
 		return false;
 	}

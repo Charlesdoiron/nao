@@ -45,9 +45,9 @@ describe('CreditsWalletContent', () => {
 
 	it('shows organization wallet totals to admins', async () => {
 		mocks.getSummary.mockResolvedValue({
-			balanceMicroUsd: 5_000_000,
-			lifetimeCreditedMicroUsd: 5_000_000,
-			lifetimeDebitedMicroUsd: 0,
+			balanceMicroUsd: 23_000_000,
+			lifetimeCreditedMicroUsd: 25_000_000,
+			lifetimeDebitedMicroUsd: 2_000_000,
 			enabled: true,
 		});
 		mocks.listLedger.mockResolvedValue({
@@ -91,13 +91,13 @@ describe('CreditsWalletContent', () => {
 						{
 							entryType: 'usage',
 							deltaMicroUsd: -1_000_000,
-							balanceAfterMicroUsd: 3_000_000,
+							balanceAfterMicroUsd: 23_000_000,
 							transactionSequence: 5,
 						},
 						{
 							entryType: 'usage',
 							deltaMicroUsd: -1_000_000,
-							balanceAfterMicroUsd: 4_000_000,
+							balanceAfterMicroUsd: 24_000_000,
 							transactionSequence: 3,
 						},
 					],
@@ -154,7 +154,7 @@ describe('CreditsWalletContent', () => {
 		).toBeTruthy();
 		expect(await screen.findByText(/Managed User · .* · gpt-5\.6/)).toBeTruthy();
 		expect(
-			screen.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$3.00'),
+			screen.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$23.00'),
 		).toBeTruthy();
 		expect(screen.queryByText(/You gave your \$5 welcome credit/)).toBeNull();
 	});

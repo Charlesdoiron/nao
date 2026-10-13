@@ -74,14 +74,12 @@ async function reconcileOrganizationSetupGrantUnsafe(projectId: string): Promise
 	if (!candidate?.orgId || !project || !assessProjectReadiness(project).ready) {
 		return;
 	}
-	const issued = await issueCreditGrant({
+	await issueCreditGrant({
 		grantType: 'organization_setup',
 		orgId: candidate.orgId,
 		projectId,
 	});
-	if (issued) {
-		await reconcileOrganizationUserJoinGrants(candidate.orgId);
-	}
+	await reconcileOrganizationUserJoinGrants(candidate.orgId);
 }
 
 async function recordProjectJoinCandidateUnsafe(projectId: string, userId: string): Promise<void> {
@@ -184,7 +182,7 @@ async function recordUserJoinCandidate({
 		})
 		.onConflictDoNothing()
 		.execute();
-	if (active) {
+	if (active || (await isUserActive(userId))) {
 		await activateUserJoinCandidatesUnsafe(userId);
 	}
 }

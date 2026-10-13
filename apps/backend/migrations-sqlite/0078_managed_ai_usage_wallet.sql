@@ -29,6 +29,60 @@ CREATE UNIQUE INDEX `credit_grant_candidate_source_key_unique` ON `credit_grant_
 CREATE INDEX `credit_grant_candidate_orgId_grantType_idx` ON `credit_grant_candidate` (`org_id`,`grant_type`);--> statement-breakpoint
 CREATE INDEX `credit_grant_candidate_userId_grantType_idx` ON `credit_grant_candidate` (`user_id`,`grant_type`);--> statement-breakpoint
 CREATE INDEX `credit_grant_candidate_projectId_grantType_idx` ON `credit_grant_candidate` (`project_id`,`grant_type`);--> statement-breakpoint
+INSERT OR IGNORE INTO `credit_grant_candidate` (
+	`id`,
+	`grant_type`,
+	`org_id`,
+	`user_id`,
+	`source_key`,
+	`activated_at`,
+	`created_at`
+)
+SELECT
+	'legacy-org-member:' || `org_member`.`org_id` || ':' || `org_member`.`user_id`,
+	'user_join',
+	`org_member`.`org_id`,
+	`org_member`.`user_id`,
+	'org-member:' || `org_member`.`org_id` || ':' || `org_member`.`user_id`,
+	CASE
+		WHEN NOT `user`.`requires_password_reset`
+			OR EXISTS (SELECT 1 FROM `session` WHERE `session`.`user_id` = `org_member`.`user_id`)
+		THEN cast(unixepoch('subsecond') * 1000 as integer)
+		ELSE NULL
+	END,
+	`org_member`.`created_at`
+FROM `org_member`
+INNER JOIN `user` ON `user`.`id` = `org_member`.`user_id`;
+--> statement-breakpoint
+INSERT OR IGNORE INTO `credit_grant_candidate` (
+	`id`,
+	`grant_type`,
+	`org_id`,
+	`user_id`,
+	`project_id`,
+	`source_key`,
+	`activated_at`,
+	`created_at`
+)
+SELECT
+	'legacy-project-member:' || `project_member`.`project_id` || ':' || `project_member`.`user_id`,
+	'user_join',
+	`project`.`org_id`,
+	`project_member`.`user_id`,
+	`project_member`.`project_id`,
+	'project-member:' || `project_member`.`project_id` || ':' || `project_member`.`user_id`,
+	CASE
+		WHEN NOT `user`.`requires_password_reset`
+			OR EXISTS (SELECT 1 FROM `session` WHERE `session`.`user_id` = `project_member`.`user_id`)
+		THEN cast(unixepoch('subsecond') * 1000 as integer)
+		ELSE NULL
+	END,
+	`project_member`.`created_at`
+FROM `project_member`
+INNER JOIN `project` ON `project`.`id` = `project_member`.`project_id`
+INNER JOIN `user` ON `user`.`id` = `project_member`.`user_id`
+WHERE `project`.`org_id` IS NOT NULL;
+--> statement-breakpoint
 CREATE TABLE `managed_ai_usage` (
 	`id` text PRIMARY KEY NOT NULL,
 	`operation_id` text NOT NULL,
