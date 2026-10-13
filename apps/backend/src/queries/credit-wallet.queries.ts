@@ -84,7 +84,7 @@ export async function listCreditLedger(
 							),
 						),
 					)
-					.orderBy(s.creditLedger.createdAt, s.creditLedger.id);
+					.orderBy(s.creditLedger.transactionSequence, s.creditLedger.id);
 	const grantedForUserIds = rows
 		.map(({ entry }) => getGrantedForUserId(entry))
 		.filter((userId): userId is string => userId !== null);

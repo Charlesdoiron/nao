@@ -46,10 +46,10 @@ export function withManagedAiUsageMetering(
 	if (provider !== 'nao') {
 		return model;
 	}
-	const meteredContext = { ...context, runId: context.runId ?? crypto.randomUUID() };
+	context.runId ??= crypto.randomUUID();
 	return wrapLanguageModel({
 		model,
-		middleware: createManagedAiUsageMiddleware(modelId, meteredContext, declaredCosts),
+		middleware: createManagedAiUsageMiddleware(modelId, context, declaredCosts),
 	});
 }
 
@@ -161,7 +161,7 @@ function createStreamMeter(
 
 	return new TransformStream({
 		async transform(chunk, controller) {
-			if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+			if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-input-delta') {
 				streamedChars += chunk.delta.length;
 			} else if (chunk.type === 'response-metadata') {
 				providerRequestId = chunk.id;

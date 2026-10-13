@@ -1304,6 +1304,7 @@ export const creditWallet = pgTable(
 			.primaryKey(),
 		orgId: text('org_id').references(() => organization.id, { onDelete: 'set null' }),
 		balanceMicroUsd: bigint('balance_micro_usd', { mode: 'number' }).notNull().default(0),
+		ledgerSequence: bigint('ledger_sequence', { mode: 'number' }).notNull().default(0),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 		updatedAt: timestamp('updated_at')
 			.defaultNow()
@@ -1388,6 +1389,7 @@ export const creditLedger = pgTable(
 		entryType: text('entry_type', { enum: CREDIT_LEDGER_ENTRY_TYPES }).$type<CreditLedgerEntryType>().notNull(),
 		deltaMicroUsd: bigint('delta_micro_usd', { mode: 'number' }).notNull(),
 		balanceAfterMicroUsd: bigint('balance_after_micro_usd', { mode: 'number' }).notNull(),
+		transactionSequence: bigint('transaction_sequence', { mode: 'number' }).notNull().default(0),
 		idempotencyKey: text('idempotency_key').notNull().unique(),
 		externalReference: text('external_reference'),
 		metadata: jsonb('metadata').$type<Record<string, unknown>>(),

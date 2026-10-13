@@ -6,8 +6,10 @@ import type * as EnvModule from '../src/env';
 const mocks = vi.hoisted(() => ({
 	assertProjectCloudBillingAccess: vi.fn(),
 	getLatestRun: vi.fn(),
+	getProjectAvailableModels: vi.fn(),
 	getProjectByUserId: vi.fn(),
 	getUserRoleInProject: vi.fn(),
+	getWelcomeGrantClaim: vi.fn(),
 	runContextRecommendations: vi.fn(),
 }));
 
@@ -21,6 +23,9 @@ vi.mock('../src/handlers/context-recommendations.handler', () => ({
 }));
 vi.mock('../src/queries/context-recommendation.queries', () => ({
 	getLatestRun: mocks.getLatestRun,
+}));
+vi.mock('../src/queries/credit-wallet.queries', () => ({
+	getWelcomeGrantClaim: mocks.getWelcomeGrantClaim,
 }));
 vi.mock('../src/queries/organization.queries', () => ({}));
 vi.mock('../src/queries/project.queries', () => ({
@@ -49,7 +54,7 @@ vi.mock('../src/services/gitlab', () => ({}));
 vi.mock('../src/services/sso-group-mapping.service', () => ({
 	isOrganizationRoleMappingActive: vi.fn(),
 }));
-vi.mock('../src/utils/llm', () => ({ getProjectAvailableModels: vi.fn() }));
+vi.mock('../src/utils/llm', () => ({ getProjectAvailableModels: mocks.getProjectAvailableModels }));
 vi.mock('../src/utils/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn() } }));
 vi.mock('../src/utils/nao-config', () => ({ extractConfiguredRepos: vi.fn() }));
 
@@ -62,8 +67,10 @@ describe('context recommendation routes', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.getLatestRun.mockResolvedValue(null);
+		mocks.getProjectAvailableModels.mockResolvedValue([]);
 		mocks.getProjectByUserId.mockResolvedValue({ id: 'project-id' });
 		mocks.getUserRoleInProject.mockResolvedValue('admin');
+		mocks.getWelcomeGrantClaim.mockResolvedValue(null);
 	});
 
 	it('does not report a manual run as started when billing access is restricted', async () => {
@@ -76,6 +83,13 @@ describe('context recommendation routes', () => {
 		});
 
 		expect(mocks.runContextRecommendations).not.toHaveBeenCalled();
+	});
+
+	it('hides claimable managed models until the user claims a welcome grant', async () => {
+		await caller().contextRecommendation.listAvailableModels();
+
+		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('user-id');
+		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id', undefined);
 	});
 });
 

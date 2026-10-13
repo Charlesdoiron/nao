@@ -62,6 +62,7 @@ describe('CreditsWalletContent', () => {
 							entryType: 'gift',
 							deltaMicroUsd: 5_000_000,
 							balanceAfterMicroUsd: 5_000_000,
+							transactionSequence: 1,
 						},
 					],
 				},
@@ -73,13 +74,15 @@ describe('CreditsWalletContent', () => {
 					entries: [
 						{
 							entryType: 'usage',
-							deltaMicroUsd: -1_000,
-							balanceAfterMicroUsd: 4_999_000,
+							deltaMicroUsd: -1_000_000,
+							balanceAfterMicroUsd: 3_000_000,
+							transactionSequence: 5,
 						},
 						{
 							entryType: 'usage',
-							deltaMicroUsd: -1_000,
-							balanceAfterMicroUsd: 4_998_000,
+							deltaMicroUsd: -1_000_000,
+							balanceAfterMicroUsd: 4_000_000,
+							transactionSequence: 3,
 						},
 					],
 				},
@@ -128,9 +131,69 @@ describe('CreditsWalletContent', () => {
 			),
 		).toBeTruthy();
 		expect(await screen.findByText(/Managed User · .* · gpt-5\.6/)).toBeTruthy();
+		expect(
+			screen.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$3.00'),
+		).toBeTruthy();
 		expect(screen.queryByText(/You gave your \$5 welcome credit/)).toBeNull();
 	});
+
+	it('distinguishes failed and aborted runs from mixed runs', async () => {
+		mocks.getSummary.mockResolvedValue({ enabled: false });
+		mocks.listUsage.mockResolvedValue({
+			runs: [
+				usageRun('failed', ['failed', 'failed']),
+				usageRun('aborted', ['aborted', 'aborted']),
+				usageRun('partially-failed', ['completed', 'failed']),
+				usageRun('partially-aborted', ['completed', 'aborted']),
+			],
+			nextCursor: null,
+		});
+
+		renderCreditsWalletContent(true);
+
+		expect(await screen.findByText(/^Failed/)).toBeTruthy();
+		expect(screen.getByText(/^Aborted/)).toBeTruthy();
+		expect(screen.getByText(/^Partially failed/)).toBeTruthy();
+		expect(screen.getByText(/^Partially aborted/)).toBeTruthy();
+	});
+
+	it('does not offer older pages before cursors load', async () => {
+		mocks.getSummary.mockResolvedValue({
+			balanceMicroUsd: 0,
+			lifetimeCreditedMicroUsd: 0,
+			lifetimeDebitedMicroUsd: 0,
+			enabled: true,
+		});
+		mocks.listLedger.mockReturnValue(new Promise(() => undefined));
+		mocks.listUsage.mockReturnValue(new Promise(() => undefined));
+
+		renderCreditsWalletContent(true);
+
+		await screen.findByText('Available');
+		expect(screen.queryByRole('button', { name: 'Older' })).toBeNull();
+	});
 });
+
+function usageRun(id: string, statuses: ('completed' | 'failed' | 'aborted')[]) {
+	return {
+		id,
+		startedAt: new Date(),
+		chatTitle: id,
+		userName: 'Managed User',
+		events: statuses.map((status, index) => ({
+			id: `${id}-${index}`,
+			chatId: null,
+			category: 'chat',
+			llmModelId: 'gpt-5.6',
+			llmProvider: 'nao',
+			status,
+			costSource: status === 'completed' ? 'price_book' : 'estimated',
+			totalTokens: 0,
+			upstreamCostMicroUsd: 0,
+			customerChargeMicroUsd: 0,
+		})),
+	};
+}
 
 function renderCreditsWalletContent(canViewReplay: boolean) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

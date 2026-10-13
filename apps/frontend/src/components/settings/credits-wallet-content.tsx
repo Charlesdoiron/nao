@@ -90,7 +90,7 @@ export function CreditsWalletContent({ canViewReplay }: { canViewReplay: boolean
 						</div>
 						<PageControls
 							hasPrevious={ledgerCursor !== undefined}
-							hasNext={ledger.data?.nextCursor !== null}
+							hasNext={ledger.data?.nextCursor !== null && ledger.data?.nextCursor !== undefined}
 							onPrevious={() => setLedgerCursor(undefined)}
 							onNext={() => setLedgerCursor(ledger.data?.nextCursor ?? undefined)}
 						/>
@@ -109,7 +109,7 @@ export function CreditsWalletContent({ canViewReplay }: { canViewReplay: boolean
 				</div>
 				<PageControls
 					hasPrevious={usageCursor !== undefined}
-					hasNext={usage.data?.nextCursor !== null}
+					hasNext={usage.data?.nextCursor !== null && usage.data?.nextCursor !== undefined}
 					onPrevious={() => setUsageCursor(undefined)}
 					onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
 				/>
@@ -122,10 +122,14 @@ type UsageRunData = inferRouterOutputs<TrpcRouter>['account']['listManagedAiUsag
 type CreditLedgerGroup = inferRouterOutputs<TrpcRouter>['account']['listCreditLedger']['groups'][number];
 
 function summarizeLedgerGroup(group: CreditLedgerGroup) {
-	const latestEntry = group.entries.at(-1);
-	if (!latestEntry) {
+	const [firstEntry, ...remainingEntries] = group.entries;
+	if (!firstEntry) {
 		throw new Error('Credit ledger group cannot be empty.');
 	}
+	const latestEntry = remainingEntries.reduce(
+		(latest, entry) => (entry.transactionSequence > latest.transactionSequence ? entry : latest),
+		firstEntry,
+	);
 	return {
 		entryType: latestEntry.entryType,
 		deltaMicroUsd: group.entries.reduce((total, entry) => total + entry.deltaMicroUsd, 0),
@@ -242,14 +246,26 @@ function summarizeRun(run: UsageRunData) {
 					? `${formatUsd(knownCost)}+`
 					: 'Unknown',
 		charge: events.reduce((total, event) => total + event.customerChargeMicroUsd, 0),
-		status: events.some((event) => event.status === 'failed')
-			? 'Partially failed'
-			: events.some((event) => event.status === 'aborted')
-				? 'Partially aborted'
-				: 'Completed',
+		status: summarizeRunStatus(events),
 		estimated: events.some((event) => event.costSource === 'estimated'),
 		chatId: events.find((event) => event.chatId)?.chatId,
 	};
+}
+
+function summarizeRunStatus(events: UsageRunData['events']): string {
+	if (events.length > 0 && events.every((event) => event.status === 'failed')) {
+		return 'Failed';
+	}
+	if (events.length > 0 && events.every((event) => event.status === 'aborted')) {
+		return 'Aborted';
+	}
+	if (events.some((event) => event.status === 'failed')) {
+		return 'Partially failed';
+	}
+	if (events.some((event) => event.status === 'aborted')) {
+		return 'Partially aborted';
+	}
+	return 'Completed';
 }
 
 function CreditMetric({ label, value }: { label: string; value: number }) {

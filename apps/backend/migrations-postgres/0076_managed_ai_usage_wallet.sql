@@ -46,6 +46,7 @@ CREATE TABLE "credit_ledger" (
 	"entry_type" text NOT NULL,
 	"delta_micro_usd" bigint NOT NULL,
 	"balance_after_micro_usd" bigint NOT NULL,
+	"transaction_sequence" bigint DEFAULT 0 NOT NULL,
 	"idempotency_key" text NOT NULL,
 	"external_reference" text,
 	"metadata" jsonb,
@@ -58,6 +59,7 @@ CREATE TABLE "credit_wallet" (
 	"id" text PRIMARY KEY NOT NULL,
 	"org_id" text,
 	"balance_micro_usd" bigint DEFAULT 0 NOT NULL,
+	"ledger_sequence" bigint DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );

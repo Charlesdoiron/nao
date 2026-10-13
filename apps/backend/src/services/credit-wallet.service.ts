@@ -33,6 +33,7 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 					.update(s.creditWallet)
 					.set({
 						balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${WELCOME_GRANT_MICRO_USD}`,
+						ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 						updatedAt: new Date(),
 					})
 					.where(eq(s.creditWallet.id, wallet.id))
@@ -43,7 +44,10 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 				}
 				transaction
 					.update(s.creditLedger)
-					.set({ balanceAfterMicroUsd: updated.balanceMicroUsd })
+					.set({
+						balanceAfterMicroUsd: updated.balanceMicroUsd,
+						transactionSequence: updated.ledgerSequence,
+					})
 					.where(eq(s.creditLedger.id, entry.id))
 					.run();
 				return updated;
@@ -77,6 +81,7 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 			.update(s.creditWallet)
 			.set({
 				balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${WELCOME_GRANT_MICRO_USD}`,
+				ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 				updatedAt: new Date(),
 			})
 			.where(eq(s.creditWallet.id, wallet.id))
@@ -87,7 +92,10 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 		}
 		await transaction
 			.update(s.creditLedger)
-			.set({ balanceAfterMicroUsd: updated.balanceMicroUsd })
+			.set({
+				balanceAfterMicroUsd: updated.balanceMicroUsd,
+				transactionSequence: updated.ledgerSequence,
+			})
 			.where(eq(s.creditLedger.id, entry.id))
 			.execute();
 		return updated;
@@ -109,6 +117,7 @@ export async function reserveManagedAiCredits(
 					.update(s.creditWallet)
 					.set({
 						balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} - ${reservationMicroUsd}`,
+						ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 						updatedAt: new Date(),
 					})
 					.where(
@@ -133,6 +142,7 @@ export async function reserveManagedAiCredits(
 			.update(s.creditWallet)
 			.set({
 				balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} - ${reservationMicroUsd}`,
+				ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 				updatedAt: new Date(),
 			})
 			.where(and(eq(s.creditWallet.orgId, orgId), gte(s.creditWallet.balanceMicroUsd, reservationMicroUsd)))
@@ -202,6 +212,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 					.update(s.creditWallet)
 					.set({
 						balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} - ${reservation.deltaMicroUsd} - ${settledChargeMicroUsd}`,
+						ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 						updatedAt: new Date(),
 					})
 					.where(eq(s.creditWallet.id, wallet.id))
@@ -217,6 +228,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 						entryType: 'usage',
 						deltaMicroUsd: -settledChargeMicroUsd,
 						balanceAfterMicroUsd: updated.balanceMicroUsd,
+						transactionSequence: updated.ledgerSequence,
 						metadata: null,
 					})
 					.where(eq(s.creditLedger.id, reservation.id))
@@ -265,6 +277,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 			.update(s.creditWallet)
 			.set({
 				balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} - ${reservation.deltaMicroUsd} - ${settledChargeMicroUsd}`,
+				ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 				updatedAt: new Date(),
 			})
 			.where(eq(s.creditWallet.id, wallet.id))
@@ -280,6 +293,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 				entryType: 'usage',
 				deltaMicroUsd: -settledChargeMicroUsd,
 				balanceAfterMicroUsd: updated.balanceMicroUsd,
+				transactionSequence: updated.ledgerSequence,
 				metadata: null,
 			})
 			.where(eq(s.creditLedger.id, reservation.id))
@@ -294,6 +308,7 @@ function welcomeGrantEntry(wallet: DBCreditWallet, userId: string) {
 		entryType: 'gift' as const,
 		deltaMicroUsd: WELCOME_GRANT_MICRO_USD,
 		balanceAfterMicroUsd: wallet.balanceMicroUsd + WELCOME_GRANT_MICRO_USD,
+		transactionSequence: 0,
 		idempotencyKey: `welcome-user:v1:${userId}`,
 		metadata: { source: 'nao', campaign: 'v1-welcome-user', grantedForUserId: userId },
 	};
@@ -305,6 +320,7 @@ function reservationLedgerEntry(wallet: DBCreditWallet, operationId: string, res
 		entryType: 'reservation' as const,
 		deltaMicroUsd: -reservationMicroUsd,
 		balanceAfterMicroUsd: wallet.balanceMicroUsd,
+		transactionSequence: wallet.ledgerSequence,
 		idempotencyKey: operationId,
 		metadata: { source: 'nao', operationId },
 	};

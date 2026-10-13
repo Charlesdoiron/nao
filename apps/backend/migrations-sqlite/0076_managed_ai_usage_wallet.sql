@@ -58,6 +58,7 @@ CREATE TABLE `credit_ledger` (
 	`entry_type` text NOT NULL,
 	`delta_micro_usd` integer NOT NULL,
 	`balance_after_micro_usd` integer NOT NULL,
+	`transaction_sequence` integer DEFAULT 0 NOT NULL,
 	`idempotency_key` text NOT NULL,
 	`external_reference` text,
 	`metadata` text,
@@ -73,6 +74,7 @@ CREATE TABLE `credit_wallet` (
 	`id` text PRIMARY KEY NOT NULL,
 	`org_id` text,
 	`balance_micro_usd` integer DEFAULT 0 NOT NULL,
+	`ledger_sequence` integer DEFAULT 0 NOT NULL,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	FOREIGN KEY (`org_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE set null

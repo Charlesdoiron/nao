@@ -52,6 +52,17 @@ export const AgentProvider = ({ children, disableNavigation }: Props) => {
 		() => confirmBeforeSend(agent.selectedModel?.provider),
 		[confirmBeforeSend, agent.selectedModel?.provider],
 	);
+	const confirmRestorableAgentSend = useCallback(
+		async (args: SendMessageArgs) => {
+			try {
+				return await confirmAgentSend();
+			} catch (error) {
+				restoreChatInput(args);
+				throw error;
+			}
+		},
+		[confirmAgentSend],
+	);
 	const switchProject = useCallback(
 		async (decision: Awaited<ReturnType<typeof confirmAgentSend>>) => {
 			if (decision === 'switch-project') {
@@ -62,25 +73,25 @@ export const AgentProvider = ({ children, disableNavigation }: Props) => {
 	);
 	const queueOrSendMessage = useCallback<AgentHelpers['queueOrSendMessage']>(
 		async (args) => {
-			const decision = await confirmAgentSend();
+			const decision = await confirmRestorableAgentSend(args);
 			if (decision === 'send') {
 				return agent.queueOrSendMessage(args);
 			}
 			restoreChatInput(args);
 			await switchProject(decision);
 		},
-		[agent, confirmAgentSend, switchProject],
+		[agent, confirmRestorableAgentSend, switchProject],
 	);
 	const editMessage = useCallback<AgentHelpers['editMessage']>(
 		async (args) => {
-			const decision = await confirmAgentSend();
+			const decision = await confirmRestorableAgentSend(args);
 			if (decision === 'send') {
 				return agent.editMessage(args);
 			}
 			restoreChatInput(args);
 			await switchProject(decision);
 		},
-		[agent, confirmAgentSend, switchProject],
+		[agent, confirmRestorableAgentSend, switchProject],
 	);
 	const resendMessage = useCallback<AgentHelpers['resendMessage']>(
 		async (args) => {

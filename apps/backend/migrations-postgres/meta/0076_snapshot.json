@@ -3065,6 +3065,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "transaction_sequence": {
+          "name": "transaction_sequence",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "idempotency_key": {
           "name": "idempotency_key",
           "type": "text",
@@ -3187,6 +3194,13 @@
         },
         "balance_micro_usd": {
           "name": "balance_micro_usd",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "ledger_sequence": {
+          "name": "ledger_sequence",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true,

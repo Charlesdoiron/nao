@@ -1397,6 +1397,7 @@ export const creditWallet = sqliteTable(
 			.primaryKey(),
 		orgId: text('org_id').references(() => organization.id, { onDelete: 'set null' }),
 		balanceMicroUsd: integer('balance_micro_usd').notNull().default(0),
+		ledgerSequence: integer('ledger_sequence').notNull().default(0),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
@@ -1481,6 +1482,7 @@ export const creditLedger = sqliteTable(
 		entryType: text('entry_type', { enum: CREDIT_LEDGER_ENTRY_TYPES }).$type<CreditLedgerEntryType>().notNull(),
 		deltaMicroUsd: integer('delta_micro_usd').notNull(),
 		balanceAfterMicroUsd: integer('balance_after_micro_usd').notNull(),
+		transactionSequence: integer('transaction_sequence').notNull().default(0),
 		idempotencyKey: text('idempotency_key').notNull().unique(),
 		externalReference: text('external_reference'),
 		metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),

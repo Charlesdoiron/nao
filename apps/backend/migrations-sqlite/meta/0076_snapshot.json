@@ -2792,6 +2792,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "transaction_sequence": {
+          "name": "transaction_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "idempotency_key": {
           "name": "idempotency_key",
           "type": "text",
@@ -2898,6 +2906,14 @@
         },
         "balance_micro_usd": {
           "name": "balance_micro_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "ledger_sequence": {
+          "name": "ledger_sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

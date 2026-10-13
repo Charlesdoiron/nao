@@ -116,6 +116,22 @@ describe('getProjectAvailableModels', () => {
 		expect(models.some(({ provider }) => provider === 'nao')).toBe(false);
 	});
 
+	it('offers managed models when an environment provider has no selectable model', async () => {
+		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
+		process.env.OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:8000/v1';
+		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
+
+		const models = await getProjectAvailableModels('project-1', 'user-1');
+
+		expect(models.some(({ provider }) => provider === 'nao')).toBe(true);
+		await expect(
+			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
+				userId: 'user-1',
+				category: 'chat',
+			}),
+		).resolves.not.toBeNull();
+	});
+
 	it('never exposes the managed provider in self-hosted mode', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		process.env.NAO_MODE = 'self-hosted';

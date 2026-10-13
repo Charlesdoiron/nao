@@ -8,6 +8,7 @@ import { chatInputRestoreStore } from '@/stores/chat-input-restore';
 
 const mocks = vi.hoisted(() => ({
 	confirmBeforeSend: vi.fn(),
+	editMessage: vi.fn(),
 	navigate: vi.fn(),
 	queueOrSendMessage: vi.fn(),
 	useAgent: vi.fn(),
@@ -34,20 +35,40 @@ vi.mock('@/hooks/use-stream-end-sound', () => ({
 	useStreamEndSound: vi.fn(),
 }));
 
-function SendHarness() {
-	const { queueOrSendMessage } = useAgentContext();
+function SubmissionHarness() {
+	const { editMessage, queueOrSendMessage } = useAgentContext();
 	return (
-		<button
-			onClick={() =>
-				void queueOrSendMessage({
-					text: 'Keep this question',
-					images: [{ data: 'data:image/png;base64,image', mediaType: 'image/png' }],
-					documents: [],
-				})
-			}
-		>
-			Send
-		</button>
+		<>
+			<button
+				onClick={() =>
+					void queueOrSendMessage({
+						text: 'Keep this question',
+						images: [{ data: 'data:image/png;base64,image', mediaType: 'image/png' }],
+						documents: [],
+					}).catch(() => undefined)
+				}
+			>
+				Send
+			</button>
+			<button
+				onClick={() =>
+					void editMessage({
+						messageId: 'message-id',
+						text: 'Keep this edit',
+						images: [],
+						documents: [
+							{
+								path: '/home/uploads/context.pdf',
+								filename: 'context.pdf',
+								mediaType: 'application/pdf',
+							},
+						],
+					}).catch(() => undefined)
+				}
+			>
+				Edit
+			</button>
+		</>
 	);
 }
 
@@ -59,7 +80,7 @@ describe('AgentProvider managed welcome confirmation', () => {
 			messages: [],
 			setMessages: vi.fn(),
 			queueOrSendMessage: mocks.queueOrSendMessage,
-			editMessage: vi.fn(),
+			editMessage: mocks.editMessage,
 			resendMessage: vi.fn(),
 			switchMessageVersion: vi.fn(),
 			submitQueuedMessageNow: vi.fn(),
@@ -86,7 +107,7 @@ describe('AgentProvider managed welcome confirmation', () => {
 	it('preserves the draft and opens project selection without sending', async () => {
 		render(
 			<AgentProvider>
-				<SendHarness />
+				<SubmissionHarness />
 			</AgentProvider>,
 		);
 
@@ -99,5 +120,41 @@ describe('AgentProvider managed welcome confirmation', () => {
 			images: [{ url: 'data:image/png;base64,image', mediaType: 'image/png' }],
 			documents: [],
 		});
+	});
+
+	it('restores send and edit inputs when the managed credit status request fails', async () => {
+		mocks.confirmBeforeSend.mockRejectedValue(new Error('Status unavailable'));
+		render(
+			<AgentProvider>
+				<SubmissionHarness />
+			</AgentProvider>,
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+		await waitFor(() =>
+			expect(chatInputRestoreStore.getSnapshot()).toEqual({
+				text: 'Keep this question',
+				images: [{ url: 'data:image/png;base64,image', mediaType: 'image/png' }],
+				documents: [],
+			}),
+		);
+
+		chatInputRestoreStore.clear();
+		fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		await waitFor(() =>
+			expect(chatInputRestoreStore.getSnapshot()).toEqual({
+				text: 'Keep this edit',
+				images: [],
+				documents: [
+					{
+						path: '/home/uploads/context.pdf',
+						filename: 'context.pdf',
+						mediaType: 'application/pdf',
+					},
+				],
+			}),
+		);
+		expect(mocks.queueOrSendMessage).not.toHaveBeenCalled();
+		expect(mocks.editMessage).not.toHaveBeenCalled();
 	});
 });

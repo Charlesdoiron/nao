@@ -17,7 +17,7 @@ import Database from 'better-sqlite3';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { withManagedAiUsageMetering } from '../src/agents/managed-ai';
+import { type ManagedAiUsageContext, withManagedAiUsageMetering } from '../src/agents/managed-ai';
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { getCreditSummary, getWelcomeGrantClaim, listCreditLedger } from '../src/queries/credit-wallet.queries';
@@ -254,14 +254,15 @@ describe('managed AI usage and organization credits', () => {
 	});
 
 	it('records and charges one row per managed invocation before the assistant message is persisted', async () => {
-		const model = withManagedAiUsageMetering(createModel(), 'nao', 'gpt-5.6-luna', {
+		const context: ManagedAiUsageContext = {
 			userId: MANAGED_USER_ID,
 			orgId: ORG_ID,
 			projectId: PROJECT_ID,
 			chatId: CHAT_ID,
-			messageId: MESSAGE_ID,
 			category: 'chat',
-		});
+		};
+		const model = withManagedAiUsageMetering(createModel(), 'nao', 'gpt-5.6-luna', context);
+		context.messageId = MESSAGE_ID;
 		await model.doGenerate({} as LanguageModelV3CallOptions);
 		const streamed = await model.doStream({} as LanguageModelV3CallOptions);
 		await consume(streamed.stream);
@@ -291,6 +292,9 @@ describe('managed AI usage and organization credits', () => {
 		expect(ledgerGroup?.entries).toHaveLength(2);
 		expect(ledgerGroup?.usageUserName).toBe('Managed User');
 		const summary = await getCreditSummary(ORG_ID);
+		const transactionSequences = ledgerGroup?.entries.map((entry) => entry.transactionSequence) ?? [];
+		expect(transactionSequences).toEqual([...transactionSequences].sort((left, right) => left - right));
+		expect(ledgerGroup?.entries.at(-1)?.balanceAfterMicroUsd).toBe(summary.balanceMicroUsd);
 		const [ledgerTotal] = await db
 			.select({ total: sql<number>`coalesce(sum(${s.creditLedger.deltaMicroUsd}), 0)` })
 			.from(s.creditLedger)
@@ -382,7 +386,10 @@ describe('managed AI usage and organization credits', () => {
 	it('records an estimated charge when a stream is aborted', async () => {
 		const controller = new AbortController();
 		const model = withManagedAiUsageMetering(
-			createModel(undefined, [{ type: 'text-delta', id: 'text-1', delta: 'done' }]),
+			createModel(undefined, [
+				{ type: 'text-delta', id: 'text-1', delta: 'done' },
+				{ type: 'tool-input-delta', id: 'tool-1', delta: 'tool' },
+			]),
 			'nao',
 			'gpt-5.6-luna',
 			{ userId: MANAGED_USER_ID, orgId: ORG_ID, category: 'chat' },
@@ -393,12 +400,13 @@ describe('managed AI usage and organization credits', () => {
 		});
 		const reader = stream.getReader();
 		await reader.read();
+		await reader.read();
 		controller.abort();
 		await reader.cancel();
 
 		await vi.waitFor(async () => {
 			const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'aborted'));
-			expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+			expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 2 });
 		});
 	});
 

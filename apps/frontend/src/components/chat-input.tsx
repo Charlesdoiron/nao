@@ -160,7 +160,7 @@ function ChatInputBase({
 	const isSendBlocked =
 		!!parseBudgetError(error) ||
 		budgetStatus.data?.level === 'exceeded' ||
-		!!parseManagedCreditsError(error) ||
+		(selectedModel?.provider === 'nao' && !!parseManagedCreditsError(error)) ||
 		(selectedModel?.provider === 'nao' &&
 			managedCredit.data?.welcomeGrantStatus !== 'unclaimed' &&
 			managedCredit.data?.balanceMicroUsd !== undefined &&
@@ -657,7 +657,7 @@ function BudgetBanner() {
 	const budgetStatus = useQuery({
 		...trpc.budget.checkBudgetStatus.queryOptions({ provider: selectedModel?.provider ?? 'openai' }),
 		enabled: !!selectedModel?.provider && !isManaged,
-		refetchOnWindowFocus: false,
+		refetchOnWindowFocus: 'always',
 	});
 	const managedCredit = useQuery({
 		...trpc.account.getManagedCreditStatus.queryOptions(),

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { env } from '../env';
 import { ensureContextRecommendationsSchedule } from '../handlers/context-recommendations.handler';
 import * as crQueries from '../queries/context-recommendation.queries';
+import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
 import { agentService } from '../services/agent';
@@ -116,9 +117,10 @@ export const contextRecommendationRoutes = {
 		return { ...fresh, alreadyTerminal: !cancelled };
 	}),
 
-	listAvailableModels: recommendationsProcedure.query(async ({ ctx }) =>
-		getProjectAvailableModels(ctx.project.id, ctx.user.id),
-	),
+	listAvailableModels: recommendationsProcedure.query(async ({ ctx }) => {
+		const claim = await creditWalletQueries.getWelcomeGrantClaim(ctx.user.id);
+		return getProjectAvailableModels(ctx.project.id, claim ? ctx.user.id : undefined);
+	}),
 
 	getConfig: recommendationsProcedure.query(async ({ ctx }) => {
 		return crQueries.getConfig(ctx.project.id);

@@ -156,7 +156,7 @@ export async function resolveProviderModel(
 			return null;
 		}
 		const byokSources = await getProjectModelSources(projectId);
-		if (byokSources.length > 0) {
+		if (byokSources.some(hasSelectableModel)) {
 			return null;
 		}
 		const model = createProviderModel(provider, { apiKey }, modelId);
@@ -426,7 +426,7 @@ async function getProjectModelSources(projectId: string, userId?: string): Promi
 	const enabledSources = sources.filter(
 		(source) => source.provider !== 'nao' && !isProviderDisabled(source.provider),
 	);
-	if (enabledSources.length === 0 && userId && isManagedAiEnabled()) {
+	if (!enabledSources.some(hasSelectableModel) && userId && isManagedAiEnabled()) {
 		const project = await projectQueries.getProjectById(projectId);
 		const [claim, summary] = project?.orgId
 			? await Promise.all([
@@ -444,6 +444,10 @@ async function getProjectModelSources(projectId: string, userId?: string): Promi
 		}
 	}
 	return enabledSources;
+}
+
+function hasSelectableModel(source: ProviderModelSource): boolean {
+	return source.enabledModels.length > 0 || Boolean(getDefaultModelId(source.provider));
 }
 
 const getModelName = (provider: LlmProvider, modelId: string): string =>
