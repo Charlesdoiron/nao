@@ -118,8 +118,9 @@ export const contextRecommendationRoutes = {
 	}),
 
 	listAvailableModels: recommendationsProcedure.query(async ({ ctx }) => {
-		const claim = await creditWalletQueries.getWelcomeGrantClaim(ctx.user.id);
-		return getProjectAvailableModels(ctx.project.id, claim ? ctx.user.id : undefined);
+		const executionUserId = await crQueries.getFirstProjectAdminUserId(ctx.project.id);
+		const claim = await creditWalletQueries.getWelcomeGrantClaim(executionUserId);
+		return getProjectAvailableModels(ctx.project.id, claim ? executionUserId : undefined);
 	}),
 
 	getConfig: recommendationsProcedure.query(async ({ ctx }) => {

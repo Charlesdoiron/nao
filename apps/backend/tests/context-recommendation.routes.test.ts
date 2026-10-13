@@ -5,6 +5,7 @@ import type * as EnvModule from '../src/env';
 
 const mocks = vi.hoisted(() => ({
 	assertProjectCloudBillingAccess: vi.fn(),
+	getFirstProjectAdminUserId: vi.fn(),
 	getLatestRun: vi.fn(),
 	getProjectAvailableModels: vi.fn(),
 	getProjectByUserId: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('../src/handlers/context-recommendations.handler', () => ({
 	ensureContextRecommendationsSchedule: vi.fn(),
 }));
 vi.mock('../src/queries/context-recommendation.queries', () => ({
+	getFirstProjectAdminUserId: mocks.getFirstProjectAdminUserId,
 	getLatestRun: mocks.getLatestRun,
 }));
 vi.mock('../src/queries/credit-wallet.queries', () => ({
@@ -66,6 +68,7 @@ const testRouter = router({ contextRecommendation: contextRecommendationRoutes }
 describe('context recommendation routes', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.getFirstProjectAdminUserId.mockResolvedValue('execution-user-id');
 		mocks.getLatestRun.mockResolvedValue(null);
 		mocks.getProjectAvailableModels.mockResolvedValue([]);
 		mocks.getProjectByUserId.mockResolvedValue({ id: 'project-id' });
@@ -85,10 +88,14 @@ describe('context recommendation routes', () => {
 		expect(mocks.runContextRecommendations).not.toHaveBeenCalled();
 	});
 
-	it('hides claimable managed models until the user claims a welcome grant', async () => {
+	it('hides managed models when only the requesting admin has claimed a welcome grant', async () => {
+		mocks.getWelcomeGrantClaim.mockImplementation(async (userId) =>
+			userId === 'user-id' ? { orgId: 'org-id' } : null,
+		);
+
 		await caller().contextRecommendation.listAvailableModels();
 
-		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('user-id');
+		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('execution-user-id');
 		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id', undefined);
 	});
 });
