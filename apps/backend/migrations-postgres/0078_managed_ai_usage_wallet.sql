@@ -1,3 +1,27 @@
+CREATE TABLE "credit_grant_policy" (
+	"grant_type" text PRIMARY KEY NOT NULL,
+	"amount_micro_usd" bigint NOT NULL,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO "credit_grant_policy" ("grant_type", "amount_micro_usd") VALUES
+	('organization_setup', 20000000),
+	('user_join', 5000000);
+--> statement-breakpoint
+CREATE TABLE "credit_grant_candidate" (
+	"id" text PRIMARY KEY NOT NULL,
+	"grant_type" text NOT NULL,
+	"org_id" text,
+	"user_id" text,
+	"project_id" text,
+	"source_key" text NOT NULL,
+	"activated_at" timestamp,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "credit_grant_candidate_source_key_unique" UNIQUE("source_key")
+);
+--> statement-breakpoint
 CREATE TABLE "managed_ai_usage" (
 	"id" text PRIMARY KEY NOT NULL,
 	"operation_id" text NOT NULL,
@@ -69,6 +93,10 @@ ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_user_id_user_id_
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_project_id_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."project"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_chat_id_chat_id_fk" FOREIGN KEY ("chat_id") REFERENCES "public"."chat"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_grant_type_credit_grant_policy_grant_type_fk" FOREIGN KEY ("grant_type") REFERENCES "public"."credit_grant_policy"("grant_type") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_project_id_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."project"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_wallet_id_credit_wallet_id_fk" FOREIGN KEY ("wallet_id") REFERENCES "public"."credit_wallet"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_usage_id_managed_ai_usage_id_fk" FOREIGN KEY ("usage_id") REFERENCES "public"."managed_ai_usage"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_wallet" ADD CONSTRAINT "credit_wallet_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -79,5 +107,8 @@ CREATE INDEX "managed_ai_usage_projectId_startedAt_idx" ON "managed_ai_usage" US
 CREATE INDEX "managed_ai_usage_chatId_idx" ON "managed_ai_usage" USING btree ("chat_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_chatMessageId_idx" ON "managed_ai_usage" USING btree ("chat_message_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_status_idx" ON "managed_ai_usage" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "credit_grant_candidate_orgId_grantType_idx" ON "credit_grant_candidate" USING btree ("org_id","grant_type");--> statement-breakpoint
+CREATE INDEX "credit_grant_candidate_userId_grantType_idx" ON "credit_grant_candidate" USING btree ("user_id","grant_type");--> statement-breakpoint
+CREATE INDEX "credit_grant_candidate_projectId_grantType_idx" ON "credit_grant_candidate" USING btree ("project_id","grant_type");--> statement-breakpoint
 CREATE INDEX "credit_ledger_walletId_createdAt_idx" ON "credit_ledger" USING btree ("wallet_id","created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "credit_wallet_orgId_idx" ON "credit_wallet" USING btree ("org_id");

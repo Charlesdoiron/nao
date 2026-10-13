@@ -59,7 +59,7 @@ export const deleteProjectLlmConfig = async (projectId: string, provider: LlmPro
 };
 
 /** Get the provider for a project (for display purposes) */
-export const getProjectModelProvider = async (projectId: string, userId?: string): Promise<LlmProvider | undefined> => {
+export const getProjectModelProvider = async (projectId: string): Promise<LlmProvider | undefined> => {
 	const configs = await getProjectLlmConfigs(projectId);
 
 	// Return first configured provider, preferring anthropic
@@ -74,7 +74,7 @@ export const getProjectModelProvider = async (projectId: string, userId?: string
 	}
 
 	// Fall back to env providers, then to whatever the project can still reach (e.g. nao-managed access)
-	return getDefaultEnvProvider() ?? (await getProjectAvailableModels(projectId, userId)).at(0)?.provider;
+	return getDefaultEnvProvider() ?? (await getProjectAvailableModels(projectId)).at(0)?.provider;
 };
 
 /** Get the config to use for a specific model selection */

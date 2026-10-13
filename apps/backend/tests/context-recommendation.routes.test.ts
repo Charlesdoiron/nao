@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
 	getProjectAvailableModels: vi.fn(),
 	getProjectByUserId: vi.fn(),
 	getUserRoleInProject: vi.fn(),
-	getWelcomeGrantClaim: vi.fn(),
 	runContextRecommendations: vi.fn(),
 }));
 
@@ -26,9 +25,6 @@ vi.mock('../src/handlers/context-recommendations.handler', () => ({
 vi.mock('../src/queries/context-recommendation.queries', () => ({
 	getFirstProjectAdminUserId: mocks.getFirstProjectAdminUserId,
 	getLatestRun: mocks.getLatestRun,
-}));
-vi.mock('../src/queries/credit-wallet.queries', () => ({
-	getWelcomeGrantClaim: mocks.getWelcomeGrantClaim,
 }));
 vi.mock('../src/queries/organization.queries', () => ({}));
 vi.mock('../src/queries/project.queries', () => ({
@@ -75,7 +71,6 @@ describe('context recommendation routes', () => {
 		mocks.getProjectAvailableModels.mockResolvedValue([]);
 		mocks.getProjectByUserId.mockResolvedValue({ id: 'project-id', orgId: 'org-id' });
 		mocks.getUserRoleInProject.mockResolvedValue('admin');
-		mocks.getWelcomeGrantClaim.mockResolvedValue(null);
 	});
 
 	it('blocks protected mutations through the shared cloud billing gate', async () => {
@@ -90,15 +85,10 @@ describe('context recommendation routes', () => {
 		expect(mocks.runContextRecommendations).not.toHaveBeenCalled();
 	});
 
-	it('hides managed models when only the requesting admin has claimed a welcome grant', async () => {
-		mocks.getWelcomeGrantClaim.mockImplementation(async (userId) =>
-			userId === 'user-id' ? { orgId: 'org-id' } : null,
-		);
-
+	it('lists models for the project', async () => {
 		await caller().contextRecommendation.listAvailableModels();
 
-		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('execution-user-id');
-		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id', undefined);
+		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id');
 	});
 
 	it('keeps reads available when billing access is restricted', async () => {

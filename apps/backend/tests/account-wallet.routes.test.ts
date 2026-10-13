@@ -21,7 +21,6 @@ vi.mock('../src/queries/account.queries', () => ({}));
 
 vi.mock('../src/queries/credit-wallet.queries', () => ({
 	getCreditSummary: vi.fn(),
-	getWelcomeGrantClaim: vi.fn(),
 	listCreditLedger: mocks.listCreditLedger,
 }));
 

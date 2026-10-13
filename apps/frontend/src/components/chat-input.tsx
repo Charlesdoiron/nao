@@ -162,7 +162,6 @@ function ChatInputBase({
 		budgetStatus.data?.level === 'exceeded' ||
 		(selectedModel?.provider === 'nao' && !!parseManagedCreditsError(error)) ||
 		(selectedModel?.provider === 'nao' &&
-			managedCredit.data?.welcomeGrantStatus !== 'unclaimed' &&
 			managedCredit.data?.balanceMicroUsd !== undefined &&
 			managedCredit.data.balanceMicroUsd <= 0);
 
@@ -668,11 +667,7 @@ function BudgetBanner() {
 	const managedError = parseManagedCreditsError(error);
 	const balanceMicroUsd = managedCredit.data?.balanceMicroUsd;
 	const managedExhausted =
-		isManaged &&
-		(managedError !== null ||
-			(managedCredit.data?.welcomeGrantStatus !== 'unclaimed' &&
-				balanceMicroUsd !== undefined &&
-				balanceMicroUsd <= 0));
+		isManaged && (managedError !== null || (balanceMicroUsd !== undefined && balanceMicroUsd <= 0));
 	const budgetError = parseBudgetError(error);
 	const budgetLevel = budgetError ? 'exceeded' : (budgetStatus.data?.level ?? 'ok');
 	const budgetMessage = budgetError ?? (budgetLevel !== 'ok' ? budgetStatus.data?.message : null);

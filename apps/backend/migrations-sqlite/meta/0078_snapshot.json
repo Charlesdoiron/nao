@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d5a8984c-a2ab-442f-889d-f080fde98bcf",
+  "id": "fb7f798b-aba5-4579-b59f-7b662d1ca651",
   "prevId": "8c245a12-5948-4011-9038-4212c62209d2",
   "tables": {
     "account": {
@@ -2343,6 +2343,206 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "credit_grant_candidate": {
+      "name": "credit_grant_candidate",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grant_type": {
+          "name": "grant_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_key": {
+          "name": "source_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activated_at": {
+          "name": "activated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "credit_grant_candidate_source_key_unique": {
+          "name": "credit_grant_candidate_source_key_unique",
+          "columns": [
+            "source_key"
+          ],
+          "isUnique": true
+        },
+        "credit_grant_candidate_orgId_grantType_idx": {
+          "name": "credit_grant_candidate_orgId_grantType_idx",
+          "columns": [
+            "org_id",
+            "grant_type"
+          ],
+          "isUnique": false
+        },
+        "credit_grant_candidate_userId_grantType_idx": {
+          "name": "credit_grant_candidate_userId_grantType_idx",
+          "columns": [
+            "user_id",
+            "grant_type"
+          ],
+          "isUnique": false
+        },
+        "credit_grant_candidate_projectId_grantType_idx": {
+          "name": "credit_grant_candidate_projectId_grantType_idx",
+          "columns": [
+            "project_id",
+            "grant_type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "credit_grant_candidate_grant_type_credit_grant_policy_grant_type_fk": {
+          "name": "credit_grant_candidate_grant_type_credit_grant_policy_grant_type_fk",
+          "tableFrom": "credit_grant_candidate",
+          "tableTo": "credit_grant_policy",
+          "columnsFrom": [
+            "grant_type"
+          ],
+          "columnsTo": [
+            "grant_type"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "credit_grant_candidate_org_id_organization_id_fk": {
+          "name": "credit_grant_candidate_org_id_organization_id_fk",
+          "tableFrom": "credit_grant_candidate",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "credit_grant_candidate_user_id_user_id_fk": {
+          "name": "credit_grant_candidate_user_id_user_id_fk",
+          "tableFrom": "credit_grant_candidate",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "credit_grant_candidate_project_id_project_id_fk": {
+          "name": "credit_grant_candidate_project_id_project_id_fk",
+          "tableFrom": "credit_grant_candidate",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "credit_grant_policy": {
+      "name": "credit_grant_policy",
+      "columns": {
+        "grant_type": {
+          "name": "grant_type",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_micro_usd": {
+          "name": "amount_micro_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

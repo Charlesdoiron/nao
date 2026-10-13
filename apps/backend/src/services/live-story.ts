@@ -497,9 +497,8 @@ function keepKnownNarratives(sources: StoryNarrativeSource[], rewritten: StoryNa
 type LiveStoryModel = NonNullable<Awaited<ReturnType<typeof resolveLiveStoryModel>>>;
 
 async function resolveLiveStoryModel(target: StoryRefreshTarget) {
-	const pinned = await resolveDefaultModelSelection(target.projectId, 'live_story', target.userId);
-	const provider =
-		pinned?.provider ?? (await llmConfigQueries.getProjectModelProvider(target.projectId, target.userId));
+	const pinned = await resolveDefaultModelSelection(target.projectId, 'live_story');
+	const provider = pinned?.provider ?? (await llmConfigQueries.getProjectModelProvider(target.projectId));
 	if (!provider) {
 		return null;
 	}

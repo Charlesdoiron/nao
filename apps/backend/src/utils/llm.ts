@@ -156,7 +156,7 @@ export async function resolveProviderModel(
 			return null;
 		}
 		const byokSources = await getProjectModelSources(projectId);
-		if (byokSources.some(hasSelectableModel)) {
+		if (byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))) {
 			return null;
 		}
 		const model = createProviderModel(provider, { apiKey }, modelId);
@@ -328,22 +328,20 @@ function resolveConfigAnnotationTarget(configLlm: ConfigLlm | null): { provider:
 export async function resolveDefaultModelSelection(
 	projectId: string,
 	category: BackgroundModelCategory,
-	userId?: string,
 ): Promise<LlmSelectedModel | null> {
 	const configured = selectBackgroundModel(await projectQueries.getDefaultModelSettings(projectId), category);
 	if (!configured) {
 		return null;
 	}
-	return resolvePinnedModel(projectId, configured, userId);
+	return resolvePinnedModel(projectId, configured);
 }
 
 /** A pinned model, substituted with an available one when it has been disabled or removed. */
 export async function resolvePinnedModel(
 	projectId: string,
 	pinned: LlmSelectedModel,
-	userId?: string,
 ): Promise<LlmSelectedModel | null> {
-	return substituteUnavailableModel(await getProjectAvailableModels(projectId, userId), pinned);
+	return substituteUnavailableModel(await getProjectAvailableModels(projectId), pinned);
 }
 
 /**
@@ -351,10 +349,10 @@ export async function resolvePinnedModel(
  * (substituted when it is no longer available), otherwise the first model the picker offers.
  * Returns null when the project has no model at all.
  */
-export async function resolveDefaultChatModel(projectId: string, userId?: string): Promise<LlmSelectedModel | null> {
+export async function resolveDefaultChatModel(projectId: string): Promise<LlmSelectedModel | null> {
 	const [settings, available] = await Promise.all([
 		projectQueries.getDefaultModelSettings(projectId),
-		getProjectAvailableModels(projectId, userId),
+		getProjectAvailableModels(projectId),
 	]);
 	return selectDefaultChatModel(settings, available);
 }
@@ -387,9 +385,8 @@ function substituteUnavailableModel(
 
 export const getProjectAvailableModels = async (
 	projectId: string,
-	userId?: string,
 ): Promise<Array<{ provider: LlmProvider; modelId: string; name: string; baseUrl: string | null }>> => {
-	const sources = await getProjectModelSources(projectId, userId);
+	const sources = await getProjectModelSources(projectId);
 
 	return sources.flatMap(({ provider, enabledModels, customModels, baseUrl }) => {
 		if (enabledModels.length === 0) {
@@ -438,7 +435,7 @@ type ProviderModelSource = {
  * The model list of every provider available to a project, taking each provider from the first
  * source that declares it: the database, then nao_config.yaml, then the environment.
  */
-async function getProjectModelSources(projectId: string, userId?: string): Promise<ProviderModelSource[]> {
+async function getProjectModelSources(projectId: string): Promise<ProviderModelSource[]> {
 	const configs = await projectLlmConfigQueries.getProjectLlmConfigs(projectId);
 	const sources: ProviderModelSource[] = configs.map((config) => ({
 		provider: config.provider as LlmProvider,
@@ -475,15 +472,10 @@ async function getProjectModelSources(projectId: string, userId?: string): Promi
 	const enabledSources = sources.filter(
 		(source) => source.provider !== 'nao' && !isProviderDisabled(source.provider),
 	);
-	if (!enabledSources.some(hasSelectableModel) && userId && isManagedAiEnabled()) {
+	if (!enabledSources.some(hasSelectableModel) && isManagedAiEnabled()) {
 		const project = await projectQueries.getProjectById(projectId);
-		const [claim, summary] = project?.orgId
-			? await Promise.all([
-					creditWalletQueries.getWelcomeGrantClaim(userId),
-					creditWalletQueries.getCreditSummary(project.orgId),
-				])
-			: [null, null];
-		if (summary && (!claim || summary.balanceMicroUsd > 0)) {
+		const summary = project?.orgId ? await creditWalletQueries.getCreditSummary(project.orgId) : null;
+		if (summary && summary.balanceMicroUsd > 0) {
 			enabledSources.push({
 				provider: 'nao',
 				enabledModels: getKnownModelIds('nao'),

@@ -150,6 +150,12 @@ export type NewLlmInference = typeof sqliteSchema.llmInference.$inferInsert;
 export type DBCreditWallet = typeof sqliteSchema.creditWallet.$inferSelect;
 export type NewCreditWallet = typeof sqliteSchema.creditWallet.$inferInsert;
 
+export type DBCreditGrantPolicy = typeof sqliteSchema.creditGrantPolicy.$inferSelect;
+export type NewCreditGrantPolicy = typeof sqliteSchema.creditGrantPolicy.$inferInsert;
+
+export type DBCreditGrantCandidate = typeof sqliteSchema.creditGrantCandidate.$inferSelect;
+export type NewCreditGrantCandidate = typeof sqliteSchema.creditGrantCandidate.$inferInsert;
+
 export type DBCreditLedger = typeof sqliteSchema.creditLedger.$inferSelect;
 export type NewCreditLedger = typeof sqliteSchema.creditLedger.$inferInsert;
 

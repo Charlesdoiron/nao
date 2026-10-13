@@ -73,7 +73,9 @@ import {
 import { LLM_INFERENCE_TYPES, type ModelSettingsMap } from '../types/llm';
 import { LOG_LEVELS, LOG_SOURCES } from '../types/log';
 import {
+	CREDIT_GRANT_TYPES,
 	CREDIT_LEDGER_ENTRY_TYPES,
+	type CreditGrantType,
 	type CreditLedgerEntryType,
 	MANAGED_AI_USAGE_CATEGORIES,
 	MANAGED_AI_USAGE_COST_SOURCES,
@@ -1526,6 +1528,45 @@ export const creditWallet = sqliteTable(
 			.notNull(),
 	},
 	(t) => [uniqueIndex('credit_wallet_orgId_idx').on(t.orgId)],
+);
+
+export const creditGrantPolicy = sqliteTable('credit_grant_policy', {
+	grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES }).$type<CreditGrantType>().primaryKey(),
+	amountMicroUsd: integer('amount_micro_usd').notNull(),
+	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
+
+export const creditGrantCandidate = sqliteTable(
+	'credit_grant_candidate',
+	{
+		id: text('id')
+			.$defaultFn(() => crypto.randomUUID())
+			.primaryKey(),
+		grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES })
+			.$type<CreditGrantType>()
+			.notNull()
+			.references(() => creditGrantPolicy.grantType),
+		orgId: text('org_id').references(() => organization.id, { onDelete: 'set null' }),
+		userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+		projectId: text('project_id').references(() => project.id, { onDelete: 'set null' }),
+		sourceKey: text('source_key').notNull().unique(),
+		activatedAt: integer('activated_at', { mode: 'timestamp_ms' }),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+	},
+	(t) => [
+		index('credit_grant_candidate_orgId_grantType_idx').on(t.orgId, t.grantType),
+		index('credit_grant_candidate_userId_grantType_idx').on(t.userId, t.grantType),
+		index('credit_grant_candidate_projectId_grantType_idx').on(t.projectId, t.grantType),
+	],
 );
 
 export const managedAiUsage = sqliteTable(

@@ -26,6 +26,7 @@ import * as telegramConfigQueries from '../queries/project-telegram-config.queri
 import * as whatsappConfigQueries from '../queries/project-whatsapp-config.queries';
 import * as projectWhatsappLinkQueries from '../queries/project-whatsapp-link.queries';
 import * as userQueries from '../queries/user.queries';
+import { reconcileOrganizationSetupGrant } from '../services/credit-grant.service';
 import {
 	type DefaultModelsOverview,
 	getDefaultModelsOverview,
@@ -231,7 +232,7 @@ export const projectRoutes = {
 			if (!ctx.project) {
 				return [];
 			}
-			return getProjectAvailableModels(ctx.project.id, ctx.user.id);
+			return getProjectAvailableModels(ctx.project.id);
 		}),
 
 	upsertLlmConfig: adminProtectedProcedure
@@ -1042,7 +1043,7 @@ export const projectRoutes = {
 			};
 		}
 		const [overview, integrations, mcpEndpoint] = await Promise.all([
-			getDefaultModelsOverview(ctx.project.id, ctx.user.id),
+			getDefaultModelsOverview(ctx.project.id),
 			listIntegrationModels(ctx.project.id),
 			mcpEndpointQueries.getMcpEndpointSettings(ctx.project.id),
 		]);
@@ -1059,7 +1060,7 @@ export const projectRoutes = {
 		if (!ctx.project) {
 			return null;
 		}
-		return resolveDefaultChatModel(ctx.project.id, ctx.user.id);
+		return resolveDefaultChatModel(ctx.project.id);
 	}),
 
 	updateDefaultModels: adminProtectedProcedure
@@ -1196,6 +1197,7 @@ export const projectRoutes = {
 		.input(z.object({ envVars: z.record(z.string(), z.string()) }))
 		.mutation(async ({ ctx, input }) => {
 			await projectQueries.updateEnvVars(ctx.project.id, input.envVars);
+			await reconcileOrganizationSetupGrant(ctx.project.id);
 			void mcpService.refreshProjectConfig(ctx.project.id);
 		}),
 

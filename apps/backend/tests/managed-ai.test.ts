@@ -20,14 +20,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { type ManagedAiUsageContext, withManagedAiUsageMetering } from '../src/agents/managed-ai';
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
-import { getCreditSummary, getWelcomeGrantClaim, listCreditLedger } from '../src/queries/credit-wallet.queries';
+import { getCreditGrant, getCreditSummary, listCreditLedger } from '../src/queries/credit-wallet.queries';
 import { listManagedAiUsage } from '../src/queries/managed-ai-usage.queries';
 import { listProjectChats } from '../src/queries/project.queries';
 import * as creditWalletService from '../src/services/credit-wallet.service';
-import { ManagedCreditsExhaustedError, WelcomeGrantConfirmationRequiredError } from '../src/utils/error';
+import { ManagedCreditsExhaustedError } from '../src/utils/error';
 
-const { claimWelcomeGrant, recordManagedAiUsageAndChargeWallet, reserveManagedAiCredits, WELCOME_GRANT_MICRO_USD } =
-	creditWalletService;
+const { issueCreditGrant, recordManagedAiUsageAndChargeWallet, reserveManagedAiCredits } = creditWalletService;
 
 vi.mock('../src/db/db', async () => {
 	const { default: Database } = await import('better-sqlite3');
@@ -63,16 +62,22 @@ const PROJECT_ID = 'managed-project';
 const CHAT_ID = 'managed-chat';
 const HYBRID_CHAT_ID = 'hybrid-cost-chat';
 const MESSAGE_ID = 'managed-message';
+const ORGANIZATION_SETUP_GRANT_MICRO_USD = 20_000_000;
+const USER_JOIN_GRANT_MICRO_USD = 5_000_000;
 
-const CLAIM_WELCOME_GRANT_SCRIPT = `
+const ISSUE_USER_JOIN_GRANT_SCRIPT = `
 import { once } from 'node:events';
 import { db } from './src/db/db.ts';
-import { claimWelcomeGrant } from './src/services/credit-wallet.service.ts';
+import { issueCreditGrant } from './src/services/credit-wallet.service.ts';
 
 db.$client.run('PRAGMA busy_timeout = 5000');
 process.stdout.write('claim-ready\\n');
 await once(process.stdin, 'data');
-await claimWelcomeGrant(process.env.CLAIM_ORG_ID!, process.env.CLAIM_USER_ID!);
+await issueCreditGrant({
+	grantType: 'user_join',
+	orgId: process.env.CLAIM_ORG_ID!,
+	userId: process.env.CLAIM_USER_ID!,
+});
 db.$client.close();
 `;
 
@@ -83,6 +88,10 @@ const usage: LanguageModelV3Usage = {
 
 describe('managed AI usage and organization credits', () => {
 	beforeAll(async () => {
+		await db.insert(s.creditGrantPolicy).values([
+			{ grantType: 'organization_setup', amountMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD },
+			{ grantType: 'user_join', amountMicroUsd: USER_JOIN_GRANT_MICRO_USD },
+		]);
 		await db.insert(s.user).values([
 			{ id: MANAGED_USER_ID, name: 'Managed User', email: 'managed@example.com' },
 			{ id: BYOK_USER_ID, name: 'BYOK User', email: 'byok@example.com' },
@@ -109,6 +118,7 @@ describe('managed AI usage and organization credits', () => {
 			{ id: CHAT_ID, projectId: PROJECT_ID, userId: MANAGED_USER_ID },
 			{ id: HYBRID_CHAT_ID, projectId: PROJECT_ID, userId: MANAGED_USER_ID },
 		]);
+		await issueCreditGrant({ grantType: 'organization_setup', orgId: ORG_ID, projectId: PROJECT_ID });
 		const exhaustedWalletId = 'exhausted-wallet';
 		await db.insert(s.creditWallet).values({
 			id: exhaustedWalletId,
@@ -118,9 +128,9 @@ describe('managed AI usage and organization credits', () => {
 		await db.insert(s.creditLedger).values({
 			walletId: exhaustedWalletId,
 			entryType: 'gift',
-			deltaMicroUsd: WELCOME_GRANT_MICRO_USD,
-			balanceAfterMicroUsd: WELCOME_GRANT_MICRO_USD,
-			idempotencyKey: `welcome-user:v1:${EXHAUSTED_USER_ID}`,
+			deltaMicroUsd: USER_JOIN_GRANT_MICRO_USD,
+			balanceAfterMicroUsd: USER_JOIN_GRANT_MICRO_USD,
+			idempotencyKey: `user-join:v0:${EXHAUSTED_USER_ID}`,
 		});
 	});
 
@@ -132,57 +142,50 @@ describe('managed AI usage and organization credits', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('requires confirmation before an unclaimed user can call a managed model', async () => {
-		const providerCall = vi.fn(async () => generateResult());
-		const model = withManagedAiUsageMetering(createModel(providerCall), 'nao', 'gpt-5.6-luna', {
-			userId: UNCLAIMED_USER_ID,
-			orgId: ORG_ID,
-			category: 'chat',
-		});
-
-		await expect(model.doGenerate({} as LanguageModelV3CallOptions)).rejects.toBeInstanceOf(
-			WelcomeGrantConfirmationRequiredError,
-		);
-		expect(providerCall).not.toHaveBeenCalled();
-		expect(await getWelcomeGrantClaim(UNCLAIMED_USER_ID)).toBeNull();
-	});
-
-	it('creates the welcome gift exactly once', async () => {
-		await claimWelcomeGrant(ORG_ID, MANAGED_USER_ID);
-		await claimWelcomeGrant(ORG_ID, MANAGED_USER_ID);
+	it('creates the database-configured organization setup gift exactly once', async () => {
+		await issueCreditGrant({ grantType: 'organization_setup', orgId: ORG_ID, projectId: PROJECT_ID });
+		await issueCreditGrant({ grantType: 'organization_setup', orgId: ORG_ID, projectId: PROJECT_ID });
 
 		const summary = await getCreditSummary(ORG_ID);
 		const entries = await db
 			.select()
 			.from(s.creditLedger)
-			.where(eq(s.creditLedger.idempotencyKey, `welcome-user:v1:${MANAGED_USER_ID}`));
+			.where(eq(s.creditLedger.idempotencyKey, `organization-setup:v0:${ORG_ID}`));
 		expect(summary).toEqual({
-			balanceMicroUsd: WELCOME_GRANT_MICRO_USD,
-			lifetimeCreditedMicroUsd: WELCOME_GRANT_MICRO_USD,
+			balanceMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD,
+			lifetimeCreditedMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD,
 			lifetimeDebitedMicroUsd: 0,
 		});
 		expect(entries).toHaveLength(1);
-		expect(entries[0]?.metadata).toMatchObject({ grantedForUserId: MANAGED_USER_ID });
-		expect((await listCreditLedger(ORG_ID, { limit: 100 })).groups[0]?.grantedForUserName).toBe('Managed User');
+		expect(entries[0]?.metadata).toMatchObject({
+			grantType: 'organization_setup',
+			amountMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD,
+			projectId: PROJECT_ID,
+		});
 	});
 
-	it('pools one grant per user into the organization they first use', async () => {
-		await claimWelcomeGrant(POOL_ORG_ID, SECOND_USER_ID);
-		await claimWelcomeGrant(POOL_ORG_ID, BYOK_USER_ID);
-		await claimWelcomeGrant(POOL_ORG_ID, MANAGED_USER_ID);
-		const secondOrgForSecondUser = await claimWelcomeGrant(ORG_ID, SECOND_USER_ID);
+	it('issues one user join gift globally and keeps it in the first organization', async () => {
+		expect(await issueCreditGrant({ grantType: 'user_join', orgId: POOL_ORG_ID, userId: SECOND_USER_ID })).toBe(
+			true,
+		);
+		expect(await issueCreditGrant({ grantType: 'user_join', orgId: POOL_ORG_ID, userId: SECOND_USER_ID })).toBe(
+			false,
+		);
+		expect(await issueCreditGrant({ grantType: 'user_join', orgId: ORG_ID, userId: SECOND_USER_ID })).toBe(false);
 
-		expect((await getCreditSummary(POOL_ORG_ID)).balanceMicroUsd).toBe(2 * WELCOME_GRANT_MICRO_USD);
-		expect(secondOrgForSecondUser.balanceMicroUsd).toBe(WELCOME_GRANT_MICRO_USD);
+		expect((await getCreditSummary(POOL_ORG_ID)).balanceMicroUsd).toBe(USER_JOIN_GRANT_MICRO_USD);
+		expect((await getCreditSummary(ORG_ID)).balanceMicroUsd).toBe(ORGANIZATION_SETUP_GRANT_MICRO_USD);
+		expect(await getCreditGrant('user_join', SECOND_USER_ID)).toEqual({ orgId: POOL_ORG_ID });
+		expect((await listCreditLedger(POOL_ORG_ID, { limit: 100 })).groups[0]?.grantedForUserName).toBe('Second User');
 		expect((await listCreditLedger(ORG_ID, { limit: 100 })).groups).toHaveLength(1);
 	});
 
-	it('keeps one winning organization when two claims race', async () => {
+	it('keeps one winning organization when two user join gifts race', async () => {
 		const databasePath = path.join(os.tmpdir(), `nao-welcome-grant-race-${crypto.randomUUID()}.sqlite`);
 		await (db.$client as unknown as InstanceType<typeof Database>).backup(databasePath);
 		const claims = [
-			startWelcomeGrantClaim(databasePath, RACE_ORG_A_ID),
-			startWelcomeGrantClaim(databasePath, RACE_ORG_B_ID),
+			startUserJoinGrant(databasePath, RACE_ORG_A_ID),
+			startUserJoinGrant(databasePath, RACE_ORG_B_ID),
 		];
 
 		try {
@@ -201,7 +204,7 @@ describe('managed AI usage and organization credits', () => {
 						inner join credit_wallet on credit_wallet.id = credit_ledger.wallet_id
 						where credit_ledger.idempotency_key = ?`,
 					)
-					.all(`welcome-user:v1:${RACE_USER_ID}`) as { orgId: string }[];
+					.all(`user-join:v0:${RACE_USER_ID}`) as { orgId: string }[];
 				const { total } = raceDatabase
 					.prepare(
 						`select coalesce(sum(balance_micro_usd), 0) as total
@@ -212,7 +215,7 @@ describe('managed AI usage and organization credits', () => {
 
 				expect(winningClaims).toHaveLength(1);
 				expect([RACE_ORG_A_ID, RACE_ORG_B_ID]).toContain(winningClaims[0]?.orgId);
-				expect(total).toBe(WELCOME_GRANT_MICRO_USD);
+				expect(total).toBe(USER_JOIN_GRANT_MICRO_USD);
 			} finally {
 				raceDatabase.close();
 			}
@@ -227,7 +230,7 @@ describe('managed AI usage and organization credits', () => {
 		}
 	});
 
-	it('allows members whose grant was claimed elsewhere to use a funded shared wallet', async () => {
+	it('allows members whose join gift funded another organization to use a shared wallet', async () => {
 		const providerCall = vi.fn(async () => generateResult());
 		const model = withManagedAiUsageMetering(createModel(providerCall), 'nao', 'gpt-5.6-luna', {
 			userId: SECOND_USER_ID,
@@ -239,7 +242,7 @@ describe('managed AI usage and organization credits', () => {
 		await model.doGenerate({} as LanguageModelV3CallOptions);
 
 		expect(providerCall).toHaveBeenCalledOnce();
-		expect(await getWelcomeGrantClaim(SECOND_USER_ID)).toEqual({ orgId: POOL_ORG_ID });
+		expect(await getCreditGrant('user_join', SECOND_USER_ID)).toEqual({ orgId: POOL_ORG_ID });
 	});
 
 	it('rejects managed usage without a billed organization before calling the provider', async () => {
@@ -530,7 +533,7 @@ describe('managed AI usage and organization credits', () => {
 	});
 });
 
-function startWelcomeGrantClaim(
+function startUserJoinGrant(
 	databasePath: string,
 	orgId: string,
 ): {
@@ -538,7 +541,7 @@ function startWelcomeGrantClaim(
 	ready: Promise<void>;
 	completed: Promise<void>;
 } {
-	const child = spawn('bun', ['--eval', CLAIM_WELCOME_GRANT_SCRIPT], {
+	const child = spawn('bun', ['--eval', ISSUE_USER_JOIN_GRANT_SCRIPT], {
 		cwd: path.resolve(import.meta.dirname, '..'),
 		env: {
 			...process.env,
@@ -558,7 +561,7 @@ function startWelcomeGrantClaim(
 		ready: waitForOutput(child, 'claim-ready'),
 		completed: once(child, 'exit').then(([exitCode]) => {
 			if (exitCode !== 0) {
-				throw new Error(`Welcome grant claim exited with code ${String(exitCode)}: ${stderr}`);
+				throw new Error(`User join grant exited with code ${String(exitCode)}: ${stderr}`);
 			}
 		}),
 	};

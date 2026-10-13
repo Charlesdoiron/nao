@@ -57,17 +57,24 @@ export function CreditsWalletContent({ canViewReplay }: { canViewReplay: boolean
 								<tbody>
 									{ledger.data?.groups.map((group) => {
 										const entry = summarizeLedgerGroup(group);
+										const grantType = getGrantType(group);
 										return (
 											<tr key={group.id} className='border-t border-border'>
 												<td className='py-2'>{formatDate(group.createdAt)}</td>
 												<td className='py-2'>
-													{ledgerLabel(entry.entryType, entry.deltaMicroUsd, group)}
-													{entry.entryType === 'gift' && (
-														<span className='ml-2 text-muted-foreground'>
-															{' '}
-															{group.grantedForUserName ?? 'Former user'}
-														</span>
+													{ledgerLabel(
+														entry.entryType,
+														entry.deltaMicroUsd,
+														grantType,
+														group,
 													)}
+													{entry.entryType === 'gift' &&
+														grantType !== 'organization_setup' && (
+															<span className='ml-2 text-muted-foreground'>
+																{' '}
+																{group.grantedForUserName ?? 'Former user'}
+															</span>
+														)}
 													{entry.entryType === 'usage' && (
 														<span className='ml-2 text-muted-foreground'>
 															{' '}
@@ -303,12 +310,28 @@ function PageControls({
 	);
 }
 
-function ledgerLabel(entryType: string, deltaMicroUsd: number, group: CreditLedgerGroup): string {
+function ledgerLabel(
+	entryType: string,
+	deltaMicroUsd: number,
+	grantType: string | null,
+	group: CreditLedgerGroup,
+): string {
 	return entryType === 'gift'
-		? `${formatGiftUsd(deltaMicroUsd)} nao gift`
+		? `${formatGiftUsd(deltaMicroUsd)} ${
+				grantType === 'organization_setup'
+					? 'project setup grant'
+					: grantType === 'user_join'
+						? 'member join grant'
+						: 'nao gift'
+			}`
 		: entryType === 'usage'
 			? `nao AI - ${group.usageUserName ?? 'Former user'}`
 			: entryType;
+}
+
+function getGrantType(group: CreditLedgerGroup): string | null {
+	const grantType = group.entries.find((entry) => entry.metadata?.grantType)?.metadata?.grantType;
+	return typeof grantType === 'string' ? grantType : null;
 }
 
 function formatGiftUsd(microUsd: number): string {

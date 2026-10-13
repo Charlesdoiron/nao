@@ -48,10 +48,10 @@ export interface IntegrationModel {
 type AvailableModel = Awaited<ReturnType<typeof getProjectAvailableModels>>[number];
 
 /** Loads the settings and the model catalog once and derives every default from them. */
-export async function getDefaultModelsOverview(projectId: string, userId?: string): Promise<DefaultModelsOverview> {
+export async function getDefaultModelsOverview(projectId: string): Promise<DefaultModelsOverview> {
 	const [settings, availableModels] = await Promise.all([
 		projectQueries.getDefaultModelSettings(projectId),
-		getProjectAvailableModels(projectId, userId),
+		getProjectAvailableModels(projectId),
 	]);
 	const chat = selectDefaultChatModel(settings, availableModels);
 	const named = (selection: LlmSelectedModel): ResolvedDefaultModel => ({
@@ -65,7 +65,7 @@ export async function getDefaultModelsOverview(projectId: string, userId?: strin
 		chatModel: chat ? named(chat) : null,
 		builtInDefaults: {
 			chat: availableModels.length > 0 ? named(availableModels[0]) : null,
-			categories: chat ? await resolveBuiltInTaskModels(projectId, chat, named, userId) : {},
+			categories: chat ? await resolveBuiltInTaskModels(projectId, chat, named) : {},
 		},
 	};
 }
@@ -80,9 +80,8 @@ async function resolveBuiltInTaskModels(
 	projectId: string,
 	chat: LlmSelectedModel,
 	named: (selection: LlmSelectedModel) => ResolvedDefaultModel,
-	userId?: string,
 ): Promise<BuiltInDefaultModels['categories']> {
-	const taskProvider = await llmConfigQueries.getProjectModelProvider(projectId, userId);
+	const taskProvider = await llmConfigQueries.getProjectModelProvider(projectId);
 	const annotationModel = async (fallbackModelId: string): Promise<LlmSelectedModel> => ({
 		provider: chat.provider,
 		modelId: await resolveAnnotationModelId(projectId, chat, fallbackModelId),

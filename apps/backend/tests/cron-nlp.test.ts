@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { naturalLanguageToCron } from '../src/services/cron-nlp';
 import { sanitizeCron } from '../src/utils/cron';
-import { ManagedCreditsExhaustedError, WelcomeGrantConfirmationRequiredError } from '../src/utils/error';
+import { ManagedCreditsExhaustedError } from '../src/utils/error';
 
 const mocks = vi.hoisted(() => ({
 	generateText: vi.fn(),
@@ -40,10 +40,8 @@ describe('naturalLanguageToCron', () => {
 		});
 	});
 
-	it.each([
-		['managed credits exhausted', new ManagedCreditsExhaustedError()],
-		['welcome grant confirmation required', new WelcomeGrantConfirmationRequiredError()],
-	])('rethrows %s errors', async (_name, error) => {
+	it('rethrows managed credit exhaustion', async () => {
+		const error = new ManagedCreditsExhaustedError();
 		mocks.generateText.mockRejectedValue(error);
 
 		await expect(naturalLanguageToCron('project-1', 'user-1', 'every hour')).rejects.toBe(error);

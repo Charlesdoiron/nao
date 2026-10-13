@@ -416,8 +416,8 @@ async function proposeWithModel(
 }
 
 async function resolveModel(projectId: string, userId?: string): Promise<ResolvedModel | null> {
-	const pinned = await resolveDefaultModelSelection(projectId, 'other', userId);
-	const provider = pinned?.provider ?? (await llmConfigQueries.getProjectModelProvider(projectId, userId));
+	const pinned = await resolveDefaultModelSelection(projectId, 'other');
+	const provider = pinned?.provider ?? (await llmConfigQueries.getProjectModelProvider(projectId));
 	if (!provider) {
 		return null;
 	}

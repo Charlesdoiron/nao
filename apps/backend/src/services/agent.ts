@@ -269,17 +269,13 @@ export class AgentService {
 	private _agents = new Map<string, AgentManager>();
 
 	async assertBudget(projectId: string, modelSelection?: LlmSelectedModel, userId?: string): Promise<void> {
-		const resolved = await this._getResolvedLlmSelectedModel(projectId, modelSelection, userId);
+		const resolved = await this._getResolvedLlmSelectedModel(projectId, modelSelection);
 		await assertBudgetNotExceeded(projectId, resolved.provider, userId);
 	}
 
 	/** Resolves the concrete model a run will use (project default when none is configured). */
-	async resolveModelSelection(
-		projectId: string,
-		modelSelection?: LlmSelectedModel,
-		userId?: string,
-	): Promise<LlmSelectedModel> {
-		return this._getResolvedLlmSelectedModel(projectId, modelSelection, userId);
+	async resolveModelSelection(projectId: string, modelSelection?: LlmSelectedModel): Promise<LlmSelectedModel> {
+		return this._getResolvedLlmSelectedModel(projectId, modelSelection);
 	}
 
 	async create(
@@ -330,11 +326,7 @@ export class AgentService {
 			await assertProjectCloudBillingAccess(chat.projectId);
 		}
 		this._disposeAgent(chat.id);
-		const resolvedLlmSelectedModel = await this._getResolvedLlmSelectedModel(
-			chat.projectId,
-			modelSelection,
-			chat.userId,
-		);
+		const resolvedLlmSelectedModel = await this._getResolvedLlmSelectedModel(chat.projectId, modelSelection);
 		if (!options.isBudgetChecked) {
 			await assertBudgetNotExceeded(chat.projectId, resolvedLlmSelectedModel.provider, chat.userId);
 		}
@@ -388,13 +380,12 @@ export class AgentService {
 	protected async _getResolvedLlmSelectedModel(
 		projectId: string,
 		modelSelection?: LlmSelectedModel,
-		userId?: string,
 	): Promise<LlmSelectedModel> {
 		if (modelSelection) {
 			return modelSelection;
 		}
 
-		const defaultModel = await resolveDefaultChatModel(projectId, userId);
+		const defaultModel = await resolveDefaultChatModel(projectId);
 		if (defaultModel) {
 			return defaultModel;
 		}
@@ -863,7 +854,7 @@ class AgentManager {
 	}
 
 	private async _generateTitle(userMessageText: string): Promise<void> {
-		const pinned = await resolveDefaultModelSelection(this.chat.projectId, 'title', this.chat.userId);
+		const pinned = await resolveDefaultModelSelection(this.chat.projectId, 'title');
 		const provider = pinned?.provider ?? this._modelSelection.provider;
 		const summaryModelId =
 			pinned?.modelId ??

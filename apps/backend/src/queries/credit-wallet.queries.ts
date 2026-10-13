@@ -2,18 +2,24 @@ import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
+import type { CreditGrantType } from '../types/managed-ai-usage';
 import * as userQueries from './user.queries';
 
 export type CreditLedgerCursor = { createdAt: Date; id: string };
 
-export async function getWelcomeGrantClaim(userId: string): Promise<{ orgId: string | null } | null> {
-	const [claim] = await db
+export async function getCreditGrant(
+	grantType: CreditGrantType,
+	subjectId: string,
+): Promise<{ orgId: string | null } | null> {
+	const idempotencyKey =
+		grantType === 'organization_setup' ? `organization-setup:v0:${subjectId}` : `user-join:v0:${subjectId}`;
+	const [grant] = await db
 		.select({ orgId: s.creditWallet.orgId })
 		.from(s.creditLedger)
 		.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
-		.where(eq(s.creditLedger.idempotencyKey, `welcome-user:v1:${userId}`))
+		.where(eq(s.creditLedger.idempotencyKey, idempotencyKey))
 		.limit(1);
-	return claim ?? null;
+	return grant ?? null;
 }
 
 export async function getCreditSummary(orgId: string): Promise<{

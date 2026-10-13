@@ -79,7 +79,7 @@ export class TestAgentService extends AgentService {
 			return { data: null, sql: null, error: 'The agent did not run any SQL query.' };
 		}
 
-		const resolvedSelectedModel = await this._getResolvedLlmSelectedModel(projectId, modelSelection, userId);
+		const resolvedSelectedModel = await this._getResolvedLlmSelectedModel(projectId, modelSelection);
 		const modelConfig = await this._getModelConfig(projectId, resolvedSelectedModel, {
 			userId,
 			projectId,

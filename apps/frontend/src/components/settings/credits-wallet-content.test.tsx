@@ -63,6 +63,22 @@ describe('CreditsWalletContent', () => {
 							deltaMicroUsd: 5_000_000,
 							balanceAfterMicroUsd: 5_000_000,
 							transactionSequence: 1,
+							metadata: { grantType: 'user_join' },
+						},
+					],
+				},
+				{
+					id: 'setup-gift',
+					createdAt: new Date(),
+					grantedForUserName: null,
+					usageUserName: null,
+					entries: [
+						{
+							entryType: 'gift',
+							deltaMicroUsd: 20_000_000,
+							balanceAfterMicroUsd: 25_000_000,
+							transactionSequence: 2,
+							metadata: { grantType: 'organization_setup' },
 						},
 					],
 				},
@@ -121,7 +137,13 @@ describe('CreditsWalletContent', () => {
 		expect(screen.getByRole('link', { name: 'Open chat replay' })).toBeTruthy();
 		expect(
 			await screen.findByText(
-				(_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$5 nao gift Managed User',
+				(_, element) =>
+					element?.tagName === 'TD' && element.textContent?.trim() === '$5 member join grant Managed User',
+			),
+		).toBeTruthy();
+		expect(
+			await screen.findByText(
+				(_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$20 project setup grant',
 			),
 		).toBeTruthy();
 		expect(

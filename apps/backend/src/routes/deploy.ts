@@ -10,6 +10,7 @@ import { env } from '../env';
 import { ensureContextRecommendationsScheduleForNewProject } from '../handlers/context-recommendations.handler';
 import * as projectQueries from '../queries/project.queries';
 import { validateApiKey } from '../services/api-key.service';
+import { recordOrganizationSetupCandidate } from '../services/credit-grant.service';
 
 export const deployRoutes = async (app: App) => {
 	app.post('/deploy', async (request, reply) => {
@@ -86,6 +87,7 @@ export const deployRoutes = async (app: App) => {
 				await ensureContextRecommendationsScheduleForNewProject(projectId);
 			}
 
+			await recordOrganizationSetupCandidate(projectId);
 			return reply.send({ projectId, projectName, status });
 		} finally {
 			fs.rmSync(tmpDir, { recursive: true, force: true });

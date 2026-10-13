@@ -1,3 +1,34 @@
+CREATE TABLE `credit_grant_policy` (
+	`grant_type` text PRIMARY KEY NOT NULL,
+	`amount_micro_usd` integer NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO `credit_grant_policy` (`grant_type`, `amount_micro_usd`) VALUES
+	('organization_setup', 20000000),
+	('user_join', 5000000);
+--> statement-breakpoint
+CREATE TABLE `credit_grant_candidate` (
+	`id` text PRIMARY KEY NOT NULL,
+	`grant_type` text NOT NULL,
+	`org_id` text,
+	`user_id` text,
+	`project_id` text,
+	`source_key` text NOT NULL,
+	`activated_at` integer,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`grant_type`) REFERENCES `credit_grant_policy`(`grant_type`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`org_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`project_id`) REFERENCES `project`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `credit_grant_candidate_source_key_unique` ON `credit_grant_candidate` (`source_key`);--> statement-breakpoint
+CREATE INDEX `credit_grant_candidate_orgId_grantType_idx` ON `credit_grant_candidate` (`org_id`,`grant_type`);--> statement-breakpoint
+CREATE INDEX `credit_grant_candidate_userId_grantType_idx` ON `credit_grant_candidate` (`user_id`,`grant_type`);--> statement-breakpoint
+CREATE INDEX `credit_grant_candidate_projectId_grantType_idx` ON `credit_grant_candidate` (`project_id`,`grant_type`);--> statement-breakpoint
 CREATE TABLE `managed_ai_usage` (
 	`id` text PRIMARY KEY NOT NULL,
 	`operation_id` text NOT NULL,

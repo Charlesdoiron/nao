@@ -3,18 +3,36 @@ import { and, eq, gte, sql } from 'drizzle-orm';
 import s, { type DBCreditWallet, type DBManagedAiUsage, type NewManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
 import dbConfig, { Dialect } from '../db/dbConfig';
+import type { CreditGrantType } from '../types/managed-ai-usage';
 import { ManagedCreditsExhaustedError } from '../utils/error';
 
-export const WELCOME_GRANT_MICRO_USD = 5_000_000;
-
-/**
- * Every user brings one welcome grant to the organization they first use managed AI in.
- * The ledger key is per user, so later organizations and repeated calls add nothing.
- */
-export async function claimWelcomeGrant(orgId: string, userId: string): Promise<DBCreditWallet> {
+export async function issueCreditGrant({
+	grantType,
+	orgId,
+	userId,
+	projectId,
+}: {
+	grantType: CreditGrantType;
+	orgId: string;
+	userId?: string;
+	projectId?: string;
+}): Promise<boolean> {
+	const idempotencyKey = creditGrantIdempotencyKey(grantType, orgId, userId);
 	if (dbConfig.dialect === Dialect.Sqlite) {
 		return db.transaction(
 			(transaction) => {
+				const policy = transaction
+					.select()
+					.from(s.creditGrantPolicy)
+					.where(eq(s.creditGrantPolicy.grantType, grantType))
+					.get();
+				if (!policy) {
+					throw new Error(`Credit grant policy ${grantType} is not configured.`);
+				}
+				if (!policy.enabled) {
+					return false;
+				}
+				validateGrantAmount(policy.amountMicroUsd, grantType);
 				transaction.insert(s.creditWallet).values({ orgId }).onConflictDoNothing().run();
 				const wallet = transaction.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, orgId)).get();
 				if (!wallet) {
@@ -22,17 +40,19 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 				}
 				const entry = transaction
 					.insert(s.creditLedger)
-					.values(welcomeGrantEntry(wallet, userId))
+					.values(
+						creditGrantEntry(wallet, grantType, policy.amountMicroUsd, idempotencyKey, userId, projectId),
+					)
 					.onConflictDoNothing()
 					.returning()
 					.get();
 				if (!entry) {
-					return wallet;
+					return false;
 				}
 				const updated = transaction
 					.update(s.creditWallet)
 					.set({
-						balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${WELCOME_GRANT_MICRO_USD}`,
+						balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${policy.amountMicroUsd}`,
 						ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 						updatedAt: new Date(),
 					})
@@ -50,13 +70,25 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 					})
 					.where(eq(s.creditLedger.id, entry.id))
 					.run();
-				return updated;
+				return true;
 			},
 			{ behavior: 'immediate' },
 		);
 	}
 
 	return db.transaction(async (transaction) => {
+		const [policy] = await transaction
+			.select()
+			.from(s.creditGrantPolicy)
+			.where(eq(s.creditGrantPolicy.grantType, grantType))
+			.limit(1);
+		if (!policy) {
+			throw new Error(`Credit grant policy ${grantType} is not configured.`);
+		}
+		if (!policy.enabled) {
+			return false;
+		}
+		validateGrantAmount(policy.amountMicroUsd, grantType);
 		await transaction.insert(s.creditWallet).values({ orgId }).onConflictDoNothing().execute();
 		const [wallet] = await transaction
 			.select()
@@ -69,18 +101,18 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 
 		const [entry] = await transaction
 			.insert(s.creditLedger)
-			.values(welcomeGrantEntry(wallet, userId))
+			.values(creditGrantEntry(wallet, grantType, policy.amountMicroUsd, idempotencyKey, userId, projectId))
 			.onConflictDoNothing()
 			.returning()
 			.execute();
 		if (!entry) {
-			return wallet;
+			return false;
 		}
 
 		const [updated] = await transaction
 			.update(s.creditWallet)
 			.set({
-				balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${WELCOME_GRANT_MICRO_USD}`,
+				balanceMicroUsd: sql`${s.creditWallet.balanceMicroUsd} + ${policy.amountMicroUsd}`,
 				ledgerSequence: sql`${s.creditWallet.ledgerSequence} + 1`,
 				updatedAt: new Date(),
 			})
@@ -98,7 +130,7 @@ export async function claimWelcomeGrant(orgId: string, userId: string): Promise<
 			})
 			.where(eq(s.creditLedger.id, entry.id))
 			.execute();
-		return updated;
+		return true;
 	});
 }
 
@@ -302,15 +334,44 @@ export async function recordManagedAiUsageAndChargeWallet(
 	});
 }
 
-function welcomeGrantEntry(wallet: DBCreditWallet, userId: string) {
+function creditGrantIdempotencyKey(grantType: CreditGrantType, orgId: string, userId?: string): string {
+	if (grantType === 'organization_setup') {
+		return `organization-setup:v0:${orgId}`;
+	}
+	if (!userId) {
+		throw new Error('User join credit grant requires a user.');
+	}
+	return `user-join:v0:${userId}`;
+}
+
+function validateGrantAmount(amountMicroUsd: number, grantType: CreditGrantType): void {
+	if (!Number.isSafeInteger(amountMicroUsd) || amountMicroUsd <= 0) {
+		throw new Error(`Credit grant policy ${grantType} must have a positive integer amount.`);
+	}
+}
+
+function creditGrantEntry(
+	wallet: DBCreditWallet,
+	grantType: CreditGrantType,
+	amountMicroUsd: number,
+	idempotencyKey: string,
+	userId?: string,
+	projectId?: string,
+) {
 	return {
 		walletId: wallet.id,
 		entryType: 'gift' as const,
-		deltaMicroUsd: WELCOME_GRANT_MICRO_USD,
-		balanceAfterMicroUsd: wallet.balanceMicroUsd + WELCOME_GRANT_MICRO_USD,
+		deltaMicroUsd: amountMicroUsd,
+		balanceAfterMicroUsd: wallet.balanceMicroUsd + amountMicroUsd,
 		transactionSequence: 0,
-		idempotencyKey: `welcome-user:v1:${userId}`,
-		metadata: { source: 'nao', campaign: 'v1-welcome-user', grantedForUserId: userId },
+		idempotencyKey,
+		metadata: {
+			source: 'nao',
+			grantType,
+			amountMicroUsd,
+			...(userId && { grantedForUserId: userId }),
+			...(projectId && { projectId }),
+		},
 	};
 }
 

@@ -11,11 +11,10 @@ import * as managedAiUsageQueries from '../queries/managed-ai-usage.queries';
 import * as orgQueries from '../queries/organization.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
-import * as creditWalletService from '../services/credit-wallet.service';
 import { emailService } from '../services/email';
 import { buildResetPasswordEmail } from '../utils/email-builders';
 import { regexPassword } from '../utils/utils';
-import { adminProtectedProcedure, canSendProcedure, projectProtectedProcedure, protectedProcedure } from './trpc';
+import { adminProtectedProcedure, projectProtectedProcedure, protectedProcedure } from './trpc';
 
 const creditLedgerPaginationInput = z
 	.object({
@@ -44,26 +43,7 @@ const walletAdminProcedure = walletProcedure.use(async ({ ctx, next }) => {
 });
 
 export const accountRoutes = {
-	getManagedCreditStatus: projectProtectedProcedure.query(({ ctx }) =>
-		getManagedCreditStatus(ctx.project, ctx.user.id),
-	),
-	claimWelcomeGrant: canSendProcedure.mutation(async ({ ctx }) => {
-		if (!isManagedAiEnabled()) {
-			throw new TRPCError({ code: 'BAD_REQUEST', message: 'nao-managed AI is not enabled.' });
-		}
-		if (!ctx.project.orgId) {
-			throw new TRPCError({ code: 'BAD_REQUEST', message: 'The selected project has no organization.' });
-		}
-		await creditWalletService.claimWelcomeGrant(ctx.project.orgId, ctx.user.id);
-		const status = await getManagedCreditStatus(ctx.project, ctx.user.id);
-		if (status.welcomeGrantStatus !== 'claimed_here') {
-			throw new TRPCError({
-				code: 'CONFLICT',
-				message: 'Your welcome credit was already assigned to another organization.',
-			});
-		}
-		return status;
-	}),
+	getManagedCreditStatus: projectProtectedProcedure.query(({ ctx }) => getManagedCreditStatus(ctx.project)),
 	getCreditSummary: walletProcedure.query(async ({ ctx }) => {
 		const summary = ctx.membership
 			? await creditWalletQueries.getCreditSummary(ctx.membership.orgId)
@@ -157,13 +137,11 @@ export const accountRoutes = {
 		}),
 };
 
-async function getManagedCreditStatus(project: Pick<DBProject, 'orgId'>, userId: string) {
-	const claim = await creditWalletQueries.getWelcomeGrantClaim(userId);
+async function getManagedCreditStatus(project: Pick<DBProject, 'orgId'>) {
 	if (!project.orgId) {
 		return {
 			enabled: isManagedAiEnabled(),
 			organization: null,
-			welcomeGrantStatus: claim ? ('claimed_elsewhere' as const) : ('unclaimed' as const),
 			balanceMicroUsd: 0,
 		};
 	}
@@ -174,11 +152,6 @@ async function getManagedCreditStatus(project: Pick<DBProject, 'orgId'>, userId:
 	return {
 		enabled: isManagedAiEnabled(),
 		organization: organization ? { id: organization.id, name: organization.name } : null,
-		welcomeGrantStatus: !claim
-			? ('unclaimed' as const)
-			: claim.orgId === project.orgId
-				? ('claimed_here' as const)
-				: ('claimed_elsewhere' as const),
 		balanceMicroUsd: summary.balanceMicroUsd,
 	};
 }

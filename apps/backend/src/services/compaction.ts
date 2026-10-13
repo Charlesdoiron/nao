@@ -183,7 +183,7 @@ export class CompactionService {
 		selectedModelId: string,
 		runId?: string,
 	): Promise<ResolvedCompactionLLM | undefined> {
-		const pinned = await resolveDefaultModelSelection(chat.projectId, 'compaction', chat.userId);
+		const pinned = await resolveDefaultModelSelection(chat.projectId, 'compaction');
 		const effectiveProvider = pinned?.provider ?? provider;
 		const modelId =
 			pinned?.modelId ??

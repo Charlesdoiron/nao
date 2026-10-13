@@ -61,7 +61,7 @@ class MemoryService {
 			return;
 		}
 
-		const pinned = await resolveDefaultModelSelection(opts.projectId, 'other', opts.userId);
+		const pinned = await resolveDefaultModelSelection(opts.projectId, 'other');
 		const provider = pinned?.provider ?? opts.provider;
 		const modelId =
 			pinned?.modelId ?? (await this._getExtractorModelId(opts.projectId, opts.provider, opts.modelId));

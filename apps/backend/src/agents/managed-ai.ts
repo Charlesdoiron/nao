@@ -8,12 +8,10 @@ import type { LlmProvider } from '@nao/shared/types';
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai';
 
 import { env } from '../env';
-import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
 import type { ModelCosts } from '../types/llm';
 import type { ManagedAiUsageCategory, ManagedAiUsageStatus } from '../types/managed-ai-usage';
-import { WelcomeGrantConfirmationRequiredError } from '../utils/error';
 import { getProviderMeta } from './providers';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
@@ -200,10 +198,6 @@ async function prepareCall(
 	}
 	if (!rates) {
 		throw new Error('Managed model has no configured token pricing.');
-	}
-	const claim = await creditWalletQueries.getWelcomeGrantClaim(context.userId);
-	if (!claim) {
-		throw new WelcomeGrantConfirmationRequiredError();
 	}
 	await creditWalletService.reserveManagedAiCredits(
 		context.orgId,

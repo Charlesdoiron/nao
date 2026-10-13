@@ -33,7 +33,7 @@ export async function resolveSubagentModel(context: ToolContext, requestedModelI
 }
 
 async function resolveSelection(context: ToolContext, requestedModelId?: string): Promise<LlmSelectedModel> {
-	const available = await getProjectAvailableModels(context.projectId, context.userId);
+	const available = await getProjectAvailableModels(context.projectId);
 
 	if (requestedModelId) {
 		return findRequestedModel(available, requestedModelId);

@@ -28,3 +28,6 @@ export const CREDIT_LEDGER_ENTRY_TYPES = [
 	'adjustment',
 ] as const;
 export type CreditLedgerEntryType = (typeof CREDIT_LEDGER_ENTRY_TYPES)[number];
+
+export const CREDIT_GRANT_TYPES = ['organization_setup', 'user_join'] as const;
+export type CreditGrantType = (typeof CREDIT_GRANT_TYPES)[number];

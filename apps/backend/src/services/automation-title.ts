@@ -45,11 +45,9 @@ async function resolveModelForProject(
 	userId: string,
 	modelSelection?: LlmSelectedModel,
 ): Promise<{ provider: LlmProvider; model: ProviderModelResult } | null> {
-	const pinned = modelSelection ? null : await resolveDefaultModelSelection(projectId, 'title', userId);
+	const pinned = modelSelection ? null : await resolveDefaultModelSelection(projectId, 'title');
 	const provider =
-		modelSelection?.provider ??
-		pinned?.provider ??
-		(await llmConfigQueries.getProjectModelProvider(projectId, userId));
+		modelSelection?.provider ?? pinned?.provider ?? (await llmConfigQueries.getProjectModelProvider(projectId));
 	if (!provider) {
 		return null;
 	}

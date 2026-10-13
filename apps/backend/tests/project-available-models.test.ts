@@ -10,7 +10,6 @@ import { getProjectAvailableModels, resolveProviderModel } from '../src/utils/ll
 const mocks = vi.hoisted(() => ({
 	getProjectById: vi.fn(),
 	getProjectLlmConfigs: vi.fn(),
-	getWelcomeGrantClaim: vi.fn(),
 	getCreditSummary: vi.fn(),
 }));
 
@@ -24,7 +23,6 @@ vi.mock('../src/queries/project-llm-config.queries', () => ({
 }));
 
 vi.mock('../src/queries/credit-wallet.queries', () => ({
-	getWelcomeGrantClaim: mocks.getWelcomeGrantClaim,
 	getCreditSummary: mocks.getCreditSummary,
 }));
 
@@ -49,7 +47,6 @@ describe('getProjectAvailableModels', () => {
 		__reloadEnvForTesting();
 		vi.clearAllMocks();
 		mocks.getProjectLlmConfigs.mockResolvedValue([]);
-		mocks.getWelcomeGrantClaim.mockResolvedValue(null);
 		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
 	});
 
@@ -64,14 +61,14 @@ describe('getProjectAvailableModels', () => {
 	it('lists the curated nao models only when the project has no other provider', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
 
-		const managed = await getProjectAvailableModels('project-1', 'user-1');
+		const managed = await getProjectAvailableModels('project-1');
 		expect(managed.map(({ provider, modelId }) => ({ provider, modelId }))).toEqual([
 			{ provider: 'nao', modelId: 'gpt-5.6-luna' },
 			{ provider: 'nao', modelId: 'gpt-5.6-terra' },
 			{ provider: 'nao', modelId: 'gpt-5.6-sol' },
 		]);
-		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('user-1');
 		expect(mocks.getCreditSummary).toHaveBeenCalledWith('org-1');
 		await expect(
 			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
@@ -94,7 +91,7 @@ describe('getProjectAvailableModels', () => {
 				baseUrl: null,
 			},
 		]);
-		const byok = await getProjectAvailableModels('project-1', 'user-1');
+		const byok = await getProjectAvailableModels('project-1');
 		expect(byok).toHaveLength(1);
 		expect(byok[0]).toMatchObject({ provider: 'openai', modelId: 'gpt-5-mini' });
 		await expect(
@@ -105,13 +102,12 @@ describe('getProjectAvailableModels', () => {
 		).resolves.toBeNull();
 	});
 
-	it('hides managed models when the grant was claimed elsewhere and the project wallet is exhausted', async () => {
+	it('hides managed models when the project wallet is exhausted', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getWelcomeGrantClaim.mockResolvedValue({ orgId: 'org-2' });
 		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
 
-		const models = await getProjectAvailableModels('project-1', 'user-1');
+		const models = await getProjectAvailableModels('project-1');
 
 		expect(models.some(({ provider }) => provider === 'nao')).toBe(false);
 	});
@@ -120,8 +116,9 @@ describe('getProjectAvailableModels', () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		process.env.OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:8000/v1';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
 
-		const models = await getProjectAvailableModels('project-1', 'user-1');
+		const models = await getProjectAvailableModels('project-1');
 
 		expect(models.some(({ provider }) => provider === 'nao')).toBe(true);
 		await expect(
@@ -138,7 +135,7 @@ describe('getProjectAvailableModels', () => {
 		__reloadEnvForTesting();
 		mocks.getProjectById.mockResolvedValue(null);
 
-		const models = await getProjectAvailableModels('project-1', 'user-1');
+		const models = await getProjectAvailableModels('project-1');
 		expect(models.some(({ provider }) => provider === 'nao')).toBe(false);
 		await expect(
 			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
@@ -146,7 +143,6 @@ describe('getProjectAvailableModels', () => {
 				category: 'chat',
 			}),
 		).resolves.toBeNull();
-		expect(mocks.getWelcomeGrantClaim).not.toHaveBeenCalled();
 	});
 
 	it('lists models from every named openai-compatible endpoint in nao_config.yaml', async () => {
