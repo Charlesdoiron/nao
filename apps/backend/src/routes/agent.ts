@@ -48,6 +48,7 @@ export const agentRoutes = async (app: App) => {
 			userId: user.id,
 			projectId,
 			...body,
+			billingAccessVerifiedProjectId: projectId,
 			adminMode: body.adminMode && canChatWithNaoData,
 		});
 		stopAgent = result.stop;

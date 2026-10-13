@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as EnvModule from '../src/env';
 
 const mocks = vi.hoisted(() => ({
+	assertOrganizationCloudBillingAccess: vi.fn(),
 	assertProjectCloudBillingAccess: vi.fn(),
 	getFirstProjectAdminUserId: vi.fn(),
 	getLatestRun: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('../src/queries/project.queries', () => ({
 vi.mock('../src/queries/user.queries', () => ({}));
 vi.mock('../src/services/agent', () => ({ agentService: { get: vi.fn() } }));
 vi.mock('../src/services/cloud-billing-access.service', () => ({
+	assertOrganizationCloudBillingAccess: mocks.assertOrganizationCloudBillingAccess,
 	assertProjectCloudBillingAccess: mocks.assertProjectCloudBillingAccess,
 }));
 vi.mock('../src/services/context-pr.service', () => ({
@@ -71,14 +73,14 @@ describe('context recommendation routes', () => {
 		mocks.getFirstProjectAdminUserId.mockResolvedValue('execution-user-id');
 		mocks.getLatestRun.mockResolvedValue(null);
 		mocks.getProjectAvailableModels.mockResolvedValue([]);
-		mocks.getProjectByUserId.mockResolvedValue({ id: 'project-id' });
+		mocks.getProjectByUserId.mockResolvedValue({ id: 'project-id', orgId: 'org-id' });
 		mocks.getUserRoleInProject.mockResolvedValue('admin');
 		mocks.getWelcomeGrantClaim.mockResolvedValue(null);
 	});
 
-	it('does not report a manual run as started when billing access is restricted', async () => {
+	it('blocks protected mutations through the shared cloud billing gate', async () => {
 		const accessError = new TRPCError({ code: 'FORBIDDEN', message: 'Cloud billing access is restricted' });
-		mocks.assertProjectCloudBillingAccess.mockRejectedValue(accessError);
+		mocks.assertOrganizationCloudBillingAccess.mockRejectedValue(accessError);
 
 		await expect(caller().contextRecommendation.run()).rejects.toMatchObject({
 			code: 'FORBIDDEN',
@@ -97,6 +99,18 @@ describe('context recommendation routes', () => {
 
 		expect(mocks.getWelcomeGrantClaim).toHaveBeenCalledWith('execution-user-id');
 		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id', undefined);
+	});
+
+	it('keeps reads available when billing access is restricted', async () => {
+		const latestRun = { id: 'run-id', status: 'completed' };
+		mocks.getLatestRun.mockResolvedValue(latestRun);
+		mocks.assertOrganizationCloudBillingAccess.mockRejectedValue(
+			new TRPCError({ code: 'FORBIDDEN', message: 'Cloud billing access is restricted' }),
+		);
+
+		await expect(caller().contextRecommendation.latestRun()).resolves.toEqual(latestRun);
+
+		expect(mocks.assertOrganizationCloudBillingAccess).not.toHaveBeenCalled();
 	});
 });
 

@@ -1,4 +1,4 @@
-import { type BackgroundModelCategory, selectBackgroundModel } from '@nao/shared';
+import { type BackgroundModelCategory, type DefaultModelSettings, selectBackgroundModel } from '@nao/shared';
 import { type LlmProvider, type LlmSelectedModel, providerKind } from '@nao/shared/types';
 
 import { isManagedAiEnabled, type ManagedAiUsageContext, withManagedAiUsageMetering } from '../agents/managed-ai';
@@ -334,15 +334,53 @@ export async function resolveDefaultModelSelection(
 	if (!configured) {
 		return null;
 	}
+	return resolvePinnedModel(projectId, configured, userId);
+}
 
-	const available = await getProjectAvailableModels(projectId, userId);
+/** A pinned model, substituted with an available one when it has been disabled or removed. */
+export async function resolvePinnedModel(
+	projectId: string,
+	pinned: LlmSelectedModel,
+	userId?: string,
+): Promise<LlmSelectedModel | null> {
+	return substituteUnavailableModel(await getProjectAvailableModels(projectId, userId), pinned);
+}
+
+/**
+ * The model a run uses when nothing selects one explicitly: the chat default an admin pinned
+ * (substituted when it is no longer available), otherwise the first model the picker offers.
+ * Returns null when the project has no model at all.
+ */
+export async function resolveDefaultChatModel(projectId: string, userId?: string): Promise<LlmSelectedModel | null> {
+	const [settings, available] = await Promise.all([
+		projectQueries.getDefaultModelSettings(projectId),
+		getProjectAvailableModels(projectId, userId),
+	]);
+	return selectDefaultChatModel(settings, available);
+}
+
+/** `resolveDefaultChatModel` over settings and a catalog the caller already loaded. */
+export function selectDefaultChatModel(
+	settings: DefaultModelSettings | null,
+	available: Array<{ provider: LlmProvider; modelId: string }>,
+): LlmSelectedModel | null {
+	if (settings?.chat) {
+		return substituteUnavailableModel(available, settings.chat);
+	}
+	const first = available.at(0);
+	return first ? { provider: first.provider, modelId: first.modelId } : null;
+}
+
+function substituteUnavailableModel(
+	available: Array<{ provider: LlmProvider; modelId: string }>,
+	configured: LlmSelectedModel,
+): LlmSelectedModel | null {
 	if (available.length === 0) {
 		return null;
 	}
 	if (available.some((m) => m.provider === configured.provider && m.modelId === configured.modelId)) {
 		return configured;
 	}
-
 	const substitute = available.find((m) => m.provider === configured.provider) ?? available[0];
 	return { provider: substitute.provider, modelId: substitute.modelId };
 }
@@ -376,6 +414,17 @@ export const getProjectDeclaredModels = async (
 ): Promise<Array<{ provider: LlmProvider; models: CustomModelMetadata[] }>> => {
 	const sources = await getProjectModelSources(projectId);
 	return sources.map(({ provider, customModels }) => ({ provider, models: customModels }));
+};
+
+/** Names models the way the project lists them, falling back to nao's catalogue then the raw model id. */
+export const getProjectModelNameResolver = async (
+	projectId: string,
+): Promise<(provider: LlmProvider, modelId: string) => string> => {
+	const declaredModels = await getProjectDeclaredModels(projectId);
+	return (provider, modelId) => {
+		const declared = declaredModels.find((d) => d.provider === provider)?.models.find((m) => m.id === modelId);
+		return declared?.displayName?.trim() || getModelName(provider, modelId);
+	};
 };
 
 type ProviderModelSource = {

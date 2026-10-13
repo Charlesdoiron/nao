@@ -6,6 +6,7 @@ import type { UsageChartData } from '@/components/settings/usage-chart-card';
 import type { displayChart } from '@nao/shared/tools';
 import type { UsageRecord } from '@nao/backend/usage';
 import { ChatsReplayPage } from '@/components/settings/chats-replay-page';
+import { ChatsReplaySearchBar } from '@/components/settings/chats-replay-search-bar';
 import { CreditsWalletContent } from '@/components/settings/credits-wallet-content';
 import { UsageChartCard } from '@/components/settings/usage-chart-card';
 import { ReplayFilters, UsageFilters } from '@/components/settings/usage-filters';
@@ -21,7 +22,7 @@ import { useIsCloud } from '@/hooks/use-nao-mode';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useUsagePeriodSettings } from '@/hooks/use-usage-period-settings';
 import { trpc } from '@/main';
-import { requireUsageOrWalletAccess } from '@/lib/require-admin';
+import { requireUsageOrWalletAccess } from '@/lib/route-guards';
 import { buildUserUsageChart } from '@/lib/usage-by-user';
 import { formatUsageBucketLabel } from '@/lib/usage-date';
 
@@ -176,7 +177,7 @@ function UsageOverview({
 	onOpenChatReplay: (chatId: string) => void;
 	canViewUsage: boolean;
 }) {
-	const { provider, users, feedback, tools, sources, splitByUser, tokenView } = usageSearch;
+	const { provider, users, feedback, tools, sources, search, splitByUser, tokenView } = usageSearch;
 	const periodState = useUsagePeriodSettings({ canViewUsage, usageSearch, onUpdateSearch });
 	const { period, granularity } = periodState;
 
@@ -261,9 +262,9 @@ function UsageOverview({
 	);
 
 	return (
-		<div className='flex min-h-0 flex-1 overflow-auto bg-background'>
-			<div className='flex w-full flex-col'>
-				<div className='flex w-full flex-col gap-2 px-4 md:p-8'>
+		<div className='flex min-h-0 flex-1 overflow-auto bg-background xl:overflow-hidden'>
+			<div className='flex min-h-0 w-full flex-col xl:h-full'>
+				<div className='flex w-full flex-col gap-2 px-4 md:p-8 xl:shrink-0'>
 					{filtersComponent}
 
 					{canViewUsage && (
@@ -342,18 +343,25 @@ function UsageOverview({
 						</div>
 					)}
 				</div>
-				<section className='flex h-[60vh] min-h-[500px] w-full shrink-0 flex-col overflow-hidden'>
+				<section className='flex min-h-[400px] w-full flex-1 flex-col overflow-hidden xl:min-h-0'>
 					<div className='flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2 md:px-8'>
 						<h2 className='text-sm font-semibold'>Chats replay</h2>
-						<ReplayFilters
-							chatFacets={chatFacets.data?.facets}
-							selectedFeedbackStates={feedback}
-							onSelectedFeedbackStatesChange={(value) => onUpdateSearch({ feedback: value })}
-							selectedToolStates={tools}
-							onSelectedToolStatesChange={(value) => onUpdateSearch({ tools: value })}
-						/>
+						<div className='flex flex-wrap items-center gap-2'>
+							<ChatsReplaySearchBar
+								value={search}
+								onChange={(value) => onUpdateSearch({ search: value })}
+							/>
+							<ReplayFilters
+								chatFacets={chatFacets.data?.facets}
+								selectedFeedbackStates={feedback}
+								onSelectedFeedbackStatesChange={(value) => onUpdateSearch({ feedback: value })}
+								selectedToolStates={tools}
+								onSelectedToolStatesChange={(value) => onUpdateSearch({ tools: value })}
+							/>
+						</div>
 					</div>
 					<ChatsReplayPage
+						search={search}
 						selectedUserNames={users}
 						selectedFeedbackStates={feedback}
 						selectedToolStates={tools}

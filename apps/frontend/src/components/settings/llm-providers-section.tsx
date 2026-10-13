@@ -1,19 +1,25 @@
+import { useEffect, useRef } from 'react';
 import { PROVIDER_META } from '@nao/backend/provider-meta';
 import { providerLabel, providerLabels } from '@nao/shared/types';
 import { useQuery } from '@tanstack/react-query';
 import { ProviderCard } from './llm-provider-card';
 import { LlmProviderForm } from './llm-provider-form';
+import type { LlmProvider } from '@nao/shared/types';
 import { useLlmProviders } from '@/hooks/use-llm-providers';
 import { usePermissions } from '@/hooks/use-permissions';
 import { trpc } from '@/main';
 
+export type ProviderToEdit = { provider: LlmProvider; modelId?: string };
+
 interface LlmProvidersSectionProps {
 	isAdmin: boolean;
+	providerToEdit?: ProviderToEdit;
+	onProviderToEditOpened?: () => void;
 }
 
 const managedModelIds = PROVIDER_META.nao.models.map((model) => model.id);
 
-export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
+export function LlmProvidersSection({ isAdmin, providerToEdit, onProviderToEditOpened }: LlmProvidersSectionProps) {
 	const { isOrgAdmin } = usePermissions();
 	const managedCreditSummary = useQuery(trpc.account.getCreditSummary.queryOptions());
 	const {
@@ -26,6 +32,7 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 		unconfiguredEnvProviders,
 		unconfiguredConfigProviders,
 		currentModels,
+		isLoaded,
 		editingState,
 		upsertPending,
 		upsertError,
@@ -37,8 +44,20 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 		handleDeleteConfig,
 		handleSelectProvider,
 		handleConfigureEnvProvider,
+		handleEditProvider,
 		getModelDisplayName,
 	} = useLlmProviders();
+	const openedProviderKey = useRef<string>(undefined);
+
+	useEffect(() => {
+		const providerKey = providerToEdit && `${providerToEdit.provider}#${providerToEdit.modelId ?? ''}`;
+		if (!providerToEdit || !isLoaded || !isAdmin || openedProviderKey.current === providerKey) {
+			return;
+		}
+		openedProviderKey.current = providerKey;
+		handleEditProvider(providerToEdit.provider, providerToEdit.modelId);
+		onProviderToEditOpened?.();
+	}, [providerToEdit, isLoaded, isAdmin, handleEditProvider, onProviderToEditOpened]);
 
 	const projectConfigBadges = (config: (typeof projectConfigs)[number]) => {
 		const badges: string[] = [];
@@ -77,6 +96,7 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 							isEditing={true}
 							inheritedKeySource='env'
 							initialValues={editingState.initialValues}
+							initialEditedModelId={editingState.focusedModelId}
 							currentModels={currentModels}
 							onSubmit={handleSubmit}
 							onCancel={handleCancel}
@@ -110,6 +130,7 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 							isEditing={true}
 							inheritedKeySource='config'
 							initialValues={editingState.initialValues}
+							initialEditedModelId={editingState.focusedModelId}
 							currentModels={currentModels}
 							onSubmit={handleSubmit}
 							onCancel={handleCancel}
@@ -146,6 +167,7 @@ export function LlmProvidersSection({ isAdmin }: LlmProvidersSectionProps) {
 							isEditing={true}
 							inheritedKeySource={editingState.inheritedKeySource}
 							initialValues={editingState.initialValues}
+							initialEditedModelId={editingState.focusedModelId}
 							currentModels={currentModels}
 							onSubmit={handleSubmit}
 							onCancel={handleCancel}

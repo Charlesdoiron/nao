@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { requireUsageOrWalletAccess } from './require-admin';
+import { requireUsageOrWalletAccess } from './route-guards';
 
 const mocks = vi.hoisted(() => ({
 	ensureQueryData: vi.fn(),

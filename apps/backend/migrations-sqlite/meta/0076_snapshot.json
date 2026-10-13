@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1c310867-2b4c-472a-a18f-833f1eb011be",
+  "id": "a9a803fa-3cce-475c-ab29-788748623193",
   "prevId": "27016aac-059a-4915-a775-2a9acd091f11",
   "tables": {
     "account": {
@@ -363,414 +363,6 @@
           "tableTo": "shared_chat",
           "columnsFrom": [
             "shared_chat_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "managed_ai_usage": {
-      "name": "managed_ai_usage",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "operation_id": {
-          "name": "operation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "run_id": {
-          "name": "run_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "wallet_id": {
-          "name": "wallet_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "org_id": {
-          "name": "org_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "chat_message_id": {
-          "name": "chat_message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "category": {
-          "name": "category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "llm_provider": {
-          "name": "llm_provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "llm_model_id": {
-          "name": "llm_model_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "is_managed": {
-          "name": "is_managed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "finish_reason": {
-          "name": "finish_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "provider_request_id": {
-          "name": "provider_request_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_total_tokens": {
-          "name": "input_total_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_no_cache_tokens": {
-          "name": "input_no_cache_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "input_cache_read_tokens": {
-          "name": "input_cache_read_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "input_cache_write_tokens": {
-          "name": "input_cache_write_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "output_total_tokens": {
-          "name": "output_total_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "output_text_tokens": {
-          "name": "output_text_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "output_reasoning_tokens": {
-          "name": "output_reasoning_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "total_tokens": {
-          "name": "total_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_no_cache_rate_micro_usd_per_million_tokens": {
-          "name": "input_no_cache_rate_micro_usd_per_million_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_cache_read_rate_micro_usd_per_million_tokens": {
-          "name": "input_cache_read_rate_micro_usd_per_million_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_cache_write_rate_micro_usd_per_million_tokens": {
-          "name": "input_cache_write_rate_micro_usd_per_million_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "output_rate_micro_usd_per_million_tokens": {
-          "name": "output_rate_micro_usd_per_million_tokens",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_no_cache_cost_micro_usd": {
-          "name": "input_no_cache_cost_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_cache_read_cost_micro_usd": {
-          "name": "input_cache_read_cost_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "input_cache_write_cost_micro_usd": {
-          "name": "input_cache_write_cost_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "output_cost_micro_usd": {
-          "name": "output_cost_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "upstream_cost_micro_usd": {
-          "name": "upstream_cost_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "customer_charge_micro_usd": {
-          "name": "customer_charge_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "cost_source": {
-          "name": "cost_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        }
-      },
-      "indexes": {
-        "managed_ai_usage_operation_id_unique": {
-          "name": "managed_ai_usage_operation_id_unique",
-          "columns": [
-            "operation_id"
-          ],
-          "isUnique": true
-        },
-        "managed_ai_usage_orgId_startedAt_idx": {
-          "name": "managed_ai_usage_orgId_startedAt_idx",
-          "columns": [
-            "org_id",
-            "started_at",
-            "id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_userId_startedAt_idx": {
-          "name": "managed_ai_usage_userId_startedAt_idx",
-          "columns": [
-            "user_id",
-            "started_at",
-            "id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_userId_runId_idx": {
-          "name": "managed_ai_usage_userId_runId_idx",
-          "columns": [
-            "user_id",
-            "run_id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_projectId_startedAt_idx": {
-          "name": "managed_ai_usage_projectId_startedAt_idx",
-          "columns": [
-            "project_id",
-            "started_at",
-            "id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_chatId_idx": {
-          "name": "managed_ai_usage_chatId_idx",
-          "columns": [
-            "chat_id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_chatMessageId_idx": {
-          "name": "managed_ai_usage_chatMessageId_idx",
-          "columns": [
-            "chat_message_id"
-          ],
-          "isUnique": false
-        },
-        "managed_ai_usage_status_idx": {
-          "name": "managed_ai_usage_status_idx",
-          "columns": [
-            "status"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "managed_ai_usage_wallet_id_credit_wallet_id_fk": {
-          "name": "managed_ai_usage_wallet_id_credit_wallet_id_fk",
-          "tableFrom": "managed_ai_usage",
-          "tableTo": "credit_wallet",
-          "columnsFrom": [
-            "wallet_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "managed_ai_usage_user_id_user_id_fk": {
-          "name": "managed_ai_usage_user_id_user_id_fk",
-          "tableFrom": "managed_ai_usage",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "managed_ai_usage_org_id_organization_id_fk": {
-          "name": "managed_ai_usage_org_id_organization_id_fk",
-          "tableFrom": "managed_ai_usage",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "org_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "managed_ai_usage_project_id_project_id_fk": {
-          "name": "managed_ai_usage_project_id_project_id_fk",
-          "tableFrom": "managed_ai_usage",
-          "tableTo": "project",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "managed_ai_usage_chat_id_chat_id_fk": {
-          "name": "managed_ai_usage_chat_id_chat_id_fk",
-          "tableFrom": "managed_ai_usage",
-          "tableTo": "chat",
-          "columnsFrom": [
-            "chat_id"
           ],
           "columnsTo": [
             "id"
@@ -1944,6 +1536,14 @@
           ],
           "isUnique": false
         },
+        "chat_message_chatId_createdAt_idx": {
+          "name": "chat_message_chatId_createdAt_idx",
+          "columns": [
+            "chat_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
         "chat_message_createdAt_idx": {
           "name": "chat_message_createdAt_idx",
           "columns": [
@@ -2735,224 +2335,6 @@
           "tableTo": "chat",
           "columnsFrom": [
             "chat_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "credit_ledger": {
-      "name": "credit_ledger",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "wallet_id": {
-          "name": "wallet_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "usage_id": {
-          "name": "usage_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "entry_type": {
-          "name": "entry_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "delta_micro_usd": {
-          "name": "delta_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "balance_after_micro_usd": {
-          "name": "balance_after_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "transaction_sequence": {
-          "name": "transaction_sequence",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "idempotency_key": {
-          "name": "idempotency_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "external_reference": {
-          "name": "external_reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        }
-      },
-      "indexes": {
-        "credit_ledger_usage_id_unique": {
-          "name": "credit_ledger_usage_id_unique",
-          "columns": [
-            "usage_id"
-          ],
-          "isUnique": true
-        },
-        "credit_ledger_idempotency_key_unique": {
-          "name": "credit_ledger_idempotency_key_unique",
-          "columns": [
-            "idempotency_key"
-          ],
-          "isUnique": true
-        },
-        "credit_ledger_walletId_createdAt_idx": {
-          "name": "credit_ledger_walletId_createdAt_idx",
-          "columns": [
-            "wallet_id",
-            "created_at",
-            "id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "credit_ledger_wallet_id_credit_wallet_id_fk": {
-          "name": "credit_ledger_wallet_id_credit_wallet_id_fk",
-          "tableFrom": "credit_ledger",
-          "tableTo": "credit_wallet",
-          "columnsFrom": [
-            "wallet_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "credit_ledger_usage_id_managed_ai_usage_id_fk": {
-          "name": "credit_ledger_usage_id_managed_ai_usage_id_fk",
-          "tableFrom": "credit_ledger",
-          "tableTo": "managed_ai_usage",
-          "columnsFrom": [
-            "usage_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "credit_wallet": {
-      "name": "credit_wallet",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "org_id": {
-          "name": "org_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "balance_micro_usd": {
-          "name": "balance_micro_usd",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "ledger_sequence": {
-          "name": "ledger_sequence",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
-        }
-      },
-      "indexes": {
-        "credit_wallet_orgId_idx": {
-          "name": "credit_wallet_orgId_idx",
-          "columns": [
-            "org_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "credit_wallet_org_id_organization_id_fk": {
-          "name": "credit_wallet_org_id_organization_id_fk",
-          "tableFrom": "credit_wallet",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "org_id"
           ],
           "columnsTo": [
             "id"
@@ -4027,6 +3409,89 @@
           "name": "mcp_user_token_user_id_project_id_server_name_pk"
         }
       },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "member_budget_notification": {
+      "name": "member_budget_notification",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period_start": {
+          "name": "period_start",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "member_budget_notification_project_user_period": {
+          "name": "member_budget_notification_project_user_period",
+          "columns": [
+            "project_id",
+            "user_id",
+            "period_start"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "member_budget_notification_project_id_project_id_fk": {
+          "name": "member_budget_notification_project_id_project_id_fk",
+          "tableFrom": "member_budget_notification",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "member_budget_notification_user_id_user_id_fk": {
+          "name": "member_budget_notification_user_id_user_id_fk",
+          "tableFrom": "member_budget_notification",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -5925,6 +5390,88 @@
         }
       }
     },
+    "project_group_budget": {
+      "name": "project_group_budget",
+      "columns": {
+        "group_id": {
+          "name": "group_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "limit_usd": {
+          "name": "limit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "project_group_budget_projectId_idx": {
+          "name": "project_group_budget_projectId_idx",
+          "columns": [
+            "project_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "project_group_budget_group_id_user_group_id_fk": {
+          "name": "project_group_budget_group_id_user_group_id_fk",
+          "tableFrom": "project_group_budget",
+          "tableTo": "user_group",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "project_group_budget_project_id_project_id_fk": {
+          "name": "project_group_budget_project_id_project_id_fk",
+          "tableFrom": "project_group_budget",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "project_llm_config": {
       "name": "project_llm_config",
       "columns": {
@@ -6128,6 +5675,163 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "project_member_budget": {
+      "name": "project_member_budget",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "limit_usd": {
+          "name": "limit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "project_member_budget_userId_idx": {
+          "name": "project_member_budget_userId_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "project_member_budget_project_id_project_id_fk": {
+          "name": "project_member_budget_project_id_project_id_fk",
+          "tableFrom": "project_member_budget",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "project_member_budget_user_id_user_id_fk": {
+          "name": "project_member_budget_user_id_user_id_fk",
+          "tableFrom": "project_member_budget",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "project_member_budget_project_id_user_id_pk": {
+          "columns": [
+            "project_id",
+            "user_id"
+          ],
+          "name": "project_member_budget_project_id_user_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "project_member_budget_settings": {
+      "name": "project_member_budget_settings",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "period": {
+          "name": "period",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "default_limit_usd": {
+          "name": "default_limit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "project_member_budget_settings_project_id_project_id_fk": {
+          "name": "project_member_budget_settings_project_id_project_id_fk",
+          "tableFrom": "project_member_budget_settings",
+          "tableTo": "project",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "member_budget_period_valid": {
+          "name": "member_budget_period_valid",
+          "value": "period IN ('week', 'month', 'year')"
+        }
+      }
     },
     "project_provider_budget": {
       "name": "project_provider_budget",

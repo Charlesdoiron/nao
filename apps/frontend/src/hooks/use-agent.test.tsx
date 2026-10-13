@@ -52,6 +52,7 @@ vi.mock('@ai-sdk/react', () => ({
 
 vi.mock('@tanstack/react-query', () => ({
 	useMutation: () => ({ mutateAsync: vi.fn() }),
+	useQuery: () => ({ data: mocks.initialModel }),
 	useQueryClient: () => mocks.queryClient,
 }));
 
@@ -124,6 +125,7 @@ vi.mock('@/main', () => ({
 			get: { queryKey: () => ['chat'] },
 		},
 		project: {
+			getDefaultChatModel: { queryOptions: () => ({}) },
 			listAvailableTranscribeModels: { queryKey: () => ['transcribe-models'] },
 		},
 	},
