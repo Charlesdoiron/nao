@@ -32,6 +32,7 @@ export type UsageRouteSearch = {
 	origin: ReplayOrigin | undefined;
 	recoId: string | undefined;
 	recoTab: RecommendationTab | undefined;
+	creditCheckout: string | undefined;
 };
 
 export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
@@ -52,6 +53,7 @@ export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
 	origin: undefined,
 	recoId: undefined,
 	recoTab: undefined,
+	creditCheckout: undefined,
 };
 
 export function getAvailableUsageTabs({
@@ -161,6 +163,10 @@ export function validateUsageSearch(search: Record<string, unknown>): UsageRoute
 		origin: parseOneOf(search.origin, replayOrigins),
 		recoId: typeof search.recoId === 'string' && search.recoId.length > 0 ? search.recoId : undefined,
 		recoTab: parseOneOf(search.recoTab, RECOMMENDATION_TABS),
+		creditCheckout:
+			typeof search.creditCheckout === 'string' && search.creditCheckout.length > 0
+				? search.creditCheckout
+				: undefined,
 	};
 }
 
