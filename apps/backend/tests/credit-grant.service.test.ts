@@ -32,6 +32,7 @@ vi.mock('../src/db/db', async () => {
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { getCreditGrant, getCreditSummary } from '../src/queries/credit-wallet.queries';
+import * as projectQueries from '../src/queries/project.queries';
 import * as userQueries from '../src/queries/user.queries';
 import {
 	activateUserJoinCandidates,
@@ -104,7 +105,7 @@ describe('automatic credit grants', () => {
 		});
 	});
 
-	it('reconciles setup and join grants once per organization during startup', async () => {
+	it('continues past project lookup failures and reconciles once per organization during startup', async () => {
 		const firstProjectPath = createProjectDirectory('deduplicated-first', false);
 		const secondProjectPath = createProjectDirectory('deduplicated-second', false);
 		await insertOrganizationAndProject('deduplicated-org', 'deduplicated-first-project', firstProjectPath, {});
@@ -149,9 +150,27 @@ describe('automatic credit grants', () => {
 			},
 		]);
 		const issueGrant = vi.spyOn(creditWalletService, 'issueCreditGrant');
+		const getProjectById = projectQueries.getProjectById;
+		const candidateProjectIds = new Set(['deduplicated-first-project', 'deduplicated-second-project']);
+		let lookupFailed = false;
+		vi.spyOn(projectQueries, 'getProjectById').mockImplementation(async (projectId) => {
+			if (candidateProjectIds.has(projectId) && !lookupFailed) {
+				lookupFailed = true;
+				throw new Error('transient project lookup failure');
+			}
+			return getProjectById(projectId);
+		});
+		const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
 		await reconcileOrganizationSetupGrants();
 
+		expect(errorLog).toHaveBeenCalledWith('Failed to reconcile organization setup grant', {
+			source: 'system',
+			context: expect.objectContaining({
+				orgId: 'deduplicated-org',
+				projectId: expect.stringMatching(/^deduplicated-(first|second)-project$/),
+			}),
+		});
 		expect(
 			issueGrant.mock.calls.filter(
 				([input]) => input.grantType === 'organization_setup' && input.orgId === 'deduplicated-org',

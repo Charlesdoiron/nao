@@ -119,9 +119,15 @@ async function reconcileOrganizationSetupGrantUnsafe(projectId: string): Promise
 
 async function reconcileOrganizationSetupCandidatesUnsafe(orgId: string, projectIds: string[]): Promise<void> {
 	for (const projectId of projectIds) {
-		const project = await projectQueries.getProjectById(projectId);
-		if (project && assessProjectReadiness(project).ready) {
-			await issueOrganizationSetupCredits(orgId, projectId);
+		let reconciled = false;
+		await runBestEffort('reconcile organization setup grant', { orgId, projectId }, async () => {
+			const project = await projectQueries.getProjectById(projectId);
+			if (project && assessProjectReadiness(project).ready) {
+				await issueOrganizationSetupCredits(orgId, projectId);
+				reconciled = true;
+			}
+		});
+		if (reconciled) {
 			return;
 		}
 	}
