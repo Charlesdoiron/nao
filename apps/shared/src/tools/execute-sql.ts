@@ -24,6 +24,16 @@ export const SaveToSchema = z.object({
 		),
 });
 
+export const ArrayParameterSchema = z.object({
+	name: z
+		.string()
+		.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+		.describe('The BigQuery named parameter without the leading @.'),
+	query_id: QueryIdSchema.describe('The earlier query whose complete result supplies the parameter values.'),
+	column: z.string().min(1).describe('The source result column to bind as the array.'),
+	type: z.enum(['STRING', 'INT64', 'FLOAT64', 'BOOL']).describe('The BigQuery array element type.'),
+});
+
 export const InputSchema = z.object({
 	sql_query: z.string().describe('The SQL query to execute'),
 	database_id: z
@@ -39,6 +49,14 @@ export const InputSchema = z.object({
 	save_to: SaveToSchema.optional().describe(
 		`Only for "${LOCAL_DATABASE_ID}". Also writes the result to a file in permanent storage, for an intermediary result you want to query again later or an export the user can download. The rows still come back as usual.`,
 	),
+	array_parameters: z
+		.array(ArrayParameterSchema)
+		.min(1)
+		.max(10)
+		.optional()
+		.describe(
+			'BigQuery only. Bind complete columns from earlier query results as named array parameters. Reference each parameter in SQL with IN UNNEST(@name), never by copying its values into the SQL text.',
+		),
 });
 
 export const OutputSchema = z.object({

@@ -1120,3 +1120,59 @@ class TestLocation:
 
         assert config._dry_run_bytes("SELECT 1", mock_conn) == 42
         assert mock_conn.client.query.call_args.kwargs["location"] == "us-central1"
+
+
+class TestArrayParameters:
+    def test_execute_sql_binds_array_parameters(self):
+        config = BigQueryConfig(name="test", project_id="my-project", dataset_id="analytics")
+        mock_conn = MagicMock()
+        expected = MagicMock()
+        mock_conn.client.query.return_value.to_dataframe.return_value = expected
+        parameters = [
+            {
+                "name": "users",
+                "type": "STRING",
+                "values": ["a", "b"],
+            }
+        ]
+
+        result = config.execute_sql(
+            "SELECT * FROM users WHERE user_id IN UNNEST(@users)",
+            conn=mock_conn,
+            query_parameters=parameters,
+        )
+
+        assert result is expected
+        mock_conn.raw_sql.assert_not_called()
+        job_config = mock_conn.client.query.call_args.kwargs["job_config"]
+        assert job_config.default_dataset.project == "my-project"
+        assert job_config.default_dataset.dataset_id == "analytics"
+        assert job_config.query_parameters[0].to_api_repr() == {
+            "name": "users",
+            "parameterType": {
+                "type": "ARRAY",
+                "arrayType": {"type": "STRING"},
+            },
+            "parameterValue": {
+                "arrayValues": [{"value": "a"}, {"value": "b"}],
+            },
+        }
+
+    def test_dry_run_binds_array_parameters(self):
+        config = BigQueryConfig(name="test", project_id="my-project")
+        mock_conn = MagicMock()
+        mock_conn.client.query.return_value.total_bytes_processed = 42
+
+        assert (
+            config._dry_run_bytes(
+                "SELECT * FROM users WHERE user_id IN UNNEST(@users)",
+                mock_conn,
+                [{"name": "users", "type": "STRING", "values": ["a", "b"]}],
+            )
+            == 42
+        )
+
+        job_config = mock_conn.client.query.call_args.kwargs["job_config"]
+        assert job_config.dry_run is True
+        assert job_config.use_query_cache is False
+        assert job_config.query_parameters[0].name == "users"

@@ -68,6 +68,16 @@ describe('dialect-aware system prompt', () => {
 		const toolCalls = markdown.slice(markdown.indexOf('## Tool Calls'), markdown.indexOf('## SQL Query Rules'));
 		expect(toolCalls).toContain('use `indexes.md` to see how the table is ordered and indexed');
 	});
+
+	it('instructs BigQuery to read uploaded filters with DuckDB first', () => {
+		const markdown = renderWith([{ type: 'bigquery', database: 'analytics' }]);
+		const toolCalls = markdown.slice(markdown.indexOf('## Tool Calls'), markdown.indexOf('## SQL Query Rules'));
+
+		expect(toolCalls).toContain('first query the file with `execute_sql` using `database_id: duckdb_local`');
+		expect(toolCalls).toContain('Do not copy the file values into a warehouse `IN (...)` clause');
+		expect(toolCalls).toContain('Bind the complete result column with `array_parameters`');
+		expect(toolCalls).toContain('filter with `IN UNNEST(@name)`');
+	});
 });
 
 describe('dialect rules end-to-end from a synced project folder', () => {

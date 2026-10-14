@@ -496,23 +496,40 @@ class BigQueryConfig(DatabaseConfig):
             max_query_size=max_query_size,
         )
 
-    def execute_sql(self, sql: str, conn: BaseBackend | None = None) -> pd.DataFrame:
+    def execute_sql(
+        self,
+        sql: str,
+        conn: BaseBackend | None = None,
+        query_parameters: list[dict[str, Any]] | None = None,
+    ) -> pd.DataFrame:
         owns_connection = conn is None
         if conn is None:
             conn = self.connect()
         try:
             if self.max_query_size and self.max_query_size > 0:
-                self._check_max_query_size(sql, conn)
+                self._check_max_query_size(sql, conn, query_parameters)
+            if query_parameters:
+                query_job = conn.client.query(  # type: ignore[union-attr]
+                    sql,
+                    job_config=self._query_job_config(query_parameters),
+                    location=self.location,
+                )
+                return query_job.to_dataframe(create_bqstorage_client=False)
             cursor = conn.raw_sql(sql)  # type: ignore[union-attr]
             return cursor.to_dataframe(create_bqstorage_client=False)
         finally:
             if owns_connection:
                 conn.disconnect()
 
-    def _check_max_query_size(self, sql: str, conn: BaseBackend) -> None:
+    def _check_max_query_size(
+        self,
+        sql: str,
+        conn: BaseBackend,
+        query_parameters: list[dict[str, Any]] | None = None,
+    ) -> None:
         assert self.max_query_size is not None
         bytes_limit = int(self.max_query_size * 1024**3)
-        estimated_bytes = self._dry_run_bytes(sql, conn)
+        estimated_bytes = self._dry_run_bytes(sql, conn, query_parameters)
         estimated_gb = estimated_bytes / 1024**3
         if estimated_bytes > bytes_limit:
             raise ValueError(
@@ -520,14 +537,30 @@ class BigQueryConfig(DatabaseConfig):
                 f"which exceeds the configured limit of {self.max_query_size:.6f} GB."
             )
 
-    def _dry_run_bytes(self, sql: str, conn: Any) -> int:
-        from google.cloud import bigquery as bq
-
-        job_config = bq.QueryJobConfig(dry_run=True, use_query_cache=False)
-        if self.dataset_id:
-            job_config.default_dataset = f"{self.project_id}.{self.dataset_id}"
+    def _dry_run_bytes(
+        self,
+        sql: str,
+        conn: Any,
+        query_parameters: list[dict[str, Any]] | None = None,
+    ) -> int:
+        job_config = self._query_job_config(query_parameters)
+        job_config.dry_run = True
+        job_config.use_query_cache = False
         query_job = conn.client.query(sql, job_config=job_config, location=self.location)
         return query_job.total_bytes_processed or 0
+
+    def _query_job_config(self, query_parameters: list[dict[str, Any]] | None):
+        from google.cloud import bigquery as bq
+
+        job_config = bq.QueryJobConfig()
+        if self.dataset_id:
+            job_config.default_dataset = f"{self.project_id}.{self.dataset_id}"
+        if query_parameters:
+            job_config.query_parameters = [
+                bq.ArrayQueryParameter(parameter["name"], parameter["type"], parameter["values"])
+                for parameter in query_parameters
+            ]
+        return job_config
 
     def connect(self) -> BaseBackend:
         """Create an Ibis BigQuery connection."""

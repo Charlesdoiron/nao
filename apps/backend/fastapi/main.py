@@ -182,6 +182,7 @@ def _execute_sql_with_guards(
     group_allowed_tables: set[tuple[str, str]] | None,
     row_security_policies: dict[tuple[str, str], RowSecurityPolicy] | None,
     database_folder: str,
+    query_parameters: list[dict[str, object]] | None = None,
 ) -> pd.DataFrame:
     conn = db_config.connect()
     try:
@@ -195,6 +196,12 @@ def _execute_sql_with_guards(
             row_security_policies=row_security_policies,
             database_folder=database_folder,
         )
+        if query_parameters:
+            return db_config.execute_sql(
+                validated_sql,
+                conn=conn,
+                query_parameters=query_parameters,
+            )
         return db_config.execute_sql(validated_sql, conn=conn)
     finally:
         conn.disconnect()
@@ -444,6 +451,20 @@ def _validate_request(
     )
 
 
+def _bigquery_query_parameters(
+    request: ExecuteSQLRequest,
+    db_config: Any,
+) -> list[dict[str, object]] | None:
+    if not request.query_parameters:
+        return None
+    if str(db_config.type).lower() != "bigquery":
+        raise HTTPException(
+            status_code=400,
+            detail="Array query parameters are only supported for BigQuery.",
+        )
+    return [parameter.model_dump() for parameter in request.query_parameters]
+
+
 # =============================================================================
 # API Endpoints
 # =============================================================================
@@ -474,6 +495,7 @@ async def health_check():
 async def execute_sql(request: ExecuteSQLRequest):
     try:
         project_path, db_config, database_folder = _load_database(request)
+        query_parameters = _bigquery_query_parameters(request, db_config)
         group_allowed_tables = _active_group_allowed_tables(request.table_access, db_config, database_folder)
         row_security_policies = _active_row_security_policies(request.row_security, db_config, database_folder)
         try:
@@ -499,6 +521,7 @@ async def execute_sql(request: ExecuteSQLRequest):
                     group_allowed_tables,
                     row_security_policies,
                     database_folder,
+                    query_parameters,
                 )
             else:
                 validated_sql = _validate_request(
@@ -509,7 +532,13 @@ async def execute_sql(request: ExecuteSQLRequest):
                     row_security_policies,
                     database_folder,
                 )
-                df = db_config.execute_sql(validated_sql)
+                if query_parameters:
+                    df = db_config.execute_sql(
+                        validated_sql,
+                        query_parameters=query_parameters,
+                    )
+                else:
+                    df = db_config.execute_sql(validated_sql)
         except (
             AllowListedOnlyGuardError,
             ColumnAccessError,
@@ -540,6 +569,7 @@ async def execute_sql(request: ExecuteSQLRequest):
 async def validate_sql(request: ExecuteSQLRequest):
     try:
         project_path, db_config, database_folder = _load_database(request)
+        _bigquery_query_parameters(request, db_config)
         group_allowed_tables = _active_group_allowed_tables(request.table_access, db_config, database_folder)
         row_security_policies = _active_row_security_policies(request.row_security, db_config, database_folder)
         try:

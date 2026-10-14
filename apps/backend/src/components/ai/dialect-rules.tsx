@@ -61,6 +61,14 @@ export const DIALECT_GUIDANCE: DialectGuidance[] = [
 	{
 		matches: ['bigquery'],
 		label: 'BigQuery dialect',
+		toolRules: [
+			<>
+				When filtering BigQuery data with values from an uploaded file, first query the file with{' '}
+				<Code>execute_sql</Code> using <Code>database_id: duckdb_local</Code>. Do not copy the file values into
+				a warehouse <Code>IN (...)</Code> clause. Bind the complete result column with{' '}
+				<Code>array_parameters</Code> and filter with <Code>IN UNNEST(@name)</Code>.
+			</>,
+		],
 		sqlRules: [
 			<>
 				Use backtick-quoted identifiers (e.g. <Code>project.dataset.table</Code>).

@@ -1104,6 +1104,54 @@ def test_execute_sql_with_cte_duckdb(duckdb_project_folder):
     )
 
 
+def test_execute_sql_forwards_bigquery_array_parameters(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    class FakeBigQueryConfig:
+        type = "bigquery"
+        allow_listed_only = False
+
+        def execute_sql(self, sql: str, query_parameters=None):
+            captured["sql"] = sql
+            captured["query_parameters"] = query_parameters
+            return main.pd.DataFrame([{"user_id": "a"}])
+
+    monkeypatch.setattr(
+        main,
+        "_load_database",
+        lambda _request: (tmp_path, FakeBigQueryConfig(), "database=analytics"),
+    )
+    monkeypatch.setattr(main, "_validate_request", lambda request, *_args: request.sql)
+
+    response = TestClient(app, headers=INTERNAL_HEADERS).post(
+        "/execute_sql",
+        json={
+            "sql": "SELECT * FROM users WHERE user_id IN UNNEST(@users)",
+            "nao_project_folder": str(tmp_path),
+            "table_access": UNENFORCED_TABLE_ACCESS,
+            "query_parameters": [
+                {
+                    "name": "users",
+                    "type": "STRING",
+                    "values": ["a", "b"],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured == {
+        "sql": "SELECT * FROM users WHERE user_id IN UNNEST(@users)",
+        "query_parameters": [
+            {
+                "name": "users",
+                "type": "STRING",
+                "values": ["a", "b"],
+            }
+        ],
+    }
+
+
 # BigQuery tests (requires SSO authentication)
 
 

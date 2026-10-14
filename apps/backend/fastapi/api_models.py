@@ -96,6 +96,20 @@ RowSecurity = Annotated[
 ]
 
 
+class BigQueryArrayParameter(StrictRequestModel):
+    name: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=1,
+            max_length=128,
+            pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
+        ),
+    ]
+    type: Literal["STRING", "INT64", "FLOAT64", "BOOL"]
+    values: list[str | int | float | bool]
+
+
 class ExecuteSQLRequest(StrictRequestModel):
     sql: str
     nao_project_folder: str
@@ -105,6 +119,10 @@ class ExecuteSQLRequest(StrictRequestModel):
     env_vars: dict[str, str] | None = None
     azure_access_token: str | None = None
     enforce_excluded_columns: bool = False
+    query_parameters: list[BigQueryArrayParameter] = Field(
+        default_factory=list,
+        max_length=10_000,
+    )
 
     @field_validator("table_access", mode="before")
     @classmethod

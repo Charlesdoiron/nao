@@ -8,9 +8,16 @@ interface WarehouseSqlOptions {
 	databaseId?: string;
 	envVars?: Record<string, string>;
 	azureAccessToken?: string | null;
+	queryParameters?: WarehouseQueryParameter[];
 	enforceExcludedColumns: boolean;
 	tableAccess: WarehouseTableAccess;
 	rowSecurity: WarehouseRowSecurity;
+}
+
+export interface WarehouseQueryParameter {
+	name: string;
+	type: 'STRING' | 'INT64' | 'FLOAT64' | 'BOOL';
+	values: (string | number | boolean)[];
 }
 
 export interface WarehouseSqlResult {
@@ -86,6 +93,7 @@ async function requestWarehouseSql<T>(
 			...(options.databaseId && { database_id: options.databaseId }),
 			...(options.envVars && Object.keys(options.envVars).length > 0 && { env_vars: options.envVars }),
 			...(options.azureAccessToken && { azure_access_token: options.azureAccessToken }),
+			...(options.queryParameters?.length && { query_parameters: options.queryParameters }),
 		}),
 	});
 

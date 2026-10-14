@@ -50,6 +50,46 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 		expect(updateExecuteSqlPart).not.toHaveBeenCalled();
 	});
 
+	it('binds a complete earlier result as a BigQuery array parameter', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: ['user_id'],
+			data: [{ user_id: 'a' }, { user_id: 'b' }, { user_id: 'a' }, { user_id: null }],
+		});
+
+		await executeQuery(
+			{
+				sql_query: 'SELECT * FROM users WHERE user_id IN UNNEST(@users)',
+				database_id: 'bigquery-prod',
+				array_parameters: [{ name: 'users', query_id: 'query_ab12cd34', column: 'user_id', type: 'STRING' }],
+			},
+			context,
+		);
+
+		const request = vi.mocked(fetch).mock.calls[0]?.[1];
+		const body = JSON.parse(String(request?.body)) as { query_parameters: unknown };
+		expect(body.query_parameters).toEqual([{ name: 'users', type: 'STRING', values: ['a', 'b'] }]);
+	});
+
+	it('rejects an array parameter whose source column does not exist', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', { columns: ['user_id'], data: [{ user_id: 'a' }] });
+
+		await expect(
+			executeQuery(
+				{
+					sql_query: 'SELECT * FROM users WHERE user_id IN UNNEST(@users)',
+					database_id: 'bigquery-prod',
+					array_parameters: [
+						{ name: 'users', query_id: 'query_ab12cd34', column: 'missing', type: 'STRING' },
+					],
+				},
+				context,
+			),
+		).rejects.toThrow('Column "missing" not found in query query_ab12cd34');
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
 	it('refuses to edit a same-turn semantic query as SQL', async () => {
 		const context = createContext();
 		const created = await executeQuery({ sql_query: 'SELECT 1 AS n' }, context, {
