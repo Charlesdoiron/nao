@@ -22,6 +22,27 @@ export async function reconcileOrganizationSetupGrant(projectId: string): Promis
 	);
 }
 
+export async function reconcileOrganizationSetupGrants(): Promise<void> {
+	if (!isCloud) {
+		return;
+	}
+	const candidates = await db
+		.selectDistinct({ projectId: s.creditGrantCandidate.projectId })
+		.from(s.creditGrantCandidate)
+		.where(
+			and(
+				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
+				isNotNull(s.creditGrantCandidate.projectId),
+			),
+		)
+		.execute();
+	for (const { projectId } of candidates) {
+		if (projectId) {
+			await reconcileOrganizationSetupGrant(projectId);
+		}
+	}
+}
+
 export async function recordOrganizationJoinCandidate(orgId: string, userId: string): Promise<void> {
 	await runBestEffort('record organization join candidate', { orgId, userId }, () =>
 		recordUserJoinCandidate({ orgId, userId, sourceKey: `org-member:${orgId}:${userId}` }),

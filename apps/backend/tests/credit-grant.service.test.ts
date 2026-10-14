@@ -36,6 +36,7 @@ import * as userQueries from '../src/queries/user.queries';
 import {
 	activateUserJoinCandidates,
 	reconcileOrganizationSetupGrant,
+	reconcileOrganizationSetupGrants,
 	recordOrganizationJoinCandidate,
 	recordOrganizationSetupCandidate,
 	recordProjectJoinCandidate,
@@ -83,6 +84,23 @@ describe('automatic credit grants', () => {
 			lifetimeDebitedMicroUsd: 0,
 		});
 		expect(await getCreditGrant('organization_setup', 'setup-org')).toEqual({ orgId: 'setup-org' });
+	});
+
+	it('reconciles setup candidates backfilled for existing ready projects', async () => {
+		const projectPath = createProjectDirectory('legacy-setup', false);
+		await insertOrganizationAndProject('legacy-setup-org', 'legacy-setup-project', projectPath, {});
+		await db.insert(s.creditGrantCandidate).values({
+			grantType: 'organization_setup',
+			orgId: 'legacy-setup-org',
+			projectId: 'legacy-setup-project',
+			sourceKey: 'project:legacy-setup-project',
+		});
+
+		await reconcileOrganizationSetupGrants();
+
+		expect(await getCreditGrant('organization_setup', 'legacy-setup-org')).toEqual({
+			orgId: 'legacy-setup-org',
+		});
 	});
 
 	it('reconciles join grants when another project becomes ready in a funded organization', async () => {

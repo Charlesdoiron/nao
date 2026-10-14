@@ -8,6 +8,8 @@ import type { LlmProvider } from '@nao/shared/types';
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai';
 
 import { env } from '../env';
+import * as creditWalletQueries from '../queries/credit-wallet.queries';
+import * as projectQueries from '../queries/project.queries';
 import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
 import type { ModelCosts } from '../types/llm';
@@ -32,6 +34,25 @@ export function isManagedAiEnabled(): boolean {
 		Boolean(process.env.NAO_MANAGED_OPENAI_API_KEY) &&
 		!env.DISABLED_PROVIDERS.includes('nao')
 	);
+}
+
+export function canAffordManagedAiModel(balanceMicroUsd: number, modelId: string): boolean {
+	const model = getProviderMeta('nao').models.find(({ id }) => id === modelId);
+	const rates = model?.costPerM;
+	if (!rates) {
+		return false;
+	}
+	const baselineReservationMicroUsd = calculateCategoryCost(DEFAULT_MAX_OUTPUT_TOKENS, rates.output);
+	return balanceMicroUsd >= baselineReservationMicroUsd;
+}
+
+export async function hasManagedAiCreditsForModel(projectId: string, modelId: string): Promise<boolean> {
+	const project = await projectQueries.getProjectById(projectId);
+	if (!project?.orgId) {
+		return false;
+	}
+	const summary = await creditWalletQueries.getCreditSummary(project.orgId);
+	return canAffordManagedAiModel(summary.balanceMicroUsd, modelId);
 }
 
 export function withManagedAiUsageMetering(

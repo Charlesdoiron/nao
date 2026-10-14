@@ -33,6 +33,24 @@ INSERT OR IGNORE INTO `credit_grant_candidate` (
 	`id`,
 	`grant_type`,
 	`org_id`,
+	`project_id`,
+	`source_key`,
+	`created_at`
+)
+SELECT
+	'legacy-project-setup:' || `project`.`id`,
+	'organization_setup',
+	`project`.`org_id`,
+	`project`.`id`,
+	'project:' || `project`.`id`,
+	`project`.`created_at`
+FROM `project`
+WHERE `project`.`org_id` IS NOT NULL;
+--> statement-breakpoint
+INSERT OR IGNORE INTO `credit_grant_candidate` (
+	`id`,
+	`grant_type`,
+	`org_id`,
 	`user_id`,
 	`source_key`,
 	`activated_at`,

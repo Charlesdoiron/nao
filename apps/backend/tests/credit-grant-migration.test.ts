@@ -13,7 +13,7 @@ describe('managed AI credit migration', () => {
 			CREATE TABLE session (id text PRIMARY KEY, user_id text NOT NULL);
 			CREATE TABLE organization (id text PRIMARY KEY);
 			CREATE TABLE org_member (org_id text NOT NULL, user_id text NOT NULL, created_at integer NOT NULL);
-			CREATE TABLE project (id text PRIMARY KEY, org_id text);
+			CREATE TABLE project (id text PRIMARY KEY, org_id text, created_at integer NOT NULL);
 			CREATE TABLE project_member (project_id text NOT NULL, user_id text NOT NULL, created_at integer NOT NULL);
 		`);
 	});
@@ -27,7 +27,7 @@ describe('managed AI credit migration', () => {
 			INSERT INTO user (id, requires_password_reset) VALUES ('active-user', 0), ('invited-user', 1);
 			INSERT INTO organization (id) VALUES ('org');
 			INSERT INTO org_member (org_id, user_id, created_at) VALUES ('org', 'active-user', 1000);
-			INSERT INTO project (id, org_id) VALUES ('project', 'org');
+			INSERT INTO project (id, org_id, created_at) VALUES ('project', 'org', 1500);
 			INSERT INTO project_member (project_id, user_id, created_at) VALUES ('project', 'invited-user', 2000);
 		`);
 
@@ -46,6 +46,11 @@ describe('managed AI credit migration', () => {
 				source_key: 'org-member:org:active-user',
 				activated_at: expect.any(Number),
 				created_at: 1000,
+			},
+			{
+				source_key: 'project:project',
+				activated_at: null,
+				created_at: 1500,
 			},
 			{
 				source_key: 'project-member:project:invited-user',

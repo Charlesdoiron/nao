@@ -20,7 +20,7 @@ import {
 	UIMessageStreamWriter,
 } from 'ai';
 
-import type { ManagedAiUsageContext } from '../agents/managed-ai';
+import { hasManagedAiCreditsForModel, type ManagedAiUsageContext } from '../agents/managed-ai';
 import { disableModelReasoning, fitThinkingBudget, getProviderMeta, ProviderModelResult } from '../agents/providers';
 import { getSystemPromptOverride, hasNaoPromptPlaceholder, injectNaoPrompt } from '../agents/system-prompts';
 import { llmTelemetry } from '../agents/telemetry';
@@ -58,7 +58,7 @@ import {
 	settleToolParts,
 } from '../utils/ai';
 import { assertBudgetNotExceeded } from '../utils/budget';
-import { HandlerError } from '../utils/error';
+import { HandlerError, ManagedCreditsExhaustedError } from '../utils/error';
 import {
 	getProjectDeclaredModels,
 	resolveAnnotationModelId,
@@ -265,12 +265,19 @@ async function _buildContextBase(opts: {
 	};
 }
 
+async function assertModelBudget(projectId: string, model: LlmSelectedModel, userId?: string): Promise<void> {
+	await assertBudgetNotExceeded(projectId, model.provider, userId);
+	if (model.provider === 'nao' && !(await hasManagedAiCreditsForModel(projectId, model.modelId))) {
+		throw new ManagedCreditsExhaustedError();
+	}
+}
+
 export class AgentService {
 	private _agents = new Map<string, AgentManager>();
 
 	async assertBudget(projectId: string, modelSelection?: LlmSelectedModel, userId?: string): Promise<void> {
 		const resolved = await this._getResolvedLlmSelectedModel(projectId, modelSelection);
-		await assertBudgetNotExceeded(projectId, resolved.provider, userId);
+		await assertModelBudget(projectId, resolved, userId);
 	}
 
 	/** Resolves the concrete model a run will use (project default when none is configured). */
@@ -318,6 +325,8 @@ export class AgentService {
 			billingAccessVerifiedProjectId?: string;
 			/** Attributes model calls made by non-interactive agent runs. */
 			usageCategory?: ManagedAiUsageCategory;
+			/** Omits chat attribution when the run uses a transient, unpersisted chat. */
+			attributeUsageToChat?: boolean;
 			/** Skips the budget check when the caller already ran `assertBudget` for this request. */
 			isBudgetChecked?: boolean;
 		} = {},
@@ -328,12 +337,12 @@ export class AgentService {
 		this._disposeAgent(chat.id);
 		const resolvedLlmSelectedModel = await this._getResolvedLlmSelectedModel(chat.projectId, modelSelection);
 		if (!options.isBudgetChecked) {
-			await assertBudgetNotExceeded(chat.projectId, resolvedLlmSelectedModel.provider, chat.userId);
+			await assertModelBudget(chat.projectId, resolvedLlmSelectedModel, chat.userId);
 		}
 		const usageContext: ManagedAiUsageContext = {
 			userId: chat.userId,
 			projectId: chat.projectId,
-			chatId: chat.id,
+			chatId: options.attributeUsageToChat === false ? undefined : chat.id,
 			runId: crypto.randomUUID(),
 			category: options.usageCategory ?? 'chat',
 		};

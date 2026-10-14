@@ -57,7 +57,10 @@ export class TestAgentService extends AgentService {
 			projectId,
 		};
 
-		const agent = await this.create(tempChat, modelSelection, { usageCategory: 'test' });
+		const agent = await this.create(tempChat, modelSelection, {
+			usageCategory: 'test',
+			attributeUsageToChat: false,
+		});
 		return agent.generate([userMessage], { costs });
 	}
 

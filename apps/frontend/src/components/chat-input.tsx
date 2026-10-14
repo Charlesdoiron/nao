@@ -642,15 +642,16 @@ function ChatInputAdminBadge() {
 function BudgetBanner() {
 	const { error, clearError, selectedModel } = useAgentContext();
 	const { isAdmin } = usePermissions();
-	const prevProviderRef = useRef(selectedModel?.provider);
+	const selectedModelKey = selectedModel ? `${selectedModel.provider}:${selectedModel.modelId}` : undefined;
+	const prevModelKeyRef = useRef(selectedModelKey);
 
 	useEffect(() => {
-		const prev = prevProviderRef.current;
-		prevProviderRef.current = selectedModel?.provider;
-		if (prev && prev !== selectedModel?.provider && (parseBudgetError(error) || parseManagedCreditsError(error))) {
+		const prev = prevModelKeyRef.current;
+		prevModelKeyRef.current = selectedModelKey;
+		if (prev && prev !== selectedModelKey && (parseBudgetError(error) || parseManagedCreditsError(error))) {
 			clearError();
 		}
-	}, [selectedModel?.provider, error, clearError]);
+	}, [selectedModelKey, error, clearError]);
 
 	const isManaged = selectedModel?.provider === 'nao';
 	const budgetStatus = useQuery({

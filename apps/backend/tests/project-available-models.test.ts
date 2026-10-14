@@ -61,7 +61,7 @@ describe('getProjectAvailableModels', () => {
 	it('lists the curated nao models only when the project has no other provider', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 480_000 });
 
 		const managed = await getProjectAvailableModels('project-1');
 		expect(managed.map(({ provider, modelId }) => ({ provider, modelId }))).toEqual([
@@ -102,10 +102,10 @@ describe('getProjectAvailableModels', () => {
 		).resolves.toBeNull();
 	});
 
-	it('hides managed models when the project wallet is exhausted', async () => {
+	it('hides managed models when the wallet cannot fund the baseline reservation', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
 
 		const models = await getProjectAvailableModels('project-1');
 
@@ -116,11 +116,13 @@ describe('getProjectAvailableModels', () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		process.env.OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:8000/v1';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 19_200 });
 
 		const models = await getProjectAvailableModels('project-1');
 
-		expect(models.some(({ provider }) => provider === 'nao')).toBe(true);
+		expect(models.filter(({ provider }) => provider === 'nao').map(({ modelId }) => modelId)).toEqual([
+			'gpt-5.6-luna',
+		]);
 		await expect(
 			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
 				userId: 'user-1',
