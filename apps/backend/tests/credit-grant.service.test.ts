@@ -41,6 +41,7 @@ import {
 	recordOrganizationSetupCandidate,
 	recordProjectJoinCandidate,
 } from '../src/services/credit-grant.service';
+import * as creditWalletService from '../src/services/credit-wallet.service';
 import { logger } from '../src/utils/logger';
 
 const tempDirectories: string[] = [];
@@ -101,6 +102,66 @@ describe('automatic credit grants', () => {
 		expect(await getCreditGrant('organization_setup', 'legacy-setup-org')).toEqual({
 			orgId: 'legacy-setup-org',
 		});
+	});
+
+	it('reconciles setup and join grants once per organization during startup', async () => {
+		const firstProjectPath = createProjectDirectory('deduplicated-first', false);
+		const secondProjectPath = createProjectDirectory('deduplicated-second', false);
+		await insertOrganizationAndProject('deduplicated-org', 'deduplicated-first-project', firstProjectPath, {});
+		await db.insert(s.project).values({
+			id: 'deduplicated-second-project',
+			orgId: 'deduplicated-org',
+			name: 'deduplicated-second-project',
+			type: 'local',
+			path: secondProjectPath,
+			envVars: {},
+		});
+		await db.insert(s.user).values({
+			id: 'deduplicated-user',
+			name: 'Deduplicated User',
+			email: 'deduplicated@example.com',
+		});
+		await db.insert(s.projectMember).values({
+			projectId: 'deduplicated-first-project',
+			userId: 'deduplicated-user',
+			role: 'user',
+		});
+		await db.insert(s.creditGrantCandidate).values([
+			{
+				grantType: 'organization_setup',
+				orgId: 'deduplicated-org',
+				projectId: 'deduplicated-first-project',
+				sourceKey: 'project:deduplicated-first-project',
+			},
+			{
+				grantType: 'organization_setup',
+				orgId: 'deduplicated-org',
+				projectId: 'deduplicated-second-project',
+				sourceKey: 'project:deduplicated-second-project',
+			},
+			{
+				grantType: 'user_join',
+				orgId: 'deduplicated-org',
+				userId: 'deduplicated-user',
+				projectId: 'deduplicated-first-project',
+				sourceKey: 'project-member:deduplicated-first-project:deduplicated-user',
+				activatedAt: new Date(),
+			},
+		]);
+		const issueGrant = vi.spyOn(creditWalletService, 'issueCreditGrant');
+
+		await reconcileOrganizationSetupGrants();
+
+		expect(
+			issueGrant.mock.calls.filter(
+				([input]) => input.grantType === 'organization_setup' && input.orgId === 'deduplicated-org',
+			),
+		).toHaveLength(1);
+		expect(
+			issueGrant.mock.calls.filter(
+				([input]) => input.grantType === 'user_join' && input.userId === 'deduplicated-user',
+			),
+		).toHaveLength(1);
 	});
 
 	it('reconciles join grants when another project becomes ready in a funded organization', async () => {
@@ -249,6 +310,20 @@ describe('automatic credit grants', () => {
 				.set({ amountMicroUsd: 20_000_000 })
 				.where(eq(s.creditGrantPolicy.grantType, 'organization_setup'));
 		}
+	});
+
+	it('logs startup reconciliation lookup failures without rejecting', async () => {
+		const lookupError = new Error('lookup failed');
+		vi.spyOn(db, 'selectDistinct').mockImplementationOnce(() => {
+			throw lookupError;
+		});
+		const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+		await expect(reconcileOrganizationSetupGrants()).resolves.toBeUndefined();
+		expect(errorLog).toHaveBeenCalledWith('Failed to reconcile organization setup grants', {
+			source: 'system',
+			context: { error: expect.objectContaining({ message: lookupError.message }) },
+		});
 	});
 });
 

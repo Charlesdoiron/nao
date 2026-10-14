@@ -23,23 +23,42 @@ export async function reconcileOrganizationSetupGrant(projectId: string): Promis
 }
 
 export async function reconcileOrganizationSetupGrants(): Promise<void> {
+	await runBestEffort('reconcile organization setup grants', {}, reconcileOrganizationSetupGrantsUnsafe);
+}
+
+async function reconcileOrganizationSetupGrantsUnsafe(): Promise<void> {
 	if (!isCloud) {
 		return;
 	}
 	const candidates = await db
-		.selectDistinct({ projectId: s.creditGrantCandidate.projectId })
+		.selectDistinct({
+			orgId: s.creditGrantCandidate.orgId,
+			projectId: s.creditGrantCandidate.projectId,
+		})
 		.from(s.creditGrantCandidate)
 		.where(
 			and(
 				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
+				isNotNull(s.creditGrantCandidate.orgId),
 				isNotNull(s.creditGrantCandidate.projectId),
 			),
 		)
 		.execute();
-	for (const { projectId } of candidates) {
-		if (projectId) {
-			await reconcileOrganizationSetupGrant(projectId);
+	const projectIdsByOrganization = new Map<string, string[]>();
+	for (const { orgId, projectId } of candidates) {
+		if (orgId && projectId) {
+			const projectIds = projectIdsByOrganization.get(orgId);
+			if (projectIds) {
+				projectIds.push(projectId);
+			} else {
+				projectIdsByOrganization.set(orgId, [projectId]);
+			}
 		}
+	}
+	for (const [orgId, projectIds] of projectIdsByOrganization) {
+		await runBestEffort('reconcile organization setup grant', { orgId }, () =>
+			reconcileOrganizationSetupCandidatesUnsafe(orgId, projectIds),
+		);
 	}
 }
 
@@ -95,12 +114,26 @@ async function reconcileOrganizationSetupGrantUnsafe(projectId: string): Promise
 	if (!candidate?.orgId || !project || !assessProjectReadiness(project).ready) {
 		return;
 	}
+	await issueOrganizationSetupCredits(candidate.orgId, projectId);
+}
+
+async function reconcileOrganizationSetupCandidatesUnsafe(orgId: string, projectIds: string[]): Promise<void> {
+	for (const projectId of projectIds) {
+		const project = await projectQueries.getProjectById(projectId);
+		if (project && assessProjectReadiness(project).ready) {
+			await issueOrganizationSetupCredits(orgId, projectId);
+			return;
+		}
+	}
+}
+
+async function issueOrganizationSetupCredits(orgId: string, projectId: string): Promise<void> {
 	await issueCreditGrant({
 		grantType: 'organization_setup',
-		orgId: candidate.orgId,
+		orgId,
 		projectId,
 	});
-	await reconcileOrganizationUserJoinGrants(candidate.orgId);
+	await reconcileOrganizationUserJoinGrants(orgId);
 }
 
 async function recordProjectJoinCandidateUnsafe(projectId: string, userId: string): Promise<void> {

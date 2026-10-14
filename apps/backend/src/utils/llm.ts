@@ -1,12 +1,7 @@
 import { type BackgroundModelCategory, type DefaultModelSettings, selectBackgroundModel } from '@nao/shared';
 import { type LlmProvider, type LlmSelectedModel, providerKind } from '@nao/shared/types';
 
-import {
-	canAffordManagedAiModel,
-	isManagedAiEnabled,
-	type ManagedAiUsageContext,
-	withManagedAiUsageMetering,
-} from '../agents/managed-ai';
+import { isManagedAiEnabled, type ManagedAiUsageContext, withManagedAiUsageMetering } from '../agents/managed-ai';
 import {
 	createProviderModel,
 	getDefaultModelId,
@@ -481,15 +476,9 @@ async function getProjectModelSources(projectId: string): Promise<ProviderModelS
 		const project = await projectQueries.getProjectById(projectId);
 		const summary = project?.orgId ? await creditWalletQueries.getCreditSummary(project.orgId) : null;
 		if (summary && summary.balanceMicroUsd > 0) {
-			const affordableModels = getKnownModelIds('nao').filter((modelId) =>
-				canAffordManagedAiModel(summary.balanceMicroUsd, modelId),
-			);
-			if (affordableModels.length === 0) {
-				return enabledSources;
-			}
 			enabledSources.push({
 				provider: 'nao',
-				enabledModels: affordableModels,
+				enabledModels: getKnownModelIds('nao'),
 				customModels: [],
 				baseUrl: null,
 			});

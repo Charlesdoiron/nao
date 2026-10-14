@@ -20,7 +20,7 @@ import {
 	UIMessageStreamWriter,
 } from 'ai';
 
-import { hasManagedAiCreditsForModel, type ManagedAiUsageContext } from '../agents/managed-ai';
+import type { ManagedAiUsageContext } from '../agents/managed-ai';
 import { disableModelReasoning, fitThinkingBudget, getProviderMeta, ProviderModelResult } from '../agents/providers';
 import { getSystemPromptOverride, hasNaoPromptPlaceholder, injectNaoPrompt } from '../agents/system-prompts';
 import { llmTelemetry } from '../agents/telemetry';
@@ -58,7 +58,7 @@ import {
 	settleToolParts,
 } from '../utils/ai';
 import { assertBudgetNotExceeded } from '../utils/budget';
-import { HandlerError, ManagedCreditsExhaustedError } from '../utils/error';
+import { HandlerError } from '../utils/error';
 import {
 	getProjectDeclaredModels,
 	resolveAnnotationModelId,
@@ -267,9 +267,6 @@ async function _buildContextBase(opts: {
 
 async function assertModelBudget(projectId: string, model: LlmSelectedModel, userId?: string): Promise<void> {
 	await assertBudgetNotExceeded(projectId, model.provider, userId);
-	if (model.provider === 'nao' && !(await hasManagedAiCreditsForModel(projectId, model.modelId))) {
-		throw new ManagedCreditsExhaustedError();
-	}
 }
 
 export class AgentService {

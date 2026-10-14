@@ -102,10 +102,10 @@ describe('getProjectAvailableModels', () => {
 		).resolves.toBeNull();
 	});
 
-	it('hides managed models when the wallet cannot fund the baseline reservation', async () => {
+	it('hides managed models when the wallet has no credits', async () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 1 });
+		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
 
 		const models = await getProjectAvailableModels('project-1');
 
@@ -122,6 +122,8 @@ describe('getProjectAvailableModels', () => {
 
 		expect(models.filter(({ provider }) => provider === 'nao').map(({ modelId }) => modelId)).toEqual([
 			'gpt-5.6-luna',
+			'gpt-5.6-terra',
+			'gpt-5.6-sol',
 		]);
 		await expect(
 			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
