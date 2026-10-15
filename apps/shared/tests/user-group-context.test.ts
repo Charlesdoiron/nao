@@ -24,8 +24,8 @@ import {
 	type StoredLegacyDatabaseContextAccessV2,
 	unionDatabaseContextAccess,
 	unionFileTreeAccess,
-} from './user-group-context';
-import { ALL_MCP_ACCESS, EMPTY_MCP_ACCESS } from './user-group-mcp';
+} from '../src/user-group-context';
+import { ALL_MCP_ACCESS, EMPTY_MCP_ACCESS } from '../src/user-group-mcp';
 
 describe('user group database context access', () => {
 	it('normalizes type casing, duplicates, and order while preserving source names', () => {
