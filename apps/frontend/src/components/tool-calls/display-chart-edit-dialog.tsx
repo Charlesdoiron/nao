@@ -227,6 +227,7 @@ export function ChartConfigEditDialog({
 								className={cn(queryEditorState === 'hidden' && 'hidden')}
 								input={editableQuery.input}
 								output={editableQuery.output}
+								toolCallId={editableQuery.toolCallId}
 								onOutputChange={setEditedOutput}
 								onClose={() => setQueryEditorState('hidden')}
 							/>

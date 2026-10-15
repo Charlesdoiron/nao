@@ -9,6 +9,7 @@ import * as projectQueries from '../queries/project.queries';
 import { assertProjectCloudBillingAccess } from '../services/cloud-billing-access.service';
 import { AgentRequestSchema } from '../types/chat';
 import { trackAgentStreamDisconnect } from '../utils/agent-stream-disconnect';
+import { withQueryResultPreviewsInStream } from '../utils/query-result-preview';
 import { withSseKeepAlive } from '../utils/sse-keep-alive';
 
 const DEBUG_CHUNKS = false;
@@ -40,7 +41,7 @@ export const agentRoutes = async (app: App) => {
 			domainHost: getDomainHost(headers),
 		});
 
-		let stream = result.stream;
+		let stream = withQueryResultPreviewsInStream(result.stream);
 
 		if (DEBUG_CHUNKS) {
 			stream = stream.pipeThrough(
