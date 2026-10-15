@@ -1176,3 +1176,32 @@ class TestArrayParameters:
         assert job_config.dry_run is True
         assert job_config.use_query_cache is False
         assert job_config.query_parameters[0].name == "users"
+
+    @pytest.mark.parametrize(
+        ("parameter_type", "value", "expected"),
+        [
+            ("NUMERIC", "123.45", "123.45"),
+            ("BIGNUMERIC", "12345678901234567890.123456789", "12345678901234567890.123456789"),
+            ("DATE", "2026-10-15", "2026-10-15"),
+            ("DATETIME", "2026-10-15 10:30:00.123456", "2026-10-15T10:30:00.123456"),
+            ("TIME", "10:30:00.123456", "10:30:00.123456"),
+            ("TIMESTAMP", "2026-10-15T10:30:00Z", "2026-10-15 10:30:00+00:00"),
+            ("INTERVAL", "0-0 7 00:00:00", "0-0 7 00:00:00"),
+            ("BYTES", "aGVsbG8=", "aGVsbG8="),
+            ("GEOGRAPHY", "POINT(1 2)", "POINT(1 2)"),
+            ("JSON", '{"answer":42}', '{"answer": 42}'),
+        ],
+    )
+    def test_serializes_scalar_array_parameter_types(self, parameter_type, value, expected):
+        config = BigQueryConfig(name="test", project_id="my-project")
+
+        job_config = config._query_job_config([{"name": "values", "type": parameter_type, "values": [value]}])
+
+        representation = job_config.to_api_repr()["query"]["queryParameters"][0]
+        assert representation["parameterValue"]["arrayValues"] == [{"value": expected}]
+
+    def test_rejects_invalid_typed_parameter_value(self):
+        config = BigQueryConfig(name="test", project_id="my-project")
+
+        with pytest.raises(ValueError, match="Invalid DATE query parameter value"):
+            config._query_job_config([{"name": "dates", "type": "DATE", "values": ["not-a-date"]}])

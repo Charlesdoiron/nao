@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import date, datetime, time
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, PrivateAttr, field_validator
@@ -557,7 +560,11 @@ class BigQueryConfig(DatabaseConfig):
             job_config.default_dataset = f"{self.project_id}.{self.dataset_id}"
         if query_parameters:
             job_config.query_parameters = [
-                bq.ArrayQueryParameter(parameter["name"], parameter["type"], parameter["values"])
+                bq.ArrayQueryParameter(
+                    parameter["name"],
+                    parameter["type"],
+                    [_convert_query_parameter_value(parameter["type"], value) for value in parameter["values"]],
+                )
                 for parameter in query_parameters
             ]
         return job_config
@@ -657,6 +664,33 @@ class BigQueryConfig(DatabaseConfig):
         finally:
             if conn is not None:
                 conn.disconnect()
+
+
+def _convert_query_parameter_value(parameter_type: str, value: Any) -> Any:
+    try:
+        if parameter_type in {"NUMERIC", "BIGNUMERIC"}:
+            return Decimal(str(value))
+        if parameter_type == "DATE":
+            return date.fromisoformat(value)
+        if parameter_type == "DATETIME":
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is not None:
+                raise ValueError("DATETIME values cannot include a timezone")
+            return parsed
+        if parameter_type == "TIME":
+            parsed = time.fromisoformat(value)
+            if parsed.tzinfo is not None:
+                raise ValueError("TIME values cannot include a timezone")
+            return parsed
+        if parameter_type == "TIMESTAMP":
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parameter_type == "BYTES":
+            return base64.b64decode(value, validate=True)
+        if parameter_type == "JSON" and isinstance(value, str):
+            return json.loads(value)
+        return value
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Invalid {parameter_type} query parameter value: {value!r}") from error
 
 
 def _fetch_schema_partition_metadata(

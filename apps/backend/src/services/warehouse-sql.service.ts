@@ -1,4 +1,5 @@
 import type { WarehouseRowSecurity } from '@nao/shared';
+import type { executeSql } from '@nao/shared/tools';
 
 import { env } from '../env';
 import { assertWarehouseTableAccess, type WarehouseTableAccess } from './context-access';
@@ -16,9 +17,16 @@ interface WarehouseSqlOptions {
 
 export interface WarehouseQueryParameter {
 	name: string;
-	type: 'STRING' | 'INT64' | 'FLOAT64' | 'BOOL';
-	values: (string | number | boolean)[];
+	type: executeSql.ArrayParameterType;
+	values: WarehouseQueryParameterValue[];
 }
+
+export type WarehouseQueryParameterValue =
+	| string
+	| number
+	| boolean
+	| WarehouseQueryParameterValue[]
+	| { [key: string]: WarehouseQueryParameterValue | null };
 
 export interface WarehouseSqlResult {
 	data: Record<string, unknown>[];

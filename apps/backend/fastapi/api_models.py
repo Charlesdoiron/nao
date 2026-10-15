@@ -1,6 +1,13 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StringConstraints,
+    field_validator,
+)
 
 
 class StrictRequestModel(BaseModel):
@@ -106,8 +113,23 @@ class BigQueryArrayParameter(StrictRequestModel):
             pattern=r"^[A-Za-z_][A-Za-z0-9_]*$",
         ),
     ]
-    type: Literal["STRING", "INT64", "FLOAT64", "BOOL"]
-    values: list[str | int | float | bool]
+    type: Literal[
+        "STRING",
+        "INT64",
+        "FLOAT64",
+        "BOOL",
+        "NUMERIC",
+        "BIGNUMERIC",
+        "DATE",
+        "DATETIME",
+        "TIME",
+        "TIMESTAMP",
+        "INTERVAL",
+        "BYTES",
+        "GEOGRAPHY",
+        "JSON",
+    ]
+    values: list[JsonValue]
 
 
 class ExecuteSQLRequest(StrictRequestModel):

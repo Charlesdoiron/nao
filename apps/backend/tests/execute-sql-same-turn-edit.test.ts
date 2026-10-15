@@ -71,6 +71,76 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 		expect(body.query_parameters).toEqual([{ name: 'users', type: 'STRING', values: ['a', 'b'] }]);
 	});
 
+	it('accepts BigQuery scalar array parameter types', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: [
+				'numeric',
+				'bignumeric',
+				'date',
+				'datetime',
+				'time',
+				'timestamp',
+				'interval',
+				'bytes',
+				'geography',
+				'json',
+			],
+			data: [
+				{
+					numeric: '123.45',
+					bignumeric: '12345678901234567890.123456789',
+					date: '2026-10-15',
+					datetime: '2026-10-15 10:30:00.123456',
+					time: '10:30:00.123456',
+					timestamp: '2026-10-15T10:30:00Z',
+					interval: '0-0 7 00:00:00',
+					bytes: 'aGVsbG8=',
+					geography: 'POINT(1 2)',
+					json: { answer: 42, tags: ['nao'] },
+				},
+			],
+		});
+
+		const types = [
+			['numeric', 'NUMERIC'],
+			['bignumeric', 'BIGNUMERIC'],
+			['date', 'DATE'],
+			['datetime', 'DATETIME'],
+			['time', 'TIME'],
+			['timestamp', 'TIMESTAMP'],
+			['interval', 'INTERVAL'],
+			['bytes', 'BYTES'],
+			['geography', 'GEOGRAPHY'],
+			['json', 'JSON'],
+		] as const;
+		await executeQuery(
+			{
+				sql_query: 'SELECT 1',
+				database_id: 'bigquery-prod',
+				array_parameters: types.map(([column, type]) => ({
+					name: column,
+					query_id: 'query_ab12cd34',
+					column,
+					type,
+				})),
+			},
+			context,
+		);
+
+		const request = vi.mocked(fetch).mock.calls[0]?.[1];
+		const body = JSON.parse(String(request?.body)) as {
+			query_parameters: Array<{ name: string; type: string; values: unknown[] }>;
+		};
+		expect(body.query_parameters).toEqual(
+			types.map(([name, type]) => ({
+				name,
+				type,
+				values: [context.queryResults.get('query_ab12cd34')!.data[0]![name]],
+			})),
+		);
+	});
+
 	it('rejects an array parameter whose source column does not exist', async () => {
 		const context = createContext();
 		context.queryResults.set('query_ab12cd34', { columns: ['user_id'], data: [{ user_id: 'a' }] });

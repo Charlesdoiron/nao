@@ -1134,7 +1134,12 @@ def test_execute_sql_forwards_bigquery_array_parameters(monkeypatch, tmp_path):
                     "name": "users",
                     "type": "STRING",
                     "values": ["a", "b"],
-                }
+                },
+                {
+                    "name": "metadata",
+                    "type": "JSON",
+                    "values": [{"active": True, "tags": ["nao"]}],
+                },
             ],
         },
     )
@@ -1147,7 +1152,12 @@ def test_execute_sql_forwards_bigquery_array_parameters(monkeypatch, tmp_path):
                 "name": "users",
                 "type": "STRING",
                 "values": ["a", "b"],
-            }
+            },
+            {
+                "name": "metadata",
+                "type": "JSON",
+                "values": [{"active": True, "tags": ["nao"]}],
+            },
         ],
     }
 

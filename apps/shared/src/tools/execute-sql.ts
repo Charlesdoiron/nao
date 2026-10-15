@@ -10,6 +10,23 @@ import { QueryIdSchema } from './query-id';
 export const LOCAL_DATABASE_ID = 'duckdb_local';
 
 export const SAVE_FORMATS = ['csv', 'parquet'] as const;
+export const ARRAY_PARAMETER_TYPES = [
+	'STRING',
+	'INT64',
+	'FLOAT64',
+	'BOOL',
+	'NUMERIC',
+	'BIGNUMERIC',
+	'DATE',
+	'DATETIME',
+	'TIME',
+	'TIMESTAMP',
+	'INTERVAL',
+	'BYTES',
+	'GEOGRAPHY',
+	'JSON',
+] as const;
+export type ArrayParameterType = (typeof ARRAY_PARAMETER_TYPES)[number];
 
 export const SaveToSchema = z.object({
 	path: z
@@ -31,7 +48,11 @@ export const ArrayParameterSchema = z.object({
 		.describe('The BigQuery named parameter without the leading @.'),
 	query_id: QueryIdSchema.describe('The earlier query whose complete result supplies the parameter values.'),
 	column: z.string().min(1).describe('The source result column to bind as the array.'),
-	type: z.enum(['STRING', 'INT64', 'FLOAT64', 'BOOL']).describe('The BigQuery array element type.'),
+	type: z
+		.enum(ARRAY_PARAMETER_TYPES)
+		.describe(
+			'The BigQuery array element type. Temporal values must use ISO format, INTERVAL must use BigQuery canonical format, NUMERIC values may be decimal strings, BYTES must be base64, and JSON strings must contain valid JSON.',
+		),
 });
 
 export const InputSchema = z.object({

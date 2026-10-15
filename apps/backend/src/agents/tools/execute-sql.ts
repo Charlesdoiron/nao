@@ -13,7 +13,11 @@ import { resolveExcludedColumnEnforcement } from '../../services/excluded-column
 import { runQueryOnLocalFiles } from '../../services/local-query.service';
 import { getQueryResult } from '../../services/query-result.service';
 import { isWarehouseSqlEnabled } from '../../services/semantic-layer.service';
-import { executeWarehouseSql, type WarehouseQueryParameter } from '../../services/warehouse-sql.service';
+import {
+	executeWarehouseSql,
+	type WarehouseQueryParameter,
+	type WarehouseQueryParameterValue,
+} from '../../services/warehouse-sql.service';
 import { ToolContext } from '../../types/tools';
 import { containsBlockedPassthroughCall, detectQueryRowLimit, isReadOnlySqlQuery } from '../../utils/sql-filter';
 import { createTool } from '../../utils/tools';
@@ -267,7 +271,11 @@ function bigQueryRequestBytes(sql: string, parameters: WarehouseQueryParameter[]
 	const queryParameters = parameters.map((parameter) => ({
 		name: parameter.name,
 		parameterType: { type: 'ARRAY', arrayType: { type: parameter.type } },
-		parameterValue: { arrayValues: parameter.values.map((value) => ({ value: String(value) })) },
+		parameterValue: {
+			arrayValues: parameter.values.map((value) => ({
+				value: parameter.type === 'JSON' ? JSON.stringify(value) : String(value),
+			})),
+		},
 	}));
 	return new TextEncoder().encode(JSON.stringify({ query: sql, queryParameters })).byteLength;
 }
@@ -277,13 +285,13 @@ function uniqueParameterValues(
 	type: WarehouseQueryParameter['type'],
 	name: string,
 ): WarehouseQueryParameter['values'] {
-	const unique = new Map<string, string | number | boolean>();
+	const unique = new Map<string, WarehouseQueryParameterValue>();
 	for (const value of values) {
 		if (value === null || value === undefined) {
 			continue;
 		}
 		const normalized = normalizeParameterValue(value, type, name);
-		unique.set(`${typeof normalized}:${normalized}`, normalized);
+		unique.set(`${typeof normalized}:${JSON.stringify(normalized)}`, normalized);
 	}
 	return [...unique.values()];
 }
@@ -292,7 +300,7 @@ function normalizeParameterValue(
 	value: unknown,
 	type: WarehouseQueryParameter['type'],
 	name: string,
-): string | number | boolean {
+): WarehouseQueryParameterValue {
 	if (type === 'STRING' && typeof value === 'string') {
 		return value;
 	}
@@ -309,7 +317,55 @@ function normalizeParameterValue(
 	if (type === 'BOOL' && typeof value === 'boolean') {
 		return value;
 	}
+	if (
+		(type === 'NUMERIC' || type === 'BIGNUMERIC') &&
+		((typeof value === 'number' && Number.isFinite(value)) ||
+			(typeof value === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)))
+	) {
+		return String(value);
+	}
+	if (type === 'DATE' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		return value;
+	}
+	if (
+		type === 'DATETIME' &&
+		typeof value === 'string' &&
+		/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/.test(value)
+	) {
+		return value;
+	}
+	if (type === 'TIME' && typeof value === 'string' && /^\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/.test(value)) {
+		return value;
+	}
+	if (type === 'TIMESTAMP' && typeof value === 'string' && !Number.isNaN(Date.parse(value))) {
+		return value;
+	}
+	if (type === 'INTERVAL' && typeof value === 'string' && value.trim().length > 0) {
+		return value.trim();
+	}
+	if ((type === 'BYTES' || type === 'GEOGRAPHY') && typeof value === 'string' && value.length > 0) {
+		return value;
+	}
+	if (type === 'JSON' && isJsonParameterValue(value)) {
+		return value;
+	}
 	throw new Error(`BigQuery array parameter "${name}" contains a value incompatible with ${type}.`);
+}
+
+function isJsonParameterValue(value: unknown): value is WarehouseQueryParameterValue {
+	if (typeof value === 'string' || typeof value === 'boolean') {
+		return true;
+	}
+	if (typeof value === 'number') {
+		return Number.isFinite(value);
+	}
+	if (Array.isArray(value)) {
+		return value.every((item) => item === null || isJsonParameterValue(item));
+	}
+	if (value && typeof value === 'object') {
+		return Object.values(value).every((item) => item === null || isJsonParameterValue(item));
+	}
+	return false;
 }
 
 /** Semantics-only mode: the warehouse is reached through the layer, raw SQL stays for the local database. */
