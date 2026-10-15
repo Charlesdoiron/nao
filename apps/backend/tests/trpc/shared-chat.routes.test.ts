@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createTestCaller } from '../helpers/trpc-caller';
+
 const mocks = vi.hoisted(() => ({
+	getChat: vi.fn(),
 	getChatInfo: vi.fn(),
 	getChatOwnerId: vi.fn(),
 	getUserRoleInProject: vi.fn(),
@@ -18,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/auth', () => ({ getAuth: vi.fn() }));
 vi.mock('../../src/db/db', () => ({ db: {} }));
 vi.mock('../../src/queries/chat.queries', () => ({
+	getChat: mocks.getChat,
 	getChatInfo: mocks.getChatInfo,
 	getChatOwnerId: mocks.getChatOwnerId,
 }));
@@ -27,6 +31,7 @@ vi.mock('../../src/queries/project.queries', () => ({
 	listUsersWithProjectAccess: mocks.listUsersWithProjectAccess,
 }));
 vi.mock('../../src/queries/shared-chat.queries', () => ({
+	canUserAccessSharedChat: vi.fn(),
 	createSharedChat: mocks.createSharedChat,
 	getSharedChatInfo: mocks.getSharedChatInfo,
 	getShareAllowedUserIds: mocks.getShareAllowedUserIds,
@@ -35,28 +40,31 @@ vi.mock('../../src/queries/shared-chat.queries', () => ({
 vi.mock('../../src/queries/story.queries', () => ({}));
 vi.mock('../../src/queries/user.queries', () => ({}));
 vi.mock('../../src/services/activity', () => ({ logActivity: vi.fn() }));
-vi.mock('../../src/services/live-story', () => ({}));
+vi.mock('../../src/services/live-story', () => ({ getStoryQueryData: vi.fn() }));
 vi.mock('../../src/services/notification.service', () => ({ notifySharedItem: mocks.notifySharedItem }));
 vi.mock('../../src/services/project-sharing.service', () => ({
 	assertCanShareToProject: mocks.assertCanShareToProject,
 	assertCanShareWith: mocks.assertCanShareWith,
 }));
-vi.mock('../../src/utils/analytics-event', () => ({}));
-vi.mock('../../src/utils/story-download', () => ({}));
+vi.mock('../../src/utils/analytics-event', () => ({ logAnalyticsEvent: vi.fn() }));
+vi.mock('../../src/utils/story-download', () => ({ buildDownloadResponse: vi.fn() }));
 
 import { sharedChatRoutes } from '../../src/trpc/shared-chat.routes';
 import { router } from '../../src/trpc/trpc';
 
 const testRouter = router({ sharedChat: sharedChatRoutes });
 
+beforeEach(() => {
+	vi.clearAllMocks();
+	mocks.notifySharedItem.mockResolvedValue(undefined);
+	mocks.assertCanShareToProject.mockResolvedValue(undefined);
+	mocks.assertCanShareWith.mockResolvedValue(undefined);
+});
+
 describe('sharedChat.create', () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
 		mocks.getChatInfo.mockResolvedValue({ projectId: 'project-1', userId: 'owner-1', title: 'Private chat' });
 		mocks.createSharedChat.mockResolvedValue({ id: 'share-1' });
-		mocks.notifySharedItem.mockResolvedValue(undefined);
-		mocks.assertCanShareToProject.mockResolvedValue(undefined);
-		mocks.assertCanShareWith.mockResolvedValue(undefined);
 	});
 
 	it("refuses a member sharing another member's chat", async () => {
@@ -114,7 +122,6 @@ describe('sharedChat.create', () => {
 
 describe('sharedChat.updateAccess', () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
 		mocks.getUserRoleInProject.mockResolvedValue('user');
 		mocks.getSharedChatInfo.mockResolvedValue({
 			id: 'share-1',
@@ -126,8 +133,6 @@ describe('sharedChat.updateAccess', () => {
 		mocks.getChatOwnerId.mockResolvedValue('owner-1');
 		mocks.getShareAllowedUserIds.mockResolvedValue(['member-1', 'member-2']);
 		mocks.listUsersWithProjectAccess.mockResolvedValue([{ id: 'member-1' }, { id: 'member-2' }]);
-		mocks.assertCanShareWith.mockResolvedValue(undefined);
-		mocks.notifySharedItem.mockResolvedValue(undefined);
 	});
 
 	it('refuses to add a recipient the owner may not share with', async () => {
@@ -151,9 +156,41 @@ describe('sharedChat.updateAccess', () => {
 	});
 });
 
+describe('sharedChat.getSharedChat', () => {
+	const chat = {
+		id: 'chat-1',
+		projectId: 'project-1',
+		title: 'Shared chat',
+		isStarred: false,
+		createdAt: 1,
+		updatedAt: 1,
+		messages: [],
+	};
+
+	beforeEach(() => {
+		mocks.getSharedChatInfo.mockResolvedValue({
+			id: 'share-1',
+			projectId: 'project-1',
+			userId: 'owner-1',
+			chatId: 'chat-1',
+			visibility: 'project',
+			title: 'Shared chat',
+			authorName: 'Owner',
+		});
+		mocks.getUserRoleInProject.mockResolvedValue('user');
+		mocks.getChat.mockResolvedValue([chat, 'owner-1']);
+	});
+
+	it('returns the shared chat', async () => {
+		await expect(createCaller('viewer-1').sharedChat.getSharedChat({ shareId: 'share-1' })).resolves.toEqual({
+			share: expect.objectContaining({ id: 'share-1', chatId: 'chat-1' }),
+			chat,
+			userRole: 'user',
+		});
+		expect(mocks.getChat).toHaveBeenCalledWith('chat-1', { includeFeedback: true });
+	});
+});
+
 function createCaller(userId: string) {
-	return testRouter.createCaller({
-		session: { user: { id: userId, name: 'Caller', email: `${userId}@example.com` } },
-		selectedProjectId: 'project-1',
-	} as never);
+	return createTestCaller(testRouter, { userId, selectedProjectId: 'project-1' });
 }

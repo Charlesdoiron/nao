@@ -21,14 +21,12 @@ import {
 
 describe('user group feature access service', () => {
 	const initialCustomStories = env.BETA_CUSTOM_STORIES_ENABLED;
-	beforeEach(() => {
-		env.BETA_CUSTOM_STORIES_ENABLED = false;
-	});
 	afterEach(() => {
 		env.BETA_CUSTOM_STORIES_ENABLED = initialCustomStories;
 	});
 
 	beforeEach(() => {
+		env.BETA_CUSTOM_STORIES_ENABLED = false;
 		vi.clearAllMocks();
 		mocks.resolveUserGroupAccess.mockResolvedValue(resolvedGroupAccess);
 	});

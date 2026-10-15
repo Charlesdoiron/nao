@@ -1,6 +1,8 @@
 import { EMPTY_FILES_CONTEXT_ACCESS, EMPTY_MCP_ACCESS } from '@nao/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createTestCaller } from '../helpers/trpc-caller';
+
 const mocks = vi.hoisted(() => ({
 	assertUserGroupManageable: vi.fn(),
 	createUserGroup: vi.fn(),
@@ -98,78 +100,70 @@ import { router } from '../../src/trpc/trpc';
 import { userGroupRoutes } from '../../src/trpc/user-group.routes';
 
 const testRouter = router(userGroupRoutes);
+const caller = createTestCaller(testRouter);
+const ORDERS_POLICY_TABLE = { databaseType: 'duckdb', database: 'sales', schema: 'main', table: 'orders' };
+const ORDERS_TABLE = { ...ORDERS_POLICY_TABLE, constraintColumns: ['tenant_id'] };
+const RESTRICTED_DATABASE_ACCESS = { mode: 'restricted', strict: false, grants: [], patterns: [] };
+const RESTRICTED_DOCS_ACCESS = { mode: 'restricted', grants: [] };
+const DETAILED_DENSITY_POLICY = { defaultDensity: 'detailed', canChange: true };
+const COMPACT_DENSITY_POLICY = { defaultDensity: 'compact', canChange: false };
+
+beforeEach(() => {
+	vi.clearAllMocks();
+	mocks.env.OIDC_GROUP_NAO_GROUP_MAPPING = undefined;
+	mocks.env.AZURE_AD_GROUP_NAO_GROUP_MAPPING = undefined;
+	mocks.role = 'admin';
+	mocks.getUserRoleInProject.mockImplementation(async (_projectId, userId) =>
+		userId === 'target-user-id' ? 'viewer' : mocks.role,
+	);
+	mocks.hasFeature.mockResolvedValue(true);
+	mocks.getUserGroupOverview.mockResolvedValue({ users: [], groups: [], memberships: [] });
+	mocks.getDatabaseContextCatalog.mockReturnValue({ syncState: 'ready', objects: [] });
+	mocks.getDocsContextCatalog.mockReturnValue({ syncState: 'ready', entries: [] });
+	mocks.getFilesContextCatalog.mockReturnValue({ syncState: 'ready', entries: [] });
+	mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [] });
+	mocks.listEffectiveOidcUserGroupMappings.mockResolvedValue([]);
+	mocks.listEffectiveEntraUserGroupMappings.mockResolvedValue([]);
+	mocks.updateProjectRowSecurity.mockImplementation(async (_projectId, value) => value);
+	mocks.validateWarehouseRowPredicate.mockImplementation(async (predicate) => predicate);
+	mocks.resolveUserGroupAccess.mockResolvedValue({
+		features: ['storyCreation'],
+		databaseAccess: RESTRICTED_DATABASE_ACCESS,
+		docsAccess: RESTRICTED_DOCS_ACCESS,
+		rowPolicies: [{ version: 1, policies: [] }],
+		toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
+	});
+	mocks.createUserGroup.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
+	mocks.createUserGroupWithinLimit.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
+});
 
 describe('user group routes', () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-		mocks.env.OIDC_GROUP_NAO_GROUP_MAPPING = undefined;
-		mocks.env.AZURE_AD_GROUP_NAO_GROUP_MAPPING = undefined;
-		mocks.role = 'admin';
-		mocks.getUserRoleInProject.mockImplementation(async (_projectId, userId) =>
-			userId === 'target-user-id' ? 'viewer' : mocks.role,
-		);
-		mocks.hasFeature.mockResolvedValue(true);
-		mocks.getUserGroupOverview.mockResolvedValue({ users: [], groups: [], memberships: [] });
-		mocks.getDatabaseContextCatalog.mockReturnValue({ syncState: 'ready', objects: [] });
-		mocks.getDocsContextCatalog.mockReturnValue({ syncState: 'ready', entries: [] });
-		mocks.getFilesContextCatalog.mockReturnValue({ syncState: 'ready', entries: [] });
-		mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [] });
-		mocks.listEffectiveOidcUserGroupMappings.mockResolvedValue([]);
-		mocks.listEffectiveEntraUserGroupMappings.mockResolvedValue([]);
-		mocks.updateProjectRowSecurity.mockImplementation(async (_projectId, value) => value);
-		mocks.validateWarehouseRowPredicate.mockImplementation(async (predicate) => predicate);
-		mocks.resolveUserGroupAccess.mockResolvedValue({
-			features: ['storyCreation'],
-			databaseAccess: { mode: 'restricted', strict: false, grants: [], patterns: [] },
-			docsAccess: { mode: 'restricted', grants: [] },
-			rowPolicies: [{ version: 1, policies: [] }],
-			toolCallDensityPolicy: {
-				defaultDensity: 'compact',
-				canChange: false,
-			},
-		});
-		mocks.createUserGroup.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
-		mocks.createUserGroupWithinLimit.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
-	});
-
 	it('allows unlicensed row-security table removals', async () => {
-		const orders = {
-			databaseType: 'duckdb',
-			database: 'sales',
-			schema: 'main',
-			table: 'orders',
-			constraintColumns: ['tenant_id'],
-		};
-		const customers = { ...orders, table: 'customers' };
+		const customers = { ...ORDERS_TABLE, table: 'customers' };
 		mocks.hasFeature.mockResolvedValue(false);
-		mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [orders, customers] });
+		mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [ORDERS_TABLE, customers] });
 		mocks.getDatabaseContextCatalog.mockReturnValue({
 			syncState: 'ready',
-			objects: [{ ...orders, columns: orders.constraintColumns }],
+			objects: [{ ...ORDERS_TABLE, columns: ORDERS_TABLE.constraintColumns }],
 		});
 
-		await expect(createCaller().updateRowSecurity({ version: 1, tables: [orders] })).resolves.toEqual({
+		await expect(caller.updateRowSecurity({ version: 1, tables: [ORDERS_TABLE] })).resolves.toEqual({
 			version: 1,
-			tables: [orders],
+			tables: [ORDERS_TABLE],
 		});
-		expect(mocks.updateProjectRowSecurity).toHaveBeenCalledWith('project-id', { version: 1, tables: [orders] });
+		expect(mocks.updateProjectRowSecurity).toHaveBeenCalledWith('project-id', {
+			version: 1,
+			tables: [ORDERS_TABLE],
+		});
 	});
 
 	it('rejects unlicensed row-security table additions', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
 
 		await expect(
-			createCaller().updateRowSecurity({
+			caller.updateRowSecurity({
 				version: 1,
-				tables: [
-					{
-						databaseType: 'duckdb',
-						database: 'sales',
-						schema: 'main',
-						table: 'orders',
-						constraintColumns: ['tenant_id'],
-					},
-				],
+				tables: [ORDERS_TABLE],
 			}),
 		).rejects.toMatchObject({
 			code: 'FORBIDDEN',
@@ -178,20 +172,13 @@ describe('user group routes', () => {
 	});
 
 	it('rejects unlicensed row-security constraint column changes', async () => {
-		const orders = {
-			databaseType: 'duckdb',
-			database: 'sales',
-			schema: 'main',
-			table: 'orders',
-			constraintColumns: ['tenant_id'],
-		};
 		mocks.hasFeature.mockResolvedValue(false);
-		mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [orders] });
+		mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [ORDERS_TABLE] });
 
 		await expect(
-			createCaller().updateRowSecurity({
+			caller.updateRowSecurity({
 				version: 1,
-				tables: [{ ...orders, constraintColumns: ['region'] }],
+				tables: [{ ...ORDERS_TABLE, constraintColumns: ['region'] }],
 			}),
 		).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(mocks.updateProjectRowSecurity).not.toHaveBeenCalled();
@@ -199,14 +186,11 @@ describe('user group routes', () => {
 
 	it('limits project constraint columns to the FastAPI maximum', async () => {
 		await expect(
-			createCaller().updateRowSecurity({
+			caller.updateRowSecurity({
 				version: 1,
 				tables: [
 					{
-						databaseType: 'duckdb',
-						database: 'sales',
-						schema: 'main',
-						table: 'orders',
+						...ORDERS_TABLE,
 						constraintColumns: Array.from({ length: 257 }, (_, index) => `column_${index}`),
 					},
 				],
@@ -217,17 +201,9 @@ describe('user group routes', () => {
 
 	it('rejects project row security tables outside the synced catalog', async () => {
 		await expect(
-			createCaller().updateRowSecurity({
+			caller.updateRowSecurity({
 				version: 1,
-				tables: [
-					{
-						databaseType: 'duckdb',
-						database: 'sales',
-						schema: 'main',
-						table: 'orders',
-						constraintColumns: ['tenant_id'],
-					},
-				],
+				tables: [ORDERS_TABLE],
 			}),
 		).rejects.toMatchObject({
 			code: 'BAD_REQUEST',
@@ -240,25 +216,17 @@ describe('user group routes', () => {
 		mocks.hasFeature.mockResolvedValue(false);
 		const rowPolicies = {
 			version: 1 as const,
-			policies: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					access: 'full' as const,
-				},
-			],
+			policies: [{ ...ORDERS_POLICY_TABLE, access: 'full' as const }],
 		};
 
-		await expect(createCaller().create({ name: 'Analysts', rowPolicies })).rejects.toMatchObject({
+		await expect(caller.create({ name: 'Analysts', rowPolicies })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 		});
 		await expect(
-			createCaller().update({
+			caller.update({
 				groupId: 'group-id',
 				featureGrants: [],
-				toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: true },
+				toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 				rowPolicies,
 			}),
 		).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -306,28 +274,12 @@ describe('user group routes', () => {
 	});
 
 	it('allows group edits after a registry update prunes removed-table policies', async () => {
-		const orders = {
-			databaseType: 'duckdb',
-			database: 'sales',
-			schema: 'main',
-			table: 'orders',
-			constraintColumns: ['tenant_id'],
-		};
-		const customersPolicy = {
-			databaseType: 'duckdb',
-			database: 'sales',
-			schema: 'main',
-			table: 'customers',
-			access: 'full' as const,
-		};
+		const customersPolicy = { ...ORDERS_POLICY_TABLE, table: 'customers', access: 'full' as const };
 		let storedPolicies = {
 			version: 1 as const,
 			policies: [
 				{
-					databaseType: orders.databaseType,
-					database: orders.database,
-					schema: orders.schema,
-					table: orders.table,
+					...ORDERS_POLICY_TABLE,
 					access: 'predicate' as const,
 					mode: 'guided' as const,
 					combinator: 'and' as const,
@@ -338,7 +290,7 @@ describe('user group routes', () => {
 		};
 		mocks.getDatabaseContextCatalog.mockReturnValue({
 			syncState: 'ready',
-			objects: [{ ...orders, columns: orders.constraintColumns }],
+			objects: [{ ...ORDERS_TABLE, columns: ORDERS_TABLE.constraintColumns }],
 		});
 		mocks.updateProjectRowSecurity.mockImplementation(async (_projectId, registry) => {
 			storedPolicies = {
@@ -357,11 +309,11 @@ describe('user group routes', () => {
 			return registry;
 		});
 
-		await createCaller().updateRowSecurity({ version: 1, tables: [orders] });
-		await createCaller().update({
+		await caller.updateRowSecurity({ version: 1, tables: [ORDERS_TABLE] });
+		await caller.update({
 			groupId: 'group-id',
 			featureGrants: ['storyCreation'],
-			toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 			rowPolicies: storedPolicies,
 		});
 
@@ -373,28 +325,20 @@ describe('user group routes', () => {
 			expect.objectContaining({
 				featureGrants: ['storyCreation'],
 				rowPolicies: storedPolicies,
-				rowPoliciesRegistry: { version: 1, tables: [orders] },
+				rowPoliciesRegistry: { version: 1, tables: [ORDERS_TABLE] },
 			}),
 		);
 	});
 
 	it('rejects group row policies for tables outside the project registry', async () => {
 		await expect(
-			createCaller().update({
+			caller.update({
 				groupId: 'group-id',
 				featureGrants: [],
-				toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+				toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 				rowPolicies: {
 					version: 1,
-					policies: [
-						{
-							databaseType: 'duckdb',
-							database: 'sales',
-							schema: 'main',
-							table: 'orders',
-							access: 'full',
-						},
-					],
+					policies: [{ ...ORDERS_POLICY_TABLE, access: 'full' }],
 				},
 			}),
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
@@ -405,31 +349,17 @@ describe('user group routes', () => {
 		['and', '("tenant_id" = 7 AND "tenant_id" > 2)'],
 		['or', '("tenant_id" = 7 OR "tenant_id" > 2)'],
 	] as const)('validates guided %s conditions in the SQL guard before saving', async (combinator, compiled) => {
-		mocks.getProjectRowSecurity.mockResolvedValue({
-			version: 1,
-			tables: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					constraintColumns: ['tenant_id'],
-				},
-			],
-		});
+		mockOrdersRowSecurity();
 
-		await createCaller().update({
+		await caller.update({
 			groupId: 'group-id',
 			featureGrants: [],
-			toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 			rowPolicies: {
 				version: 1,
 				policies: [
 					{
-						databaseType: 'duckdb',
-						database: 'sales',
-						schema: 'main',
-						table: 'orders',
+						...ORDERS_POLICY_TABLE,
 						access: 'predicate',
 						mode: 'guided',
 						combinator,
@@ -464,18 +394,7 @@ describe('user group routes', () => {
 	});
 
 	it('validates and stores normalized manual SQL predicates', async () => {
-		mocks.getProjectRowSecurity.mockResolvedValue({
-			version: 1,
-			tables: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					constraintColumns: ['tenant_id'],
-				},
-			],
-		});
+		mockOrdersRowSecurity();
 		mocks.validateWarehouseRowPredicate.mockResolvedValue('"tenant_id" = 7');
 
 		await updateWithSql('WHERE tenant_id=7');
@@ -499,36 +418,8 @@ describe('user group routes', () => {
 		);
 	});
 
-	it('rejects unsafe or unconfigured manual SQL predicates', async () => {
-		mocks.getProjectRowSecurity.mockResolvedValue({
-			version: 1,
-			tables: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					constraintColumns: ['tenant_id'],
-				},
-			],
-		});
-		mocks.validateWarehouseRowPredicate.mockRejectedValue(new Error('Column "region" is not allowed.'));
-
-		await expect(updateWithSql("WHERE region = 'west'")).rejects.toMatchObject({
-			code: 'BAD_REQUEST',
-			message: 'Column "region" is not allowed.',
-		});
-		expect(mocks.updateUserGroup).not.toHaveBeenCalled();
-	});
-
-	it('rejects bare manual SQL predicates before validation', async () => {
-		await expect(updateWithSql('tenant_id = 7')).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-		expect(mocks.validateWarehouseRowPredicate).not.toHaveBeenCalled();
-		expect(mocks.updateUserGroup).not.toHaveBeenCalled();
-	});
-
-	it.each([' ', 'WHERE', ' where   '])(
-		'rejects incomplete manual SQL predicate %j before validation',
+	it.each(['tenant_id = 7', ' ', 'WHERE', ' where   '])(
+		'rejects bare or incomplete manual SQL predicate %j before validation',
 		async (predicate) => {
 			await expect(updateWithSql(predicate)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 			expect(mocks.validateWarehouseRowPredicate).not.toHaveBeenCalled();
@@ -537,18 +428,7 @@ describe('user group routes', () => {
 	);
 
 	it('rejects full queries in manual SQL mode', async () => {
-		mocks.getProjectRowSecurity.mockResolvedValue({
-			version: 1,
-			tables: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					constraintColumns: ['tenant_id'],
-				},
-			],
-		});
+		mockOrdersRowSecurity();
 		mocks.validateWarehouseRowPredicate.mockRejectedValue(new Error('Subqueries are not allowed.'));
 
 		await expect(updateWithSql('WHERE EXISTS (SELECT 1 FROM orders)')).rejects.toMatchObject({
@@ -564,22 +444,16 @@ describe('user group routes', () => {
 	});
 
 	it('rejects mode-less predicate request shapes', async () => {
-		const identity = {
-			databaseType: 'duckdb',
-			database: 'sales',
-			schema: 'main',
-			table: 'orders',
-			access: 'predicate',
-		};
+		const identity = { ...ORDERS_POLICY_TABLE, access: 'predicate' };
 		for (const policy of [
 			{ ...identity, conditions: [{ column: 'tenant_id', operator: 'equals', value: '7' }] },
 			{ ...identity, predicate: 'tenant_id = 7' },
 		]) {
 			await expect(
-				createCaller().update({
+				caller.update({
 					groupId: 'group-id',
 					featureGrants: [],
-					toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+					toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 					rowPolicies: { version: 1, policies: [policy] },
 				} as never),
 			).rejects.toMatchObject({ code: 'BAD_REQUEST' });
@@ -588,18 +462,7 @@ describe('user group routes', () => {
 	});
 
 	it('rejects condition columns outside the table registry', async () => {
-		mocks.getProjectRowSecurity.mockResolvedValue({
-			version: 1,
-			tables: [
-				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
-					constraintColumns: ['tenant_id'],
-				},
-			],
-		});
+		mockOrdersRowSecurity();
 
 		await expect(
 			updateWithConditions([{ column: 'region', operator: 'equals', value: 'west' }]),
@@ -625,7 +488,7 @@ describe('user group routes', () => {
 	it('returns the overview without an unlimited-groups license', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
 
-		await expect(createCaller().overview()).resolves.toEqual({ users: [], groups: [], memberships: [] });
+		await expect(caller.overview()).resolves.toEqual({ users: [], groups: [], memberships: [] });
 		expect(mocks.getUserGroupOverview).toHaveBeenCalledWith('project-id');
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
@@ -633,7 +496,7 @@ describe('user group routes', () => {
 	it('requires a project admin', async () => {
 		mocks.role = 'user';
 
-		await expect(createCaller().overview()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller.overview()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
 
@@ -643,7 +506,7 @@ describe('user group routes', () => {
 			{ identifier: 'finance', targetGroupId: 'analysts-id', targetGroupName: 'Analysts' },
 		]);
 
-		await expect(createCaller().effectiveOidcEnvMappings()).resolves.toEqual([
+		await expect(caller.effectiveOidcEnvMappings()).resolves.toEqual([
 			{ identifier: 'finance', targetGroupId: 'analysts-id', targetGroupName: 'Analysts' },
 		]);
 		expect(mocks.hasFeature).toHaveBeenCalledWith('sso');
@@ -654,19 +517,19 @@ describe('user group routes', () => {
 
 	it('fails safely when OIDC env mapping visibility is unavailable', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
-		await expect(createCaller().effectiveOidcEnvMappings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller.effectiveOidcEnvMappings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(mocks.listEffectiveOidcUserGroupMappings).not.toHaveBeenCalled();
 
 		mocks.hasFeature.mockResolvedValue(true);
 		mocks.env.OIDC_GROUP_NAO_GROUP_MAPPING = 'invalid';
-		await expect(createCaller().effectiveOidcEnvMappings()).rejects.toMatchObject({
+		await expect(caller.effectiveOidcEnvMappings()).rejects.toMatchObject({
 			code: 'INTERNAL_SERVER_ERROR',
 		});
 		expect(mocks.listEffectiveOidcUserGroupMappings).not.toHaveBeenCalled();
 
 		mocks.role = 'user';
 		mocks.env.OIDC_GROUP_NAO_GROUP_MAPPING = undefined;
-		await expect(createCaller().effectiveOidcEnvMappings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller.effectiveOidcEnvMappings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 		expect(mocks.hasFeature).toHaveBeenCalledTimes(2);
 	});
 
@@ -677,7 +540,7 @@ describe('user group routes', () => {
 			{ identifier: groupId, targetGroupId: 'analysts-id', targetGroupName: 'Analysts' },
 		]);
 
-		await expect(createCaller().effectiveMicrosoftEnvMappings()).resolves.toEqual([
+		await expect(caller.effectiveMicrosoftEnvMappings()).resolves.toEqual([
 			{ identifier: groupId, targetGroupId: 'analysts-id', targetGroupName: 'Analysts' },
 		]);
 		expect(mocks.listEffectiveEntraUserGroupMappings).toHaveBeenCalledWith('project-id', [
@@ -686,17 +549,14 @@ describe('user group routes', () => {
 	});
 
 	it('validates feature keys and creates a group with unlimited entitlement', async () => {
-		await expect(
-			createCaller().create({ name: 'Analysts', featureGrants: ['unknown'] as never }),
-		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+		await expect(caller.create({ name: 'Analysts', featureGrants: ['unknown'] as never })).rejects.toMatchObject({
+			code: 'BAD_REQUEST',
+		});
 
-		await createCaller().create({
+		await caller.create({
 			name: ' Analysts ',
 			featureGrants: ['storyCreation', 'storyCreation'],
-			toolCallDensityPolicy: {
-				defaultDensity: 'compact',
-				canChange: false,
-			},
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 		});
 
 		expect(mocks.hasFeature).toHaveBeenCalledWith('user-groups');
@@ -705,12 +565,9 @@ describe('user group routes', () => {
 			'project-id',
 			'Analysts',
 			['storyCreation'],
-			{
-				defaultDensity: 'compact',
-				canChange: false,
-			},
-			{ mode: 'restricted', strict: false, grants: [], patterns: [] },
-			{ mode: 'restricted', grants: [] },
+			COMPACT_DENSITY_POLICY,
+			RESTRICTED_DATABASE_ACCESS,
+			RESTRICTED_DOCS_ACCESS,
 			undefined,
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
@@ -723,7 +580,7 @@ describe('user group routes', () => {
 	it('creates free custom groups through the atomic limit query', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
 
-		await expect(createCaller().create({ name: 'Group' })).resolves.toEqual({
+		await expect(caller.create({ name: 'Group' })).resolves.toEqual({
 			id: 'group-id',
 			name: 'Analysts',
 		});
@@ -732,9 +589,9 @@ describe('user group routes', () => {
 			'project-id',
 			'Group',
 			[],
-			{ defaultDensity: 'detailed', canChange: true },
-			{ mode: 'restricted', strict: false, grants: [], patterns: [] },
-			{ mode: 'restricted', grants: [] },
+			DETAILED_DENSITY_POLICY,
+			RESTRICTED_DATABASE_ACCESS,
+			RESTRICTED_DOCS_ACCESS,
 			undefined,
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
@@ -754,7 +611,7 @@ describe('user group routes', () => {
 			),
 		);
 
-		await expect(createCaller().create({ name: 'Fourth group' })).rejects.toMatchObject({
+		await expect(caller.create({ name: 'Fourth group' })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Free projects can create up to 3 custom user groups. Enterprise enables unlimited groups.',
 		});
@@ -762,14 +619,8 @@ describe('user group routes', () => {
 		expect(mocks.createUserGroupWithinLimit).toHaveBeenCalledOnce();
 	});
 
-	it('allows a fourth custom group with unlimited entitlement', async () => {
-		await expect(createCaller().create({ name: 'Fourth group' })).resolves.toBeDefined();
-		expect(mocks.createUserGroupWithinLimit).not.toHaveBeenCalled();
-		expect(mocks.createUserGroup).toHaveBeenCalledOnce();
-	});
-
 	it('normalizes provider-specific SSO mappings on create', async () => {
-		await createCaller().create({
+		await caller.create({
 			name: 'Analysts',
 			ssoMappings: {
 				version: 1,
@@ -785,9 +636,9 @@ describe('user group routes', () => {
 			'project-id',
 			'Analysts',
 			[],
-			{ defaultDensity: 'detailed', canChange: true },
-			{ mode: 'restricted', strict: false, grants: [], patterns: [] },
-			{ mode: 'restricted', grants: [] },
+			DETAILED_DENSITY_POLICY,
+			RESTRICTED_DATABASE_ACCESS,
+			RESTRICTED_DOCS_ACCESS,
 			{
 				version: 1,
 				providers: {
@@ -806,7 +657,7 @@ describe('user group routes', () => {
 
 	it('rejects invalid Microsoft Entra group object IDs', async () => {
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				ssoMappings: {
 					version: 1,
@@ -822,7 +673,7 @@ describe('user group routes', () => {
 			syncState: 'ready',
 			objects: [{ databaseType: 'postgres', database: 'app', schema: 'public', table: 'orders' }],
 		});
-		await createCaller().create({
+		await caller.create({
 			name: 'Analysts',
 			databaseAccess: {
 				mode: 'restricted',
@@ -838,14 +689,14 @@ describe('user group routes', () => {
 			'project-id',
 			'Analysts',
 			[],
-			{ defaultDensity: 'detailed', canChange: true },
+			DETAILED_DENSITY_POLICY,
 			{
 				mode: 'restricted',
 				strict: false,
 				grants: [{ kind: 'schema', databaseType: 'postgres', database: 'app', schema: 'public' }],
 				patterns: [],
 			},
-			{ mode: 'restricted', grants: [] },
+			RESTRICTED_DOCS_ACCESS,
 			undefined,
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
@@ -856,7 +707,7 @@ describe('user group routes', () => {
 	});
 
 	it('normalizes and persists patterns even when they have no current matches', async () => {
-		await createCaller().create({
+		await caller.create({
 			name: 'Analysts',
 			databaseAccess: {
 				mode: 'restricted',
@@ -870,9 +721,9 @@ describe('user group routes', () => {
 			'project-id',
 			'Analysts',
 			[],
-			{ defaultDensity: 'detailed', canChange: true },
+			DETAILED_DENSITY_POLICY,
 			{ mode: 'restricted', strict: false, grants: [], patterns: ['future.*', 'sales.customer_*'] },
-			{ mode: 'restricted', grants: [] },
+			RESTRICTED_DOCS_ACCESS,
 			undefined,
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
@@ -884,13 +735,13 @@ describe('user group routes', () => {
 
 	it('bounds pattern count and length', async () => {
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				databaseAccess: { mode: 'restricted', grants: [], patterns: Array.from({ length: 201 }, () => 'x') },
 			}),
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				databaseAccess: { mode: 'restricted', grants: [], patterns: ['x'.repeat(256)] },
 			}),
@@ -899,13 +750,13 @@ describe('user group routes', () => {
 
 	it('rejects malformed docs grants and bounds their size', async () => {
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				docsAccess: { mode: 'restricted', grants: [{ kind: 'file', path: '../secret.md' }] },
 			}),
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				docsAccess: {
 					mode: 'restricted',
@@ -919,7 +770,7 @@ describe('user group routes', () => {
 	});
 
 	it('accepts unavailable database and docs grants so they remain removable', async () => {
-		await createCaller().create({
+		await caller.create({
 			name: 'Analysts',
 			databaseAccess: {
 				mode: 'restricted',
@@ -940,7 +791,7 @@ describe('user group routes', () => {
 			'project-id',
 			'Analysts',
 			[],
-			{ defaultDensity: 'detailed', canChange: true },
+			DETAILED_DENSITY_POLICY,
 			{
 				mode: 'restricted',
 				strict: true,
@@ -967,7 +818,7 @@ describe('user group routes', () => {
 
 	it('rejects invalid density policies', async () => {
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				featureGrants: [],
 				toolCallDensityPolicy: {
@@ -977,7 +828,7 @@ describe('user group routes', () => {
 			} as never),
 		).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 		await expect(
-			createCaller().create({
+			caller.create({
 				name: 'Analysts',
 				featureGrants: [],
 				toolCallDensityPolicy: {
@@ -991,23 +842,17 @@ describe('user group routes', () => {
 
 	it('updates feature grants and density policy together', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
-		await createCaller().update({
+		await caller.update({
 			groupId: 'group-id',
 			name: 'Analysts',
 			featureGrants: ['automationCreation'],
-			toolCallDensityPolicy: {
-				defaultDensity: 'detailed',
-				canChange: true,
-			},
+			toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 		});
 
 		expect(mocks.updateUserGroup).toHaveBeenCalledWith('project-id', 'group-id', {
 			name: 'Analysts',
 			featureGrants: ['automationCreation'],
-			toolCallDensityPolicy: {
-				defaultDensity: 'detailed',
-				canChange: true,
-			},
+			toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 		});
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
@@ -1087,8 +932,8 @@ describe('user group routes', () => {
 	it('deletes groups and changes memberships without unlimited entitlement', async () => {
 		mocks.hasFeature.mockResolvedValue(false);
 
-		await createCaller().delete({ groupId: 'group-id' });
-		await createCaller().setMembership({ groupId: 'group-id', userId: 'target-user-id', isMember: true });
+		await caller.delete({ groupId: 'group-id' });
+		await caller.setMembership({ groupId: 'group-id', userId: 'target-user-id', isMember: true });
 
 		expect(mocks.deleteUserGroup).toHaveBeenCalledWith('project-id', 'group-id');
 		expect(mocks.setUserGroupMembership).toHaveBeenCalledWith('project-id', 'group-id', 'target-user-id', true);
@@ -1099,20 +944,17 @@ describe('user group routes', () => {
 		[
 			'update',
 			() =>
-				createCaller().update({
+				caller.update({
 					groupId: 'locked-id',
 					featureGrants: [],
-					toolCallDensityPolicy: {
-						defaultDensity: 'detailed',
-						canChange: true,
-					},
+					toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 				}),
 		],
-		['delete', () => createCaller().delete({ groupId: 'locked-id' })],
+		['delete', () => caller.delete({ groupId: 'locked-id' })],
 		[
 			'setMembership',
 			() =>
-				createCaller().setMembership({
+				caller.setMembership({
 					groupId: 'locked-id',
 					userId: 'target-user-id',
 					isMember: true,
@@ -1133,22 +975,16 @@ describe('user group routes', () => {
 	});
 
 	it('preserves database access when update omits it', async () => {
-		await createCaller().update({
+		await caller.update({
 			groupId: 'group-id',
 			featureGrants: [],
-			toolCallDensityPolicy: {
-				defaultDensity: 'detailed',
-				canChange: true,
-			},
+			toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 		});
 
 		expect(mocks.updateUserGroup).toHaveBeenCalledWith('project-id', 'group-id', {
 			name: undefined,
 			featureGrants: [],
-			toolCallDensityPolicy: {
-				defaultDensity: 'detailed',
-				canChange: true,
-			},
+			toolCallDensityPolicy: DETAILED_DENSITY_POLICY,
 		});
 	});
 
@@ -1159,7 +995,7 @@ describe('user group routes', () => {
 			objects: [{ databaseType: 'postgres', database: 'app', schema: 'public', table: 'users' }],
 		});
 
-		await expect(createCaller().contextCatalog()).resolves.toEqual({
+		await expect(caller.contextCatalog()).resolves.toEqual({
 			syncState: 'ready',
 			objects: [{ databaseType: 'postgres', database: 'app', schema: 'public', table: 'users' }],
 		});
@@ -1174,7 +1010,7 @@ describe('user group routes', () => {
 			entries: [{ kind: 'file', path: 'finance/kpis.md' }],
 		});
 
-		await expect(createCaller().docsContextCatalog()).resolves.toEqual({
+		await expect(caller.docsContextCatalog()).resolves.toEqual({
 			syncState: 'ready',
 			entries: [{ kind: 'file', path: 'finance/kpis.md' }],
 		});
@@ -1189,7 +1025,7 @@ describe('user group routes', () => {
 			entries: [{ kind: 'folder', path: 'models' }],
 		});
 
-		await expect(createCaller().filesContextCatalog()).resolves.toEqual({
+		await expect(caller.filesContextCatalog()).resolves.toEqual({
 			syncState: 'ready',
 			entries: [{ kind: 'folder', path: 'models' }],
 		});
@@ -1197,40 +1033,17 @@ describe('user group routes', () => {
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
 
-	it('returns effective access to viewers', async () => {
-		mocks.role = 'viewer';
-
-		await expect(createCaller().effectiveAccess()).resolves.toEqual({
-			features: {
-				storyCreation: true,
-				customStoryCreation: false,
-				automationCreation: false,
-			},
-			toolCallDensityPolicy: {
-				defaultDensity: 'compact',
-				canChange: false,
-			},
-			canSeeAdvancedSettings: false,
-			databaseAccess: { mode: 'restricted', strict: false, grants: [], patterns: [] },
-			docsAccess: { mode: 'restricted', grants: [] },
-		});
-		expect(mocks.resolveUserGroupAccess).toHaveBeenCalledWith('project-id', 'user-id');
-	});
-
 	it('returns effective access for a project user to admins', async () => {
-		await expect(createCaller().effectiveAccessForUser({ userId: 'target-user-id' })).resolves.toEqual({
+		await expect(caller.effectiveAccessForUser({ userId: 'target-user-id' })).resolves.toEqual({
 			features: {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
 			},
-			toolCallDensityPolicy: {
-				defaultDensity: 'compact',
-				canChange: false,
-			},
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 			canSeeAdvancedSettings: false,
-			databaseAccess: { mode: 'restricted', strict: false, grants: [], patterns: [] },
-			docsAccess: { mode: 'restricted', grants: [] },
+			databaseAccess: RESTRICTED_DATABASE_ACCESS,
+			docsAccess: RESTRICTED_DOCS_ACCESS,
 			rowPolicies: [{ version: 1, policies: [] }],
 		});
 		expect(mocks.getUserRoleInProject).toHaveBeenCalledWith('project-id', 'target-user-id');
@@ -1242,7 +1055,7 @@ describe('user group routes', () => {
 			userId === 'missing-user-id' ? null : mocks.role,
 		);
 
-		await expect(createCaller().effectiveAccessForUser({ userId: 'missing-user-id' })).rejects.toMatchObject({
+		await expect(caller.effectiveAccessForUser({ userId: 'missing-user-id' })).rejects.toMatchObject({
 			code: 'NOT_FOUND',
 			message: 'This user does not have access to the project.',
 		});
@@ -1251,13 +1064,13 @@ describe('user group routes', () => {
 
 	it('requires an admin for arbitrary-user effective access', async () => {
 		mocks.role = 'user';
-		await expect(createCaller().effectiveAccessForUser({ userId: 'target-user-id' })).rejects.toMatchObject({
+		await expect(caller.effectiveAccessForUser({ userId: 'target-user-id' })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 		});
 
 		mocks.role = 'admin';
 		mocks.hasFeature.mockResolvedValue(false);
-		await expect(createCaller().effectiveAccessForUser({ userId: 'target-user-id' })).resolves.toBeDefined();
+		await expect(caller.effectiveAccessForUser({ userId: 'target-user-id' })).resolves.toBeDefined();
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
 
@@ -1265,19 +1078,16 @@ describe('user group routes', () => {
 		mocks.role = 'viewer';
 		mocks.hasFeature.mockResolvedValue(false);
 
-		await expect(createCaller().effectiveAccess()).resolves.toEqual({
+		await expect(caller.effectiveAccess()).resolves.toEqual({
 			features: {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
 			},
-			toolCallDensityPolicy: {
-				defaultDensity: 'compact',
-				canChange: false,
-			},
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 			canSeeAdvancedSettings: false,
-			databaseAccess: { mode: 'restricted', strict: false, grants: [], patterns: [] },
-			docsAccess: { mode: 'restricted', grants: [] },
+			databaseAccess: RESTRICTED_DATABASE_ACCESS,
+			docsAccess: RESTRICTED_DOCS_ACCESS,
 		});
 		expect(mocks.resolveUserGroupAccess).toHaveBeenCalledWith('project-id', 'user-id');
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
@@ -1285,25 +1095,17 @@ describe('user group routes', () => {
 });
 
 describe('user group budget', () => {
-	beforeEach(() => {
-		vi.clearAllMocks();
-		mocks.getUserRoleInProject.mockResolvedValue('admin');
-		mocks.hasFeature.mockResolvedValue(true);
-		mocks.createUserGroup.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
-		mocks.updateUserGroup.mockResolvedValue({ id: 'group-id', name: 'Analysts' });
-	});
-
 	it('saves the budget of a new group with the group itself', async () => {
-		await createCaller().create({ name: 'Analysts', budgetLimitUsd: 300 });
+		await caller.create({ name: 'Analysts', budgetLimitUsd: 300 });
 
 		expect(mocks.setGroupBudget).toHaveBeenCalledWith('project-id', 'group-id', 300);
 	});
 
 	it('leaves the group budget untouched when no limit is sent', async () => {
-		await createCaller().update({
+		await caller.update({
 			groupId: 'group-id',
 			featureGrants: [],
-			toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+			toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 		});
 
 		expect(mocks.setGroupBudget).not.toHaveBeenCalled();
@@ -1312,7 +1114,7 @@ describe('user group budget', () => {
 	it('rejects a group budget without the license before creating the group', async () => {
 		mocks.hasFeature.mockImplementation(async (feature) => feature !== 'user-budget');
 
-		await expect(createCaller().create({ name: 'Analysts', budgetLimitUsd: 300 })).rejects.toMatchObject({
+		await expect(caller.create({ name: 'Analysts', budgetLimitUsd: 300 })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 		});
 		expect(mocks.createUserGroup).not.toHaveBeenCalled();
@@ -1320,32 +1122,16 @@ describe('user group budget', () => {
 	});
 });
 
-function createCaller() {
-	return testRouter.createCaller({
-		session: {
-			user: {
-				id: 'user-id',
-				name: 'Test User',
-				email: 'test@example.com',
-			},
-		},
-		selectedProjectId: 'project-id',
-	} as never);
-}
-
 function updateWithConditions(conditions: Array<{ column: string; operator: string; value?: string }>) {
-	return createCaller().update({
+	return caller.update({
 		groupId: 'group-id',
 		featureGrants: [],
-		toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+		toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 		rowPolicies: {
 			version: 1,
 			policies: [
 				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
+					...ORDERS_POLICY_TABLE,
 					access: 'predicate',
 					mode: 'guided',
 					combinator: 'and',
@@ -1357,18 +1143,15 @@ function updateWithConditions(conditions: Array<{ column: string; operator: stri
 }
 
 function updateWithSql(predicate: string) {
-	return createCaller().update({
+	return caller.update({
 		groupId: 'group-id',
 		featureGrants: [],
-		toolCallDensityPolicy: { defaultDensity: 'compact', canChange: false },
+		toolCallDensityPolicy: COMPACT_DENSITY_POLICY,
 		rowPolicies: {
 			version: 1,
 			policies: [
 				{
-					databaseType: 'duckdb',
-					database: 'sales',
-					schema: 'main',
-					table: 'orders',
+					...ORDERS_POLICY_TABLE,
 					access: 'predicate',
 					mode: 'sql',
 					predicate,
@@ -1376,4 +1159,8 @@ function updateWithSql(predicate: string) {
 			],
 		},
 	});
+}
+
+function mockOrdersRowSecurity(): void {
+	mocks.getProjectRowSecurity.mockResolvedValue({ version: 1, tables: [ORDERS_TABLE] });
 }

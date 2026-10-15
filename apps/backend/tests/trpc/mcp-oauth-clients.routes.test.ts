@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createTestCaller } from '../helpers/trpc-caller';
+
 const testState = vi.hoisted(() => ({
 	rows: [] as Array<Record<string, unknown>>,
 	createOAuthClient: vi.fn(),
@@ -50,13 +52,7 @@ import { mcpOAuthClientsRoutes } from '../../src/trpc/mcp-oauth-clients.routes';
 import { router } from '../../src/trpc/trpc';
 
 const testRouter = router({ mcpOAuthClients: mcpOAuthClientsRoutes });
-
-function caller() {
-	return testRouter.createCaller({
-		session: { user: { id: 'user-id' }, session: { token: 'sess-tok' } },
-		selectedProjectId: 'project-id',
-	} as never);
-}
+const caller = createTestCaller(testRouter);
 
 describe('mcpOAuthClients router', () => {
 	beforeEach(() => {
@@ -72,7 +68,7 @@ describe('mcpOAuthClients router', () => {
 		testState.rows = [
 			{ clientId: 'c1', name: 'dust', redirectUris: ['https://x/cb'], isPublic: false, createdAt: new Date() },
 		];
-		const result = await caller().mcpOAuthClients.list();
+		const result = await caller.mcpOAuthClients.list();
 		expect(result).toHaveLength(1);
 		expect(result[0]).toMatchObject({ clientId: 'c1', name: 'dust', isPublic: false });
 		expect(JSON.stringify(result)).not.toContain('secret');
@@ -80,7 +76,7 @@ describe('mcpOAuthClients router', () => {
 
 	it('creates a confidential client and returns the secret once', async () => {
 		testState.createOAuthClient.mockResolvedValue({ client_id: 'new-id', client_secret: 's3cr3t' });
-		const result = await caller().mcpOAuthClients.create({
+		const result = await caller.mcpOAuthClients.create({
 			name: 'dust.tt',
 			redirectUris: ['https://eu.dust.tt/oauth/mcp_static/finalize'],
 			confidential: true,
@@ -95,7 +91,7 @@ describe('mcpOAuthClients router', () => {
 
 	it('creates a public client with no secret', async () => {
 		testState.createOAuthClient.mockResolvedValue({ client_id: 'pub-id' });
-		const result = await caller().mcpOAuthClients.create({
+		const result = await caller.mcpOAuthClients.create({
 			name: 'cli',
 			redirectUris: ['https://x/cb'],
 			confidential: false,
@@ -107,7 +103,7 @@ describe('mcpOAuthClients router', () => {
 	});
 
 	it('deletes a client by id and returns it', async () => {
-		const result = await caller().mcpOAuthClients.delete({ clientId: 'c1' });
+		const result = await caller.mcpOAuthClients.delete({ clientId: 'c1' });
 		expect(result).toEqual({ clientId: 'c1' });
 		// Called once with a where condition (drizzle eq(), an opaque SQL object — the returned id
 		// mirrors the requested client, confirming the handler targets it).
@@ -117,6 +113,6 @@ describe('mcpOAuthClients router', () => {
 
 	it('rejects non-admins', async () => {
 		testState.role = 'user';
-		await expect(caller().mcpOAuthClients.list()).rejects.toThrow(/admin/i);
+		await expect(caller.mcpOAuthClients.list()).rejects.toThrow(/admin/i);
 	});
 });

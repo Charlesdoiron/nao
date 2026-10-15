@@ -58,6 +58,13 @@ const catalog = {
 	],
 };
 
+const ORDERS_TABLE = {
+	databaseType: 'postgres',
+	database: 'analytics',
+	schema: 'public',
+	table: 'orders',
+};
+
 describe('warehouse Context access', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -65,16 +72,15 @@ describe('warehouse Context access', () => {
 		vi.mocked(getUserRoleInProject).mockResolvedValue('user');
 		vi.mocked(getDatabaseContextCatalog).mockReturnValue(catalog);
 		vi.mocked(getProjectRowSecurity).mockResolvedValue({ version: 1, tables: [] });
-		vi.mocked(resolveUserGroupAccess).mockResolvedValue({
-			groupNames: ['All Users', 'Finance'],
-			features: [],
-			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
-			databaseAccess: { mode: 'restricted', strict: true, grants: [], patterns: [] },
-			docsAccess: { mode: 'restricted', grants: [{ kind: 'folder', path: 'finance' }] },
-			filesAccess: ALL_FILES_CONTEXT_ACCESS,
-			mcpAccess: { mode: 'restricted', grants: [{ kind: 'server', server: 'github' }] },
-			rowPolicies: [],
-		});
+		vi.mocked(resolveUserGroupAccess).mockResolvedValue(
+			userGroupAccess({
+				groupNames: ['All Users', 'Finance'],
+				databaseAccess: { mode: 'restricted', strict: true, grants: [], patterns: [] },
+				docsAccess: { mode: 'restricted', grants: [{ kind: 'folder', path: 'finance' }] },
+				filesAccess: ALL_FILES_CONTEXT_ACCESS,
+				mcpAccess: { mode: 'restricted', grants: [{ kind: 'server', server: 'github' }] },
+			}),
+		);
 	});
 
 	it('enforces table access without an unlimited-groups entitlement', async () => {
@@ -173,61 +179,44 @@ describe('warehouse Context access', () => {
 	});
 
 	it('keeps licensed row-security policy resolution unchanged', async () => {
-		const orders = {
-			databaseType: 'postgres',
-			database: 'analytics',
-			schema: 'public',
-			table: 'orders',
-		};
-		vi.mocked(getProjectRowSecurity).mockResolvedValue({
-			version: 1,
-			tables: [{ ...orders, constraintColumns: ['tenant_id'] }],
-		});
-		vi.mocked(resolveUserGroupAccess).mockResolvedValue({
-			groupNames: ['Finance'],
-			features: [],
-			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
-			databaseAccess: { mode: 'all', strict: true },
-			docsAccess: { mode: 'all' },
-			rowPolicies: [{ version: 1, policies: [{ ...orders, access: 'full' }] }],
-		});
+		protectOrdersByTenant();
+		vi.mocked(resolveUserGroupAccess).mockResolvedValue(
+			userGroupAccess({
+				groupNames: ['Finance'],
+				rowPolicies: [{ version: 1, policies: [{ ...ORDERS_TABLE, access: 'full' }] }],
+			}),
+		);
 
 		await expect(resolveProjectContextAccess('project-1', 'user-1', '/project')).resolves.toMatchObject({
 			warehouseRowSecurity: {
 				enforced: true,
-				tables: [{ ...orders, constraintColumns: ['tenant_id'], access: 'full' }],
+				tables: [{ ...ORDERS_TABLE, constraintColumns: ['tenant_id'], access: 'full' }],
 			},
 		});
 	});
 
 	it('does not widen rows with policies excluded by same-group Context filtering', async () => {
-		const orders = {
-			databaseType: 'postgres',
-			database: 'analytics',
-			schema: 'public',
-			table: 'orders',
-		};
-		vi.mocked(getProjectRowSecurity).mockResolvedValue({
-			version: 1,
-			tables: [{ ...orders, constraintColumns: ['tenant_id'] }],
-		});
-		vi.mocked(resolveUserGroupAccess).mockResolvedValue({
-			groupNames: ['Context group', 'Non-Context group'],
-			features: [],
-			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
-			databaseAccess: {
-				mode: 'restricted',
-				strict: true,
-				grants: [{ kind: 'table', ...orders }],
-				patterns: [],
-			},
-			docsAccess: { mode: 'restricted', grants: [] },
-			rowPolicies: [
+		protectOrdersByTenant();
+		const ordersOnlyGroups = (rowPolicies: UserGroupAccess['rowPolicies']) =>
+			userGroupAccess({
+				groupNames: ['Context group', 'Non-Context group'],
+				databaseAccess: {
+					mode: 'restricted',
+					strict: true,
+					grants: [{ kind: 'table', ...ORDERS_TABLE }],
+					patterns: [],
+				},
+				docsAccess: { mode: 'restricted', grants: [] },
+				rowPolicies,
+			});
+
+		vi.mocked(resolveUserGroupAccess).mockResolvedValue(
+			ordersOnlyGroups([
 				{
 					version: 1,
 					policies: [
 						{
-							...orders,
+							...ORDERS_TABLE,
 							access: 'predicate',
 							mode: 'sql',
 							predicate: 'WHERE tenant_id = 7',
@@ -235,36 +224,25 @@ describe('warehouse Context access', () => {
 					],
 				},
 				{ version: 1, policies: [] },
-			],
-		});
-
+			]),
+		);
 		await expect(resolveProjectContextAccess('project-1', 'user-1', '/project')).resolves.toMatchObject({
 			warehouseRowSecurity: {
 				enforced: true,
-				tables: [{ ...orders, access: 'predicate', predicate: '(tenant_id = 7)' }],
+				tables: [{ ...ORDERS_TABLE, access: 'predicate', predicate: '(tenant_id = 7)' }],
 			},
 		});
 
-		vi.mocked(resolveUserGroupAccess).mockResolvedValue({
-			groupNames: ['Context group', 'Non-Context group'],
-			features: [],
-			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
-			databaseAccess: {
-				mode: 'restricted',
-				strict: true,
-				grants: [{ kind: 'table', ...orders }],
-				patterns: [],
-			},
-			docsAccess: { mode: 'restricted', grants: [] },
-			rowPolicies: [
+		vi.mocked(resolveUserGroupAccess).mockResolvedValue(
+			ordersOnlyGroups([
 				{ version: 1, policies: [] },
 				{ version: 1, policies: [] },
-			],
-		});
+			]),
+		);
 		await expect(resolveProjectContextAccess('project-1', 'user-1', '/project')).resolves.toMatchObject({
 			warehouseRowSecurity: {
 				enforced: true,
-				tables: [{ ...orders, access: 'none' }],
+				tables: [{ ...ORDERS_TABLE, access: 'none' }],
 			},
 		});
 	});
@@ -450,14 +428,7 @@ describe('warehouse Context access', () => {
 	});
 
 	it('surfaces catalog filesystem errors instead of bypassing enforcement', async () => {
-		vi.mocked(resolveUserGroupAccess).mockResolvedValue({
-			groupNames: ['All Users'],
-			features: [],
-			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
-			databaseAccess: { mode: 'all', strict: true },
-			docsAccess: { mode: 'all' },
-			rowPolicies: [],
-		});
+		vi.mocked(resolveUserGroupAccess).mockResolvedValue(userGroupAccess({ groupNames: ['All Users'] }));
 		vi.mocked(getDatabaseContextCatalog).mockImplementation(() => {
 			throw new Error('permission denied');
 		});
@@ -467,3 +438,25 @@ describe('warehouse Context access', () => {
 		);
 	});
 });
+
+type UserGroupAccess = Awaited<ReturnType<typeof resolveUserGroupAccess>>;
+
+function userGroupAccess(overrides: Partial<UserGroupAccess>): UserGroupAccess {
+	return {
+		groupNames: [],
+		features: [],
+		toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: false },
+		databaseAccess: { mode: 'all', strict: true },
+		docsAccess: { mode: 'all' },
+		mcpAccess: { mode: 'all' },
+		rowPolicies: [],
+		...overrides,
+	};
+}
+
+function protectOrdersByTenant(): void {
+	vi.mocked(getProjectRowSecurity).mockResolvedValue({
+		version: 1,
+		tables: [{ ...ORDERS_TABLE, constraintColumns: ['tenant_id'] }],
+	});
+}

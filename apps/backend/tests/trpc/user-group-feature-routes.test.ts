@@ -1,6 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createTestCaller } from '../helpers/trpc-caller';
+
 const mocks = vi.hoisted(() => ({
 	automationsEnabled: true,
 	archiveStory: vi.fn(),
@@ -133,6 +135,9 @@ const testRouter = router({
 	storyShare: sharedStoryRoutes,
 	story: storyRoutes,
 });
+const caller = createTestCaller(testRouter);
+const NEW_AUTOMATION = { prompt: 'Summarize daily activity', webhookEnabled: true };
+const EXISTING_STORY = { chatId: 'chat-id', storySlug: 'existing-story' };
 
 describe('user group feature route enforcement', () => {
 	beforeEach(() => {
@@ -175,12 +180,7 @@ describe('user group feature route enforcement', () => {
 	it('denies Automation creation after the beta and role checks', async () => {
 		mockEffectiveFeatures(['storyCreation']);
 
-		await expect(
-			createCaller().automation.create({
-				prompt: 'Summarize daily activity',
-				webhookEnabled: true,
-			}),
-		).rejects.toMatchObject({
+		await expect(caller.automation.create(NEW_AUTOMATION)).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Automation creation is not enabled for your user group.',
 		});
@@ -195,19 +195,19 @@ describe('user group feature route enforcement', () => {
 			.mockResolvedValueOnce(null)
 			.mockResolvedValueOnce({ id: 'automation-id', scheduledJobId: null });
 
-		await expect(createCaller().automation.list()).resolves.toEqual([]);
-		await expect(createCaller().automation.get({ id: 'automation-id' })).resolves.toBeNull();
+		await expect(caller.automation.list()).resolves.toEqual([]);
+		await expect(caller.automation.get({ id: 'automation-id' })).resolves.toBeNull();
 		await expect(
-			createCaller().automation.update({
+			caller.automation.update({
 				id: 'automation-id',
 				title: 'Existing Automation',
 				prompt: 'Updated prompt',
 				webhookEnabled: true,
 			}),
 		).resolves.toBeNull();
-		await expect(createCaller().automation.setEnabled({ id: 'automation-id', enabled: false })).resolves.toBeNull();
-		await expect(createCaller().automation.runNow({ id: 'automation-id' })).resolves.toBeNull();
-		await expect(createCaller().automation.delete({ id: 'automation-id' })).resolves.toEqual({ success: true });
+		await expect(caller.automation.setEnabled({ id: 'automation-id', enabled: false })).resolves.toBeNull();
+		await expect(caller.automation.runNow({ id: 'automation-id' })).resolves.toBeNull();
+		await expect(caller.automation.delete({ id: 'automation-id' })).resolves.toEqual({ success: true });
 		expect(mocks.resolveUserGroupAccess).not.toHaveBeenCalled();
 		expect(mocks.listAutomations).toHaveBeenCalledWith('project-id', 'user-id');
 		expect(mocks.getAutomation).toHaveBeenCalledWith('project-id', 'user-id', 'automation-id');
@@ -225,9 +225,9 @@ describe('user group feature route enforcement', () => {
 			new TRPCError({ code: 'FORBIDDEN', message: 'Cloud billing access is restricted' }),
 		);
 
-		await expect(createCaller().automation.setEnabled({ id: 'automation-id', enabled: false })).resolves.toBeNull();
+		await expect(caller.automation.setEnabled({ id: 'automation-id', enabled: false })).resolves.toBeNull();
 		await expect(
-			createCaller().automation.update({
+			caller.automation.update({
 				id: 'automation-id',
 				title: 'Paused',
 				prompt: 'Prompt',
@@ -237,9 +237,7 @@ describe('user group feature route enforcement', () => {
 		).resolves.toBeNull();
 		expect(mocks.assertOrganizationCloudBillingAccess).not.toHaveBeenCalled();
 
-		await expect(
-			createCaller().automation.setEnabled({ id: 'automation-id', enabled: true }),
-		).rejects.toMatchObject({
+		await expect(caller.automation.setEnabled({ id: 'automation-id', enabled: true })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Cloud billing access is restricted',
 		});
@@ -249,12 +247,7 @@ describe('user group feature route enforcement', () => {
 	it('preserves the Automation beta check before the creation grant', async () => {
 		mocks.automationsEnabled = false;
 
-		await expect(
-			createCaller().automation.create({
-				prompt: 'Summarize daily activity',
-				webhookEnabled: true,
-			}),
-		).rejects.toMatchObject({
+		await expect(caller.automation.create(NEW_AUTOMATION)).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Automations are disabled on this instance.',
 		});
@@ -264,12 +257,7 @@ describe('user group feature route enforcement', () => {
 	it('preserves the Automation role check before the creation grant', async () => {
 		mocks.role = 'viewer';
 
-		await expect(
-			createCaller().automation.create({
-				prompt: 'Summarize daily activity',
-				webhookEnabled: true,
-			}),
-		).rejects.toMatchObject({
+		await expect(caller.automation.create(NEW_AUTOMATION)).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Viewers cannot perform this action',
 		});
@@ -279,7 +267,7 @@ describe('user group feature route enforcement', () => {
 	it('preserves Story ownership before feature grants', async () => {
 		mocks.getStoryOwnerId.mockResolvedValue('another-user');
 
-		await expect(createCaller().story.getStandalone({ storyId: 'story-id' })).rejects.toMatchObject({
+		await expect(caller.story.getStandalone({ storyId: 'story-id' })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'You are not authorized to modify this story.',
 		});
@@ -289,7 +277,7 @@ describe('user group feature route enforcement', () => {
 	it('allows management of an owned Story without the creation grant', async () => {
 		mockEffectiveFeatures(['automationCreation']);
 
-		await expect(createCaller().story.rename({ storyId: 'story-id', title: 'Renamed' })).resolves.toBeUndefined();
+		await expect(caller.story.rename({ storyId: 'story-id', title: 'Renamed' })).resolves.toBeUndefined();
 		expect(mocks.renameStory).toHaveBeenCalledWith('story-id', 'Renamed');
 		expect(mocks.resolveUserGroupAccess).not.toHaveBeenCalled();
 	});
@@ -297,24 +285,18 @@ describe('user group feature route enforcement', () => {
 	it('allows listing, viewing, archiving, downloading, and sharing existing Stories without the creation grant', async () => {
 		mockEffectiveFeatures([]);
 
-		await expect(createCaller().story.listAll()).resolves.toHaveLength(1);
+		await expect(caller.story.listAll()).resolves.toHaveLength(1);
+		await expect(caller.story.getLatest(EXISTING_STORY)).resolves.toMatchObject({ storyId: 'story-id' });
+		await expect(caller.story.archive(EXISTING_STORY)).resolves.toBeUndefined();
 		await expect(
-			createCaller().story.getLatest({ chatId: 'chat-id', storySlug: 'existing-story' }),
-		).resolves.toMatchObject({ storyId: 'story-id' });
-		await expect(
-			createCaller().story.archive({ chatId: 'chat-id', storySlug: 'existing-story' }),
-		).resolves.toBeUndefined();
-		await expect(
-			createCaller().story.download({
-				chatId: 'chat-id',
-				storySlug: 'existing-story',
+			caller.story.download({
+				...EXISTING_STORY,
 				format: 'html',
 			}),
 		).resolves.toEqual({ body: 'download' });
 		await expect(
-			createCaller().storyShare.create({
-				chatId: 'chat-id',
-				storySlug: 'existing-story',
+			caller.storyShare.create({
+				...EXISTING_STORY,
 				visibility: 'specific',
 				notify: false,
 			}),
@@ -339,9 +321,8 @@ describe('user group feature route enforcement', () => {
 		});
 		mocks.getQueryDataFromCode.mockResolvedValue(queryData);
 
-		await createCaller().story.download({
-			chatId: 'chat-id',
-			storySlug: 'existing-story',
+		await caller.story.download({
+			...EXISTING_STORY,
 			format: 'html',
 			versionNumber: 1,
 		});
@@ -379,9 +360,8 @@ describe('user group feature route enforcement', () => {
 			cachedAt: new Date(),
 		});
 
-		await createCaller().story.download({
-			chatId: 'chat-id',
-			storySlug: 'existing-story',
+		await caller.story.download({
+			...EXISTING_STORY,
 			format: 'html',
 			versionNumber: 2,
 		});
@@ -410,7 +390,7 @@ describe('user group feature route enforcement', () => {
 			mockEffectiveFeatures(['automationCreation']);
 
 			await expect(
-				createCaller().story.createVersion({
+				caller.story.createVersion({
 					chatId: 'chat-id',
 					storySlug: 'missing-story',
 					title: 'Missing Story',
@@ -429,9 +409,8 @@ describe('user group feature route enforcement', () => {
 		mockEffectiveFeatures(['automationCreation']);
 
 		await expect(
-			createCaller().story.createVersion({
-				chatId: 'chat-id',
-				storySlug: 'existing-story',
+			caller.story.createVersion({
+				...EXISTING_STORY,
 				title: 'Existing Story',
 				code: '# Updated',
 				action: 'update',
@@ -450,11 +429,4 @@ function mockEffectiveFeatures(features: Array<'storyCreation' | 'automationCrea
 			canChange: true,
 		},
 	});
-}
-
-function createCaller() {
-	return testRouter.createCaller({
-		session: { user: { id: 'user-id', name: 'Test User', email: 'test@example.com' } },
-		selectedProjectId: 'project-id',
-	} as never);
 }

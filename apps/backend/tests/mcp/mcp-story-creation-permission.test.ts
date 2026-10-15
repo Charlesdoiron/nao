@@ -14,36 +14,15 @@ vi.mock('../../src/utils/llm', async (importOriginal) => ({
 import { registerAssetTools } from '../../src/mcp/tools/asset-tools';
 import { registerContextLayerTools } from '../../src/mcp/tools/context-layer';
 import { registerSubAgentTools } from '../../src/mcp/tools/sub-agent';
-
-class FakeMcpServer {
-	readonly tools = new Map<string, { description?: string; inputSchema?: Record<string, unknown> }>();
-
-	registerTool(name: string, config: { description?: string; inputSchema?: Record<string, unknown> }): void {
-		this.tools.set(name, config);
-	}
-}
-
-function createContext(storyCreationEnabled: boolean, customStoryCreationEnabled = false) {
-	return {
-		userId: 'user-id',
-		projectId: 'project-id',
-		settings: {
-			contextLayerModeEnabled: true,
-			subAgentModeEnabled: true,
-		},
-		chartDataMode: false,
-		storyCreationEnabled,
-		customStoryCreationEnabled,
-	} as never;
-}
+import { createMcpContext, FakeMcpServer } from '../helpers/fake-mcp-server';
 
 describe('MCP Story creation permission', () => {
 	it('omits create_story while retaining existing-Story tools when denied', () => {
 		const server = new FakeMcpServer();
-		const context = createContext(false);
+		const context = createMcpContext();
 
-		registerContextLayerTools(server as never, context, []);
-		registerAssetTools(server as never, context);
+		registerContextLayerTools(server.asMcpServer(), context, []);
+		registerAssetTools(server.asMcpServer(), context);
 
 		expect([...server.tools.keys()]).not.toContain('create_story');
 		expect([...server.tools.keys()]).toEqual(
@@ -54,7 +33,7 @@ describe('MCP Story creation permission', () => {
 	it('registers create_story when allowed', () => {
 		const server = new FakeMcpServer();
 
-		registerContextLayerTools(server as never, createContext(true), []);
+		registerContextLayerTools(server.asMcpServer(), createMcpContext({ storyCreationEnabled: true }), []);
 
 		expect([...server.tools.keys()]).toContain('create_story');
 	});
@@ -62,7 +41,7 @@ describe('MCP Story creation permission', () => {
 	it('does not promise Story creation through ask_nao when denied', async () => {
 		const server = new FakeMcpServer();
 
-		await registerSubAgentTools(server as never, createContext(false));
+		await registerSubAgentTools(server.asMcpServer(), createMcpContext());
 
 		const description = server.tools.get('ask_nao')?.description;
 		expect(description).toContain('New Story creation is unavailable');
@@ -74,8 +53,11 @@ describe('MCP Story creation permission', () => {
 		const withCustomStories = new FakeMcpServer();
 		const withoutCustomStories = new FakeMcpServer();
 
-		await registerSubAgentTools(withCustomStories as never, createContext(true, true));
-		await registerSubAgentTools(withoutCustomStories as never, createContext(true, false));
+		await registerSubAgentTools(
+			withCustomStories.asMcpServer(),
+			createMcpContext({ storyCreationEnabled: true, customStoryCreationEnabled: true }),
+		);
+		await registerSubAgentTools(withoutCustomStories.asMcpServer(), createMcpContext({ storyCreationEnabled: true }));
 
 		expect(withCustomStories.tools.get('ask_nao')?.description).toContain('CUSTOM STORIES');
 		expect(withoutCustomStories.tools.get('ask_nao')?.description).not.toContain('CUSTOM STORIES');
@@ -85,8 +67,12 @@ describe('MCP Story creation permission', () => {
 		const allowed = new FakeMcpServer();
 		const denied = new FakeMcpServer();
 
-		registerContextLayerTools(allowed as never, createContext(true, true), []);
-		registerContextLayerTools(denied as never, createContext(true, false), []);
+		registerContextLayerTools(
+			allowed.asMcpServer(),
+			createMcpContext({ storyCreationEnabled: true, customStoryCreationEnabled: true }),
+			[],
+		);
+		registerContextLayerTools(denied.asMcpServer(), createMcpContext({ storyCreationEnabled: true }), []);
 
 		expect(Object.keys(allowed.tools.get('create_story')?.inputSchema ?? {})).toEqual(
 			expect.arrayContaining(['format', 'files']),
