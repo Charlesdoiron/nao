@@ -149,7 +149,7 @@ const settingsNavGroups: NavGroup[] = [
 				exact: true,
 			},
 			{
-				label: 'Plan & Billing',
+				label: 'Billing & Credits',
 				to: '/settings/organization/billing',
 				visible: ({ isCloudBillingEnabled, isOrgAdmin }) => isCloudBillingEnabled && isOrgAdmin,
 				exact: true,
