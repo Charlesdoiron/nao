@@ -4,7 +4,7 @@ import { renderAdminSystemPrompt } from '../components/ai';
 import { noProjectMessage } from '../env';
 import * as chatQueries from '../queries/chat.queries';
 import * as imageQueries from '../queries/image.queries';
-import { adminAgentTools, agentService } from '../services/agent';
+import { adminAgentTools, type AgentManager, agentService } from '../services/agent';
 import { mcpService } from '../services/mcp';
 import { skillService } from '../services/skill';
 import type { StorageScope } from '../services/storage';
@@ -19,6 +19,7 @@ interface HandleAgentMessageInput extends AgentRequest {
 	userId: string;
 	projectId: string | undefined;
 	billingAccessVerifiedProjectId?: string;
+	domainHost: string | undefined;
 }
 
 interface HandleAgentMessageResult {
@@ -26,7 +27,7 @@ interface HandleAgentMessageResult {
 	isNewChat: boolean;
 	modelId: string;
 	stream: ReadableStream;
-	stop: () => void;
+	agent: AgentManager;
 }
 
 export const handleAgentRoute = async (opts: HandleAgentMessageInput): Promise<HandleAgentMessageResult> => {
@@ -103,6 +104,7 @@ export const handleAgentRoute = async (opts: HandleAgentMessageInput): Promise<H
 				: undefined,
 			newUserMessage: { newId: newMessageId },
 		},
+		tracking: { source, isNewChat, domainHost: opts.domainHost },
 	});
 
 	return {
@@ -110,7 +112,7 @@ export const handleAgentRoute = async (opts: HandleAgentMessageInput): Promise<H
 		isNewChat,
 		modelId: agent.getModelId(),
 		stream,
-		stop: () => agent.stop(),
+		agent,
 	};
 };
 

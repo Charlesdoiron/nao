@@ -5,12 +5,26 @@ import type { UserRole } from '@nao/shared/types';
 import * as backofficeQueries from '../queries/backoffice.queries';
 import * as statsQueries from '../queries/backoffice-stats.queries';
 import * as userQueries from '../queries/backoffice-user.queries';
+import * as billingQueries from '../queries/billing.queries';
 import * as orgQueries from '../queries/organization.queries';
+import type { SearchPaginationInput } from '../types/backoffice';
 import type { OrgRole } from '../types/organization';
 import { HandlerError } from '../utils/error';
 import { extractConfiguredDatabases } from '../utils/nao-config';
 import { assessProjectReadiness } from '../utils/project-readiness';
+import { toBillingSummary } from './backoffice-billing.service';
 import * as membershipService from './membership.service';
+
+export async function listOrganizations(input: SearchPaginationInput) {
+	const page = await backofficeQueries.listOrganizations(input);
+	return {
+		...page,
+		items: page.items.map(({ billing, ...organization }) => ({
+			...organization,
+			billing: toBillingSummary(organization.bypassBilling, billing),
+		})),
+	};
+}
 
 export async function getOrganizationDetail(orgId: string) {
 	const organization = await requireOrganization(orgId);
@@ -124,7 +138,7 @@ export async function updateUser(userId: string, values: { name?: string; email?
 }
 
 async function requireOrganization(orgId: string) {
-	const organization = await backofficeQueries.getOrganizationForBackoffice(orgId);
+	const organization = await billingQueries.getOrganizationWithBilling(orgId);
 	if (!organization) {
 		throw new HandlerError('NOT_FOUND', 'Organization not found');
 	}
@@ -180,6 +194,7 @@ function toOrganizationSummary(organization: Awaited<ReturnType<typeof requireOr
 			.filter(Boolean),
 		hasGoogleSso: isSet(organization.googleClientId) && isSet(organization.googleClientSecret),
 		bypassBilling: organization.bypassBilling,
+		billing: toBillingSummary(organization.bypassBilling, organization.billing),
 		createdAt: organization.createdAt,
 		updatedAt: organization.updatedAt,
 	};
