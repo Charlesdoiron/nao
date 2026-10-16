@@ -57,7 +57,7 @@ function useVisibleSettingsEntries(): SettingsSearchEntry[] {
 	const isCloud = useIsCloud();
 	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
 	const betaSubagentsEnabled = config.data?.betaSubagentsEnabled === true;
-	const cloudBillingEnabled = config.data?.cloudBillingEnabled === true;
+	const cloudBillingEnabled = config.data?.cloudBillingEnabled;
 	const licenseFeatures = useLicenseFeatures();
 	const enabledLicenseFeatures = licenseFeatures.data as Record<string, boolean> | undefined;
 
@@ -74,7 +74,8 @@ function useVisibleSettingsEntries(): SettingsSearchEntry[] {
 						(!entry.requiresUsageAccess || canViewUsage) &&
 						(!entry.cloudHidden || !isCloud) &&
 						(!entry.cloudOnly || isCloud) &&
-						(!entry.cloudBillingOnly || cloudBillingEnabled) &&
+						(!entry.cloudBillingOnly || cloudBillingEnabled === true) &&
+						(!entry.cloudBillingDisabledOnly || cloudBillingEnabled === false) &&
 						(!entry.betaSubagentsOnly || betaSubagentsEnabled),
 				)
 				.filter((entry) => canSeeAdvancedSettings || viewerVisiblePages.includes(entry.page)),
