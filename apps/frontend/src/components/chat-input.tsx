@@ -42,6 +42,7 @@ import { parseBudgetError, parseManagedCreditsError } from '@/lib/ai';
 import { cn } from '@/lib/utils';
 import { useChatId } from '@/hooks/use-chat-id';
 import { useModelSelection } from '@/hooks/use-model-selection';
+import { useOpenOrganizationBilling } from '@/hooks/use-open-organization-billing';
 import { usePermissions } from '@/hooks/use-permissions';
 import { getShortcut } from '@/lib/keyboard-shortcuts';
 import { matchesShortcut } from '@/lib/platform';
@@ -711,7 +712,12 @@ function BudgetBanner() {
 	const budgetMessage = budgetError ?? (budgetLevel !== 'ok' ? budgetStatus.data?.message : null);
 
 	if (managedExhausted) {
-		return <ManagedCreditsBanner canAddProviderKey={isAdmin} canAddCredits={isOrgAdmin} />;
+		return (
+			<ManagedCreditsBanner
+				canAddProviderKey={isAdmin}
+				creditOrganizationId={isOrgAdmin ? managedCredit.data?.organization?.id : undefined}
+			/>
+		);
 	}
 
 	if (!budgetMessage) {
@@ -730,11 +736,13 @@ function BudgetBanner() {
 
 function ManagedCreditsBanner({
 	canAddProviderKey,
-	canAddCredits,
+	creditOrganizationId,
 }: {
 	canAddProviderKey: boolean;
-	canAddCredits: boolean;
+	creditOrganizationId: string | undefined;
 }) {
+	const openOrganizationBilling = useOpenOrganizationBilling();
+	const canAddCredits = Boolean(creditOrganizationId);
 	const canManageAccess = canAddProviderKey || canAddCredits;
 
 	return (
@@ -753,15 +761,14 @@ function ManagedCreditsBanner({
 				</p>
 				{canManageAccess && (
 					<div className='mt-3 flex flex-wrap gap-2'>
-						{canAddCredits && (
-							<Button asChild size='sm' variant='primary-gradient'>
-								<Link
-									to='/settings/organization/billing'
-									search={{ checkout: undefined, portal: undefined, creditCheckout: undefined }}
-								>
-									<WalletCards />
-									Add nao credits
-								</Link>
+						{creditOrganizationId && (
+							<Button
+								size='sm'
+								variant='primary-gradient'
+								onClick={() => void openOrganizationBilling(creditOrganizationId)}
+							>
+								<WalletCards />
+								Add nao credits
 							</Button>
 						)}
 						{canAddProviderKey && (

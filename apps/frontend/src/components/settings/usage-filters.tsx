@@ -104,7 +104,7 @@ export function UsageFilters({
 				onSelectedSourcesChange={onSelectedSourcesChange}
 				showUserControls={showUserControls}
 			/>
-			{showUserControls && onSplitByUserChange && (
+			{showUsageControls && showUserControls && onSplitByUserChange && (
 				<ToggleFilter
 					label='Split per user'
 					icon={Split}

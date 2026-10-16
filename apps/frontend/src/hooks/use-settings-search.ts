@@ -52,7 +52,7 @@ export function useSettingsSuggestions(): SettingsSearchEntry[] {
 }
 
 function useVisibleSettingsEntries(): SettingsSearchEntry[] {
-	const { isAdmin, isContextAdmin, isOrgAdmin } = usePermissions();
+	const { canViewUsage, isAdmin, isContextAdmin, isOrgAdmin } = usePermissions();
 	const canSeeAdvancedSettings = useCanSeeAdvancedSettings();
 	const isCloud = useIsCloud();
 	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
@@ -71,6 +71,7 @@ function useVisibleSettingsEntries(): SettingsSearchEntry[] {
 						(!entry.licenseFeature || enabledLicenseFeatures?.[entry.licenseFeature] === true) &&
 						(!entry.orgAdminOnly || isOrgAdmin) &&
 						(!entry.adminOrContextAdmin || isAdmin || isContextAdmin) &&
+						(!entry.requiresUsageAccess || canViewUsage) &&
 						(!entry.cloudHidden || !isCloud) &&
 						(!entry.cloudOnly || isCloud) &&
 						(!entry.cloudBillingOnly || cloudBillingEnabled) &&
@@ -79,6 +80,7 @@ function useVisibleSettingsEntries(): SettingsSearchEntry[] {
 				.filter((entry) => canSeeAdvancedSettings || viewerVisiblePages.includes(entry.page)),
 		[
 			betaSubagentsEnabled,
+			canViewUsage,
 			canSeeAdvancedSettings,
 			cloudBillingEnabled,
 			enabledLicenseFeatures,

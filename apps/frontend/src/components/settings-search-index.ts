@@ -14,6 +14,8 @@ export interface SettingsSearchEntry {
 	orgAdminOnly?: boolean;
 	/** Visible to admins and context admins (observability surfaces). */
 	adminOrContextAdmin?: boolean;
+	/** Hidden unless the current project role can view usage analytics. */
+	requiresUsageAccess?: boolean;
 	cloudHidden?: boolean;
 	cloudOnly?: boolean;
 	cloudBillingOnly?: boolean;
@@ -1083,6 +1085,7 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		title: 'Messages',
 		description: 'How many messages have you sent?',
 		keywords: ['usage', 'analytics', 'statistics'],
+		requiresUsageAccess: true,
 	},
 	{
 		page: '/settings/usage',
@@ -1091,6 +1094,7 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		title: 'Tokens',
 		description: 'Tokens used by your chats.',
 		keywords: ['token usage', 'input tokens', 'output tokens'],
+		requiresUsageAccess: true,
 	},
 	{
 		page: '/settings/usage',
@@ -1099,6 +1103,7 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		title: 'Cost',
 		description: 'Estimated cost in USD based on token usage and model pricing.',
 		keywords: ['price', 'billing', 'expense', 'spending'],
+		requiresUsageAccess: true,
 	},
 	{
 		page: '/settings/usage',
