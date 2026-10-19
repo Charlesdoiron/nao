@@ -19,6 +19,7 @@ import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as CliLoginRouteImport } from './routes/cli-login'
 import { Route as SidebarLayoutRouteImport } from './routes/_sidebar-layout'
 import { Route as SidebarLayoutSettingsRouteImport } from './routes/_sidebar-layout.settings'
+import { Route as SidebarLayoutChartLabelsLabRouteImport } from './routes/_sidebar-layout.chart-labels-lab'
 import { Route as SidebarLayoutChatLayoutRouteImport } from './routes/_sidebar-layout._chat-layout'
 import { Route as SidebarLayoutStoriesIndexRouteImport } from './routes/_sidebar-layout.stories.index'
 import { Route as SidebarLayoutSettingsIndexRouteImport } from './routes/_sidebar-layout.settings.index'
@@ -125,6 +126,12 @@ const SidebarLayoutSettingsRoute = SidebarLayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => SidebarLayoutRoute,
 } as any)
+const SidebarLayoutChartLabelsLabRoute =
+  SidebarLayoutChartLabelsLabRouteImport.update({
+    id: '/chart-labels-lab',
+    path: '/chart-labels-lab',
+    getParentRoute: () => SidebarLayoutRoute,
+  } as any)
 const SidebarLayoutChatLayoutRoute = SidebarLayoutChatLayoutRouteImport.update({
   id: '/_chat-layout',
   getParentRoute: () => SidebarLayoutRoute,
@@ -466,6 +473,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/chart-labels-lab': typeof SidebarLayoutChartLabelsLabRoute
   '/settings': typeof SidebarLayoutSettingsRouteWithChildren
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
@@ -532,6 +540,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/chart-labels-lab': typeof SidebarLayoutChartLabelsLabRoute
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
   '/settings/account': typeof SidebarLayoutSettingsAccountRoute
@@ -595,6 +604,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/_sidebar-layout/_chat-layout': typeof SidebarLayoutChatLayoutRouteWithChildren
+  '/_sidebar-layout/chart-labels-lab': typeof SidebarLayoutChartLabelsLabRoute
   '/_sidebar-layout/settings': typeof SidebarLayoutSettingsRouteWithChildren
   '/_sidebar-layout/_chat-layout/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/_sidebar-layout/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
@@ -664,6 +674,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/chart-labels-lab'
     | '/settings'
     | '/$chatId'
     | '/automations/$automationId'
@@ -730,6 +741,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/chart-labels-lab'
     | '/$chatId'
     | '/automations/$automationId'
     | '/settings/account'
@@ -792,6 +804,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/_sidebar-layout/_chat-layout'
+    | '/_sidebar-layout/chart-labels-lab'
     | '/_sidebar-layout/settings'
     | '/_sidebar-layout/_chat-layout/$chatId'
     | '/_sidebar-layout/automations/$automationId'
@@ -932,6 +945,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SidebarLayoutSettingsRouteImport
+      parentRoute: typeof SidebarLayoutRoute
+    }
+    '/_sidebar-layout/chart-labels-lab': {
+      id: '/_sidebar-layout/chart-labels-lab'
+      path: '/chart-labels-lab'
+      fullPath: '/chart-labels-lab'
+      preLoaderRoute: typeof SidebarLayoutChartLabelsLabRouteImport
       parentRoute: typeof SidebarLayoutRoute
     }
     '/_sidebar-layout/_chat-layout': {
@@ -1532,6 +1552,7 @@ const SidebarLayoutSettingsRouteWithChildren =
 
 interface SidebarLayoutRouteChildren {
   SidebarLayoutChatLayoutRoute: typeof SidebarLayoutChatLayoutRouteWithChildren
+  SidebarLayoutChartLabelsLabRoute: typeof SidebarLayoutChartLabelsLabRoute
   SidebarLayoutSettingsRoute: typeof SidebarLayoutSettingsRouteWithChildren
   SidebarLayoutAutomationsAutomationIdRoute: typeof SidebarLayoutAutomationsAutomationIdRoute
   SidebarLayoutSharedChatShareIdRoute: typeof SidebarLayoutSharedChatShareIdRoute
@@ -1545,6 +1566,7 @@ interface SidebarLayoutRouteChildren {
 
 const SidebarLayoutRouteChildren: SidebarLayoutRouteChildren = {
   SidebarLayoutChatLayoutRoute: SidebarLayoutChatLayoutRouteWithChildren,
+  SidebarLayoutChartLabelsLabRoute: SidebarLayoutChartLabelsLabRoute,
   SidebarLayoutSettingsRoute: SidebarLayoutSettingsRouteWithChildren,
   SidebarLayoutAutomationsAutomationIdRoute:
     SidebarLayoutAutomationsAutomationIdRoute,
