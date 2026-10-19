@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 	cloudBillingEnabled: true,
 	invalidateQueries: vi.fn(async () => undefined),
 	navigate: vi.fn(async () => undefined),
+	pathname: '/',
 	refetchInterval: undefined as RefetchInterval | undefined,
 }));
 
@@ -44,6 +45,8 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
 	useNavigate: () => mocks.navigate,
+	useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => unknown }) =>
+		select({ location: { pathname: mocks.pathname } }),
 }));
 
 vi.mock('@/main', () => ({
@@ -56,6 +59,7 @@ vi.mock('@/main', () => ({
 beforeEach(() => {
 	mocks.access = restrictedTrialAccess;
 	mocks.cloudBillingEnabled = true;
+	mocks.pathname = '/';
 	mocks.refetchInterval = undefined;
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
@@ -77,6 +81,31 @@ it('stays hidden when cloud billing is disabled', () => {
 	render(<CloudBillingAccessBanner />);
 
 	expect(screen.queryByText('A subscription is needed to keep using nao Cloud.')).toBeNull();
+});
+
+it('stays hidden on the plan and billing page', () => {
+	mocks.pathname = '/settings/organization/billing';
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('hides the active trial banner throughout settings without hiding access notices', () => {
+	mocks.pathname = '/settings/account';
+	const view = render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('A subscription is needed');
+
+	mocks.access = {
+		...restrictedTrialAccess,
+		hasAccess: true,
+		trialEndsAt: new Date(Date.now() + 14 * DAY_MS),
+	};
+
+	view.rerender(<CloudBillingAccessBanner />);
+
+	expect(screen.queryByRole('status')).toBeNull();
 });
 
 it('explains the subscription requirement without presenting it as an alert', () => {
@@ -111,29 +140,73 @@ it('warns about a failed payment while access is kept', () => {
 	expect(screen.queryByRole('alert')).toBeNull();
 });
 
-it('rounds up the trial countdown within the three-day warning window', () => {
+it('shows admins that their trial has started and rounds up the remaining days', () => {
 	const now = new Date('2026-10-05T12:00:00.000Z');
 	vi.useFakeTimers();
 	vi.setSystemTime(now);
 	mocks.access = {
 		...restrictedTrialAccess,
 		hasAccess: true,
-		trialEndsAt: new Date(now.getTime() + DAY_MS + 1),
+		trialEndsAt: new Date(now.getTime() + 13 * DAY_MS + 1),
 	};
 
 	render(<CloudBillingAccessBanner />);
 
-	expect(screen.getByRole('status').textContent).toContain('2 days left in your free trial.');
+	expect(screen.getByRole('status').textContent).toContain(
+		'Your free trial has started. 14 days left. Only admins can see this banner.',
+	);
 });
 
-it('stays hidden before the three-day trial warning window', () => {
+it('lets admins dismiss the trial-start banner', () => {
 	const now = new Date('2026-10-05T12:00:00.000Z');
+	const trialEndsAt = new Date(now.getTime() + 14 * DAY_MS);
 	vi.useFakeTimers();
 	vi.setSystemTime(now);
 	mocks.access = {
 		...restrictedTrialAccess,
 		hasAccess: true,
-		trialEndsAt: new Date(now.getTime() + 3 * DAY_MS + 1),
+		trialEndsAt,
+	};
+
+	render(<CloudBillingAccessBanner />);
+	fireEvent.click(screen.getByRole('button', { name: 'Dismiss trial banner' }));
+
+	expect(screen.queryByRole('status')).toBeNull();
+	expect(localStorage.getItem('nao-dismissed-trial-banner')).toBe(
+		JSON.stringify(`project-organization:${trialEndsAt.toISOString()}`),
+	);
+});
+
+it('shows the final three-day warning even when the trial-start banner was dismissed', () => {
+	const now = new Date('2026-10-05T12:00:00.000Z');
+	const trialEndsAt = new Date(now.getTime() + 2 * DAY_MS);
+	vi.useFakeTimers();
+	vi.setSystemTime(now);
+	localStorage.setItem(
+		'nao-dismissed-trial-banner',
+		JSON.stringify(`project-organization:${trialEndsAt.toISOString()}`),
+	);
+	mocks.access = {
+		...restrictedTrialAccess,
+		hasAccess: true,
+		trialEndsAt,
+	};
+
+	render(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('Your free trial ends soon. 2 days left.');
+	expect(screen.queryByRole('button', { name: 'Dismiss trial banner' })).toBeNull();
+});
+
+it('hides the active trial banner from non-admins', () => {
+	const now = new Date('2026-10-05T12:00:00.000Z');
+	vi.useFakeTimers();
+	vi.setSystemTime(now);
+	mocks.access = {
+		...restrictedTrialAccess,
+		canManageBilling: false,
+		hasAccess: true,
+		trialEndsAt: new Date(now.getTime() + 14 * DAY_MS),
 	};
 
 	render(<CloudBillingAccessBanner />);
