@@ -16,6 +16,7 @@ import {
 	getSuiteRate,
 	getTestStatus,
 	inferTagsFromName,
+	existsOnRef,
 	isLikelyAffected,
 } from './test-suite-utils';
 import { useTestSuite } from './use-test-suite';
@@ -23,7 +24,7 @@ import type { ChangeEvent } from 'react';
 import type { TestEditorSubmit } from './test-editor-dialog';
 import type { RunsPerTest } from './test-run-target-bar';
 import type { SuiteSummary } from './test-suite-summary';
-import type { SuiteTest, TestDraft, TestFilters, TestStatus } from './test-suite-types';
+import type { GitRef, SuiteTest, TestDraft, TestFilters, TestStatus } from './test-suite-types';
 
 import { MobileHeader } from '@/components/mobile-header';
 import { Button } from '@/components/ui/button';
@@ -80,12 +81,23 @@ export function TestSuitePage() {
 		return includeBaseline || forceBoth ? [baselineRef.id, candidateRef.id] : [candidateRef.id];
 	}
 
+	function runTests(testIds: string[], refIds: string[]) {
+		refIds.forEach((refId) => {
+			const runnableIds = testIds.filter((id) => {
+				const test = suite.tests.find((candidate) => candidate.id === id);
+				return test ? existsOnRef(test, refId) : false;
+			});
+			suite.runTests(runnableIds, [refId], runCount);
+		});
+	}
+
 	function handleCandidateChange(refId: string) {
+		const nextRef = GIT_REFS.find((ref) => ref.id === refId);
 		setCandidateRefId(refId);
 		setFilters((current) => ({
 			...current,
 			status: 'all',
-			onlyLikelyAffected: refId === baselineRef.id ? false : current.onlyLikelyAffected,
+			onlyLikelyAffected: nextRef?.changedContextFiles.length ? current.onlyLikelyAffected : false,
 		}));
 	}
 
@@ -94,7 +106,8 @@ export function TestSuitePage() {
 		setEditor({ open: false, testId: null });
 		setActiveTestId(id);
 		if (runAfterSave) {
-			suite.runTests([id], refsToRun(true), runCount);
+			const isOnProduction = editingTest !== null && existsOnRef(editingTest, baselineRef.id);
+			suite.runTests([id], isOnProduction ? refsToRun(true) : [refId], runCount);
 		}
 	}
 
@@ -158,7 +171,7 @@ export function TestSuitePage() {
 					runScopeCount={runScopeIds.length}
 					runScopeLabel={runScopeLabel}
 					isRunning={suite.runningCount > 0}
-					onRun={() => suite.runTests(runScopeIds, refsToRun(), runCount)}
+					onRun={() => runTests(runScopeIds, refsToRun())}
 				/>
 
 				<TestSuiteSummary
@@ -193,7 +206,7 @@ export function TestSuitePage() {
 						onSelectionChange={setSelectedIds}
 						activeTestId={activeTestId}
 						onOpenTest={setActiveTestId}
-						onRunTest={(testId) => suite.runTests([testId], refsToRun(), runCount)}
+						onRunTest={(testId) => runTests([testId], refsToRun())}
 						onEditTest={(testId) => setEditor({ open: true, testId })}
 						onDeleteTest={(testId) => setPendingDeleteIds([testId])}
 					/>
@@ -202,7 +215,7 @@ export function TestSuitePage() {
 				<TestSelectionBar
 					count={visibleSelectedIds.length}
 					existingTags={[...tagCounts.keys()]}
-					onRun={() => suite.runTests(visibleSelectedIds, refsToRun(), runCount)}
+					onRun={() => runTests(visibleSelectedIds, refsToRun())}
 					onAddTag={(tag) => suite.addTag(visibleSelectedIds, tag)}
 					onDelete={() => setPendingDeleteIds(visibleSelectedIds)}
 					onClear={() => setSelectedIds([])}
@@ -218,7 +231,7 @@ export function TestSuitePage() {
 					isRunning={suite.isRunning}
 					runsPerTest={runCount}
 					onClose={() => setActiveTestId(null)}
-					onRun={() => suite.runTests([activeTest.id], refsToRun(true), runCount)}
+					onRun={() => runTests([activeTest.id], refsToRun(true))}
 					onEdit={() => setEditor({ open: true, testId: activeTest.id })}
 					onRemoveTag={(tag) => suite.removeTag(activeTest.id, tag)}
 				/>
@@ -277,7 +290,7 @@ function rankByStatus(tests: SuiteTest[], statusOf: (test: SuiteTest) => TestSta
 function buildSummary(
 	tests: SuiteTest[],
 	baselineRefId: string,
-	candidateRef: { id: string; name: string },
+	candidateRef: GitRef,
 	statusOf: (test: SuiteTest) => TestStatus,
 ): SuiteSummary {
 	const isComparing = candidateRef.id !== baselineRefId;
@@ -301,6 +314,7 @@ function buildSummary(
 		statusCounts,
 		isComparing,
 		candidateName: candidateRef.name,
+		candidateKind: candidateRef.kind,
 	};
 }
 

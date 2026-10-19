@@ -1,5 +1,5 @@
 import { formatPercent } from './test-suite-utils';
-import type { TestStatus } from './test-suite-types';
+import type { GitRef, TestStatus } from './test-suite-types';
 
 import { cn } from '@/lib/utils';
 
@@ -9,6 +9,7 @@ export interface SuiteSummary {
 	statusCounts: Record<TestStatus, number>;
 	isComparing: boolean;
 	candidateName: string;
+	candidateKind: GitRef['kind'];
 }
 
 export function TestSuiteSummary({
@@ -53,7 +54,7 @@ export function TestSuiteSummary({
 			</div>
 			<StatusCard
 				label='Regressed'
-				hint='Lower pass rate than production'
+				hint='Worse than production'
 				count={summary.statusCounts.regressed}
 				tone='red'
 				status='regressed'
@@ -72,7 +73,11 @@ export function TestSuiteSummary({
 			/>
 			<StatusCard
 				label='Not run'
-				hint={summary.isComparing ? 'No results on this branch yet' : 'No results yet'}
+				hint={
+					summary.isComparing
+						? `No results on this ${summary.candidateKind === 'tag' ? 'version' : 'branch'} yet`
+						: 'No results yet'
+				}
 				count={summary.statusCounts['not-run']}
 				tone='muted'
 				status='not-run'

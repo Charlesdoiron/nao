@@ -62,6 +62,10 @@ export function getSuiteRate(tests: SuiteTest[], refId: string): number | null {
 	return runs.filter((run) => run.outcome === 'pass').length / runs.length;
 }
 
+export function existsOnRef(test: SuiteTest, refId: string): boolean {
+	return !test.addedOnRef || test.addedOnRef === refId;
+}
+
 export function isLikelyAffected(test: SuiteTest, ref: GitRef | undefined): boolean {
 	if (!ref) {
 		return false;

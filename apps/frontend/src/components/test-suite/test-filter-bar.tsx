@@ -123,7 +123,7 @@ export function TestFilterBar({
 				</DropdownMenuRadioGroup>
 			</FilterDropdown>
 
-			{isComparing && (
+			{isComparing && candidateRef.changedContextFiles.length > 0 && (
 				<SimpleTooltip content='Estimated from the context files changed on this branch. Prose edits can affect any test, so treat this as a starting point, not a guarantee.'>
 					<Button
 						variant='outline'

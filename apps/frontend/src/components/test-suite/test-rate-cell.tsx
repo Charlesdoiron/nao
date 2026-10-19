@@ -8,11 +8,17 @@ export function TestRateCell({
 	result,
 	isRunning,
 	runsPerTest,
+	unavailableLabel,
 }: {
 	result: TargetResult | undefined;
 	isRunning: boolean;
 	runsPerTest: number;
+	unavailableLabel?: string;
 }) {
+	if (unavailableLabel) {
+		return <span className='text-xs text-muted-foreground/70 italic'>{unavailableLabel}</span>;
+	}
+
 	if (isRunning) {
 		return (
 			<div className='flex items-center gap-2'>

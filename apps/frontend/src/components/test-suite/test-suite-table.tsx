@@ -1,7 +1,7 @@
 import { FlaskConical, MoreHorizontal, Pencil, Play, Trash2 } from 'lucide-react';
 
 import { RateDelta, TestRateCell, TestStatusBadge } from './test-rate-cell';
-import { getRateDelta } from './test-suite-utils';
+import { existsOnRef, getRateDelta } from './test-suite-utils';
 import type { GitRef, SuiteTest, TestStatus } from './test-suite-types';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -85,7 +85,7 @@ export function TestSuiteTable({
 						<TableHead className='text-xs text-muted-foreground'>Production</TableHead>
 						{isComparing && (
 							<>
-								<TableHead className='max-w-40 text-xs text-muted-foreground'>
+								<TableHead className='max-w-48 text-xs text-muted-foreground'>
 									<span className='block truncate font-mono'>{candidateRef.name}</span>
 								</TableHead>
 								<TableHead className='text-xs text-muted-foreground'>Δ</TableHead>
@@ -157,7 +157,7 @@ function TestRow({
 	return (
 		<TableRow
 			data-state={isSelected ? 'selected' : undefined}
-			className={cn('group cursor-pointer', isActive && 'bg-muted/60')}
+			className={cn('group cursor-pointer data-[state=selected]:bg-primary/5', isActive && 'bg-muted/60')}
 			onClick={onOpen}
 		>
 			<TableCell className='pl-4' onClick={(event) => event.stopPropagation()}>
@@ -188,6 +188,7 @@ function TestRow({
 					result={test.results[baselineRef.id]}
 					isRunning={isRunning(test.id, baselineRef.id)}
 					runsPerTest={runsPerTest}
+					unavailableLabel={existsOnRef(test, baselineRef.id) ? undefined : `Not on ${baselineRef.name}`}
 				/>
 			</TableCell>
 			{isComparing && (
@@ -197,6 +198,9 @@ function TestRow({
 							result={test.results[candidateRef.id]}
 							isRunning={isRunning(test.id, candidateRef.id)}
 							runsPerTest={runsPerTest}
+							unavailableLabel={
+								existsOnRef(test, candidateRef.id) ? undefined : `Not on ${candidateRef.name}`
+							}
 						/>
 					</TableCell>
 					<TableCell>

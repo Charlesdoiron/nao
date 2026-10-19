@@ -1,7 +1,7 @@
 import { CheckCircle2, FileCode2, Loader2, Pencil, Play, X, XCircle } from 'lucide-react';
 
 import { RunDots, TestStatusBadge } from './test-rate-cell';
-import { formatPercent, getPassRate, toTestFilePath } from './test-suite-utils';
+import { existsOnRef, formatPercent, getPassRate, toTestFilePath } from './test-suite-utils';
 import type { GitRef, SuiteTest, TargetResult, TestStatus } from './test-suite-types';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -33,7 +33,9 @@ export function TestDetailPanel({
 	onRemoveTag: (tag: string) => void;
 }) {
 	const isComparing = baselineRef.id !== candidateRef.id;
-	const targets = isComparing ? [baselineRef, candidateRef] : [baselineRef];
+	const targets = (isComparing ? [baselineRef, candidateRef] : [baselineRef]).filter((ref) =>
+		existsOnRef(test, ref.id),
+	);
 	const anyRunning = targets.some((ref) => isRunning(test.id, ref.id));
 
 	return (
@@ -88,7 +90,7 @@ export function TestDetailPanel({
 						<p className='text-xs text-muted-foreground'>Results</p>
 						<p className='text-xs text-muted-foreground'>Each dot is one run</p>
 					</div>
-					<div className={cn('grid gap-3', isComparing && 'grid-cols-2')}>
+					<div className={cn('grid gap-3', targets.length > 1 && 'grid-cols-2')}>
 						{targets.map((ref) => (
 							<TargetResultCard
 								key={ref.id}
@@ -117,7 +119,7 @@ export function TestDetailPanel({
 				</Button>
 				<Button variant='primary-gradient' size='sm' className='ml-auto' onClick={onRun} isLoading={anyRunning}>
 					{!anyRunning && <Play />}
-					Run {runsPerTest}× {isComparing ? 'on both' : ''}
+					Run {runsPerTest}× {targets.length > 1 ? 'on both' : ''}
 				</Button>
 			</footer>
 		</aside>
