@@ -9,6 +9,7 @@ import { ChatsReplayPage } from '@/components/settings/chats-replay-page';
 import { ChatsReplaySearchBar } from '@/components/settings/chats-replay-search-bar';
 import { UsageChartCard } from '@/components/settings/usage-chart-card';
 import { ReplayFilters, UsageFilters } from '@/components/settings/usage-filters';
+import { UsageReplaySplit } from '@/components/settings/usage-replay-split';
 import {
 	saveUsageFilters,
 	validateUsageSearch,
@@ -204,115 +205,112 @@ function UsageOverview({
 		/>
 	);
 
+	const chartsComponent = canViewUsage && (
+		<div className='grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[1fr_3fr_3fr] gap-2'>
+			<div className='lg:col-span-2 xl:col-span-1'>
+				<UsageChartCard
+					title='Messages'
+					isLoading={periodState.isLoading || totalUsage.isLoading}
+					isFetching={totalUsage.isFetching}
+					isError={totalUsage.isError}
+					data={totalUsageChartData}
+					chartType='kpi_card'
+					series={[
+						{
+							data_key: 'totalMessages',
+							label: 'Total messages',
+							color: 'var(--chart-1)',
+						},
+						{
+							data_key: 'uniqueUsers',
+							label: 'Unique users',
+							color: 'var(--chart-2)',
+						},
+					]}
+				/>
+			</div>
+
+			<UsageChartCard
+				title='Messages'
+				isLoading={periodState.isLoading || chartQuery.isLoading}
+				isFetching={chartQuery.isFetching}
+				isError={chartQuery.isError}
+				data={messagesChart.data}
+				chartType='stacked_bar'
+				xAxisLabelFormatter={(value) => formatUsageBucketLabel(value, granularity)}
+				titleAccessory={
+					<span className='text-xs text-muted-foreground'>
+						{splitByUser ? 'Number of messages by user' : 'Number of messages by source'}
+					</span>
+				}
+				series={messagesChart.series}
+				showLegend={messagesChart.showLegend}
+			/>
+
+			<UsageChartCard
+				title={showCost ? 'Cost' : 'Tokens'}
+				isLoading={periodState.isLoading || chartQuery.isLoading}
+				isFetching={chartQuery.isFetching}
+				isError={chartQuery.isError}
+				data={tokensChart.data}
+				chartType='stacked_bar'
+				xAxisLabelFormatter={(value) => formatUsageBucketLabel(value, granularity)}
+				valueFormatter={showCost ? formatUsd : undefined}
+				series={tokensChart.series}
+				showLegend={tokensChart.showLegend}
+				titleAccessory={
+					<Select
+						value={tokenView}
+						onValueChange={(value) => onUpdateSearch({ tokenView: value as TokenChartDisplayMode })}
+					>
+						<SelectTrigger size='sm' variant='ghost' className='mt-0 h-4 px-0 text-xs'>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{tokenChartDisplayOptions.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				}
+			/>
+		</div>
+	);
+
+	const replayToolbarComponent = (
+		<>
+			<ChatsReplaySearchBar value={search} onChange={(value) => onUpdateSearch({ search: value })} />
+			<ReplayFilters
+				chatFacets={chatFacets.data?.facets}
+				selectedFeedbackStates={feedback}
+				onSelectedFeedbackStatesChange={(value) => onUpdateSearch({ feedback: value })}
+				selectedToolStates={tools}
+				onSelectedToolStatesChange={(value) => onUpdateSearch({ tools: value })}
+			/>
+		</>
+	);
+
 	return (
 		<div className='flex flex-1 min-h-0 overflow-auto xl:overflow-hidden bg-background'>
 			<div className='flex min-h-0 w-full flex-col xl:h-full'>
-				<div className='flex flex-col w-full gap-2 px-4 md:p-8 xl:shrink-0'>
-					{filtersComponent}
+				<div className='px-4 pb-2 md:px-8 md:pt-8 xl:shrink-0'>{filtersComponent}</div>
 
-					{canViewUsage && (
-						<div className='grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-[1fr_3fr_3fr] gap-2'>
-							<div className='lg:col-span-2 xl:col-span-1'>
-								<UsageChartCard
-									title='Messages'
-									isLoading={periodState.isLoading || totalUsage.isLoading}
-									isFetching={totalUsage.isFetching}
-									isError={totalUsage.isError}
-									data={totalUsageChartData}
-									chartType='kpi_card'
-									series={[
-										{
-											data_key: 'totalMessages',
-											label: 'Total messages',
-											color: 'var(--chart-1)',
-										},
-										{
-											data_key: 'uniqueUsers',
-											label: 'Unique users',
-											color: 'var(--chart-2)',
-										},
-									]}
-								/>
-							</div>
-
-							<UsageChartCard
-								title='Messages'
-								isLoading={periodState.isLoading || chartQuery.isLoading}
-								isFetching={chartQuery.isFetching}
-								isError={chartQuery.isError}
-								data={messagesChart.data}
-								chartType='stacked_bar'
-								xAxisLabelFormatter={(value) => formatUsageBucketLabel(value, granularity)}
-								titleAccessory={
-									<span className='text-xs text-muted-foreground'>
-										{splitByUser ? 'Number of messages by user' : 'Number of messages by source'}
-									</span>
-								}
-								series={messagesChart.series}
-								showLegend={messagesChart.showLegend}
-							/>
-
-							<UsageChartCard
-								title={showCost ? 'Cost' : 'Tokens'}
-								isLoading={periodState.isLoading || chartQuery.isLoading}
-								isFetching={chartQuery.isFetching}
-								isError={chartQuery.isError}
-								data={tokensChart.data}
-								chartType='stacked_bar'
-								xAxisLabelFormatter={(value) => formatUsageBucketLabel(value, granularity)}
-								valueFormatter={showCost ? formatUsd : undefined}
-								series={tokensChart.series}
-								showLegend={tokensChart.showLegend}
-								titleAccessory={
-									<Select
-										value={tokenView}
-										onValueChange={(value) =>
-											onUpdateSearch({ tokenView: value as TokenChartDisplayMode })
-										}
-									>
-										<SelectTrigger size='sm' variant='ghost' className='mt-0 h-4 px-0 text-xs'>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											{tokenChartDisplayOptions.map((option) => (
-												<SelectItem key={option.value} value={option.value}>
-													{option.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								}
-							/>
-						</div>
-					)}
-				</div>
-
-				<section className='flex min-h-[400px] flex-1 flex-col w-full overflow-hidden xl:min-h-0'>
-					<div className='flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 pb-2 md:px-8'>
-						<h2 className='text-sm font-semibold'>Chats replay</h2>
-						<div className='flex flex-wrap items-center gap-2'>
-							<ChatsReplaySearchBar
-								value={search}
-								onChange={(value) => onUpdateSearch({ search: value })}
-							/>
-							<ReplayFilters
-								chatFacets={chatFacets.data?.facets}
-								selectedFeedbackStates={feedback}
-								onSelectedFeedbackStatesChange={(value) => onUpdateSearch({ feedback: value })}
-								selectedToolStates={tools}
-								onSelectedToolStatesChange={(value) => onUpdateSearch({ tools: value })}
-							/>
-						</div>
-					</div>
-					<ChatsReplayPage
-						search={search}
-						selectedUserNames={users}
-						selectedFeedbackStates={feedback}
-						selectedToolStates={tools}
-						selectedSources={sources}
-						onOpenChat={onOpenChatReplay}
-					/>
-				</section>
+				<UsageReplaySplit
+					charts={chartsComponent}
+					replayToolbar={replayToolbarComponent}
+					replay={
+						<ChatsReplayPage
+							search={search}
+							selectedUserNames={users}
+							selectedFeedbackStates={feedback}
+							selectedToolStates={tools}
+							selectedSources={sources}
+							onOpenChat={onOpenChatReplay}
+						/>
+					}
+				/>
 			</div>
 		</div>
 	);
