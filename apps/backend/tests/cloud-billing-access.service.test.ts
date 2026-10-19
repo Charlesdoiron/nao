@@ -37,6 +37,7 @@ describe('cloud billing access entitlement', () => {
 
 	it.each([
 		['unconfirmed local trial', entitlement('trialing', { trialEndsAt: future }), false],
+		['confirmed local trial', entitlement('trialing', { trialEndsAt: future, billingAccessEndsAt: future }), true],
 		[
 			'trialing before its billing access end',
 			entitlement('trialing', {

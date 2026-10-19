@@ -31,6 +31,9 @@ const INITIATING_USER_METADATA_KEY = 'nao_initiating_user_id';
 const CREDIT_TOP_UP_CHECKOUT_KIND = 'credit_top_up';
 const CREDIT_TOP_UP_CHECKOUT_TTL_SECONDS = 60 * 60;
 const MICRO_USD_PER_CENT = 10_000;
+const TRIAL_END_METADATA_KEY = 'nao_trial_end';
+const MIN_CHECKOUT_TRIAL_MS = 48 * 60 * 60 * 1000;
+const CHECKOUT_TRIAL_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 type CloudRecurringPriceDetails = Stripe.Price & {
 	recurring: Stripe.Price.Recurring;
@@ -223,18 +226,21 @@ export async function createCloudCheckoutSession(input: {
 	currency?: CloudBillingCurrency;
 	organizationId: string;
 	stripeCustomerId: string;
-	trialDays: number;
+	trialEnd: Date;
 }): Promise<string> {
 	if ((await listCloudSubscriptions(input.stripeCustomerId)).length > 0) {
 		throw new CloudInitialCheckoutUnavailableError(
 			'This organization already has cloud subscription history; use resubscribe instead',
 		);
 	}
+	if (input.trialEnd.getTime() <= Date.now()) {
+		throw new CloudInitialCheckoutUnavailableError('This organization trial has expired');
+	}
 	return createSubscriptionCheckoutSession({
 		...input,
 		currency: input.currency ?? 'usd',
 		kind: 'initial',
-		operationKey: `trial-${input.trialDays}`,
+		operationKey: `trial-${stripeTimestamp(input.trialEnd)}`,
 	});
 }
 
@@ -268,10 +274,12 @@ async function createSubscriptionCheckoutSession(input: {
 	stripeCustomerId: string;
 	kind: 'initial' | 'resubscribe';
 	operationKey: string;
-	trialDays?: number;
+	trialEnd?: Date;
 }): Promise<string> {
 	const plan = CLOUD_BILLING_PLANS[input.billingInterval];
-	const trialMessage = input.trialDays === undefined ? null : checkoutTrialMessage(input.trialDays);
+	const sourceTrialEnd = input.trialEnd ? stripeTimestamp(input.trialEnd) : null;
+	const effectiveTrialEnd = input.trialEnd ? effectiveCheckoutTrialEnd(input.trialEnd) : null;
+	const trialMessage = input.trialEnd ? checkoutTrialMessage(input.trialEnd) : null;
 	const matchesCheckout = (session: Stripe.Checkout.Session) =>
 		session.mode === 'subscription' &&
 		session.currency === input.currency &&
@@ -279,6 +287,8 @@ async function createSubscriptionCheckoutSession(input: {
 		session.metadata?.[ORGANIZATION_METADATA_KEY] === input.organizationId &&
 		session.metadata?.[PLAN_METADATA_KEY] === plan.key &&
 		session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === input.kind &&
+		(session.metadata?.[TRIAL_END_METADATA_KEY] ?? null) ===
+			(sourceTrialEnd === null ? null : String(sourceTrialEnd)) &&
 		(trialMessage === null || session.custom_text?.submit?.message === trialMessage);
 	const existingSession = await reuseOrExpireOpenCheckoutSessions(input, matchesCheckout);
 	if (existingSession?.url) {
@@ -307,15 +317,16 @@ async function createSubscriptionCheckoutSession(input: {
 				[ORGANIZATION_METADATA_KEY]: input.organizationId,
 				[PLAN_METADATA_KEY]: plan.key,
 				[CHECKOUT_KIND_METADATA_KEY]: input.kind,
+				...(sourceTrialEnd === null ? {} : { [TRIAL_END_METADATA_KEY]: String(sourceTrialEnd) }),
 			},
 			subscription_data: {
 				metadata: {
 					[ORGANIZATION_METADATA_KEY]: input.organizationId,
 					[PLAN_METADATA_KEY]: plan.key,
 				},
-				...(input.trialDays !== undefined
+				...(effectiveTrialEnd !== null
 					? {
-							trial_period_days: input.trialDays,
+							trial_end: effectiveTrialEnd,
 							trial_settings: { end_behavior: { missing_payment_method: 'pause' as const } },
 						}
 					: {}),
@@ -324,7 +335,7 @@ async function createSubscriptionCheckoutSession(input: {
 			cancel_url: `${billingUrl}?checkout=canceled`,
 		},
 		{
-			idempotencyKey: `cloud-checkout-${input.kind}-v11:${input.organizationId}:${plan.key}:${input.currency}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
+			idempotencyKey: `cloud-checkout-${input.kind}-v12:${input.organizationId}:${plan.key}:${input.currency}:${input.operationKey}${latestExpiredSession ? `:${latestExpiredSession.id}` : ''}`,
 		},
 	);
 	if (!session.url) {
@@ -870,8 +881,18 @@ async function expireOpenCreditTopUpSession(session: Stripe.Checkout.Session): P
 	}
 }
 
-function checkoutTrialMessage(trialDays: number): string {
-	return `Nothing is charged today. Your ${trialDays}-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.`;
+function checkoutTrialMessage(trialEnd: Date): string {
+	const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(trialEnd);
+	return `Nothing is charged today. Your recurring price, including any promotion code discount, starts when your trial ends on ${date}.`;
+}
+
+function effectiveCheckoutTrialEnd(trialEnd: Date): number {
+	const minimumTrialEnd = Date.now() + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_CLOCK_SKEW_MS;
+	return stripeTimestamp(new Date(Math.max(trialEnd.getTime(), minimumTrialEnd)));
+}
+
+function stripeTimestamp(date: Date): number {
+	return Math.floor(date.getTime() / 1_000);
 }
 
 async function reuseOrExpireOpenCheckoutSessions(

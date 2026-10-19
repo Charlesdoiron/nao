@@ -147,7 +147,7 @@ it('offers an available trial to non-managers without a billing action', () => {
 	render(<CloudBillingAccessBanner />);
 
 	expect(screen.getByRole('status').textContent).toContain(
-		'An organization admin can activate 14 days of nao Cloud.',
+		'An organization admin can configure billing for the organization.',
 	);
 	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
 	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();

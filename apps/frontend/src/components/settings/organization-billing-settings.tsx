@@ -76,7 +76,7 @@ function BillingFeedback({ billingState }: { billingState: BillingState }) {
 }
 
 function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, isHistoricalSubscription, statusView } = billingState;
+	const { billing, hasStripeSubscription, isHistoricalSubscription, localTrialActive, statusView } = billingState;
 	const currentPlan = billing.data?.plan;
 
 	return (
@@ -92,7 +92,18 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 				</p>
 			)}
 			{billing.data &&
-				(currentPlan && !isHistoricalSubscription ? (
+				(localTrialActive ? (
+					<div className='flex flex-col gap-2'>
+						<div className='flex flex-wrap items-center gap-2'>
+							<p className='font-medium text-foreground'>nao Cloud trial</p>
+							<Badge variant={statusView.variant}>{statusView.label}</Badge>
+						</div>
+						<p className='text-sm text-muted-foreground'>{statusView.description}</p>
+						<p className='text-sm text-muted-foreground'>
+							Trial ends {formatBillingDate(billing.data.trialEndsAt)}.
+						</p>
+					</div>
+				) : currentPlan && !isHistoricalSubscription ? (
 					<div className='flex flex-col gap-2'>
 						<div className='flex flex-wrap items-center gap-2'>
 							<p className='font-medium text-foreground'>{currentPlan.name}</p>
@@ -178,12 +189,13 @@ function UpcomingPaymentEstimate({ billingState }: { billingState: BillingState 
 }
 
 function BillingSetupCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, plan } = billingState;
+	const { billing, hasStripeSubscription, localTrialActive, plan } = billingState;
+	const trialCheckoutAvailable = billing.data?.trialAvailable === true || localTrialActive;
 	if (
 		!billing.data ||
 		hasStripeSubscription ||
 		!plan ||
-		(!billing.data.trialAvailable && !billing.data.resubscribeAvailable)
+		(!trialCheckoutAvailable && !billing.data.resubscribeAvailable)
 	) {
 		return null;
 	}
@@ -213,44 +225,46 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 					<PlanDetail
 						label='Free trial'
 						value={
-							isTrialAvailable
-								? `${plan.trialDays} days, starting after Stripe Checkout`
-								: wasTrialUsed
-									? 'Already used'
-									: 'Unavailable'
+							localTrialActive
+								? `Ends ${formatBillingDate(billing.data.trialEndsAt)}`
+								: isTrialAvailable
+									? `${plan.trialDays} days, starting after Stripe Checkout`
+									: wasTrialUsed
+										? 'Already used'
+										: 'Unavailable'
 						}
 					/>
-					{isTrialAvailable && <PlanDetail label='Due today' value='No charge' />}
+					{trialCheckoutAvailable && <PlanDetail label='Due today' value='No charge' />}
 				</dl>
 
 				<div className='flex flex-col items-start gap-3 border-t border-border pt-5'>
 					<p className='text-sm text-muted-foreground'>
-						{isTrialAvailable
-							? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
-							: 'Continue to Stripe to restore billing for this organization. Billing starts immediately.'}
+						{localTrialActive
+							? `Your trial is already active through ${formatBillingDate(billing.data.trialEndsAt)}. Choose monthly or yearly billing in Stripe, where you can enter a promotion code. Nothing is charged before the trial ends.`
+							: isTrialAvailable
+								? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
+								: 'Continue to Stripe to restore billing for this organization. Billing starts immediately.'}
 					</p>
 					{billing.data.canManageBilling ? (
 						<Button
-							onClick={isTrialAvailable ? billingState.openTrialCheckout : billingState.resubscribe}
+							onClick={trialCheckoutAvailable ? billingState.openTrialCheckout : billingState.resubscribe}
 							isLoading={
-								isTrialAvailable
+								trialCheckoutAvailable
 									? billingState.isTrialCheckoutPending
 									: billingState.isResubscribePending
 							}
 							disabled={billingState.isCheckoutPolling}
 						>
-							{isTrialAvailable
-								? `Start ${plan.trialDays}-day free trial in Stripe`
-								: 'Subscribe in Stripe'}
+							{trialCheckoutAvailable ? 'Choose plan in Stripe' : 'Subscribe in Stripe'}
 						</Button>
 					) : (
 						<p className='text-sm text-muted-foreground'>
 							Only an organization admin can subscribe or add billing details.
 						</p>
 					)}
-					{(isTrialAvailable ? billingState.trialCheckoutError : billingState.managementError) && (
+					{(trialCheckoutAvailable ? billingState.trialCheckoutError : billingState.managementError) && (
 						<p className='text-sm text-destructive' role='alert'>
-							{isTrialAvailable ? billingState.trialCheckoutError : billingState.managementError}
+							{trialCheckoutAvailable ? billingState.trialCheckoutError : billingState.managementError}
 						</p>
 					)}
 				</div>

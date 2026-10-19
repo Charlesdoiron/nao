@@ -3,7 +3,7 @@ import * as billingQueries from '../queries/billing.queries';
 import { getCreditPurchaseByCheckoutSession } from '../queries/credit-wallet.queries';
 import * as userQueries from '../queries/user.queries';
 import {
-	CLOUD_BILLING_PLANS,
+	CLOUD_BILLING_TRIAL_DAYS,
 	type CloudBillingCurrency,
 	type CloudBillingInterval,
 	isTerminalBillingStatus,
@@ -12,6 +12,7 @@ import {
 import { HandlerError } from '../utils/error';
 import { logger, serializeError } from '../utils/logger';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
+import { isActiveLocalTrial } from './cloud-billing-access.service';
 import { issueCreditPurchase } from './credit-wallet.service';
 import {
 	createCloudCheckoutSession,
@@ -53,16 +54,21 @@ export async function getCloudBillingOrganizationForAdmin(input: AdminBillingInp
 
 export async function createCloudTrialCheckoutForAdmin(input: AdminBillingCheckoutInput): Promise<string> {
 	const organization = await loadCloudBillingOrganization(input.organizationId);
-	if (!isTrialAvailable(organization.billing)) {
+	const localTrialActive = isActiveLocalTrial(organization.billing);
+	if (!isTrialAvailable(organization.billing) && !localTrialActive) {
 		throw new CloudBillingManagementInputError('This organization has already used its free trial');
 	}
+	const trialEnd =
+		localTrialActive && organization.billing?.trialEndsAt
+			? organization.billing.trialEndsAt
+			: trialEndFromNow(CLOUD_BILLING_TRIAL_DAYS);
 	const stripeCustomerId = await ensureCloudCustomer(organization, input.userId);
 	return createCloudCheckoutSession({
 		billingInterval: input.billingInterval,
 		currency: input.currency,
 		organizationId: organization.id,
 		stripeCustomerId,
-		trialDays: CLOUD_BILLING_PLANS[input.billingInterval].trialDays,
+		trialEnd,
 	});
 }
 
@@ -234,4 +240,10 @@ async function ensureCloudCustomer(organization: OrganizationWithBilling, userId
 		throw new Error('Unable to attach Stripe Customer');
 	}
 	return updated.stripeCustomerId;
+}
+
+function trialEndFromNow(days: number): Date {
+	const trialEnd = new Date();
+	trialEnd.setUTCDate(trialEnd.getUTCDate() + days);
+	return trialEnd;
 }

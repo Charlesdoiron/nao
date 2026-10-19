@@ -43,7 +43,7 @@ export async function reconcileCloudBillingCustomer(input: {
 	return {
 		applied: await billingQueries.updateSubscriptionProjection(billing.orgId, claim.token, {
 			...projection,
-			trialStartedAt: projection.trialStartedAt ?? claim.billing.trialStartedAt,
+			trialStartedAt: claim.billing.trialStartedAt ?? projection.trialStartedAt,
 			trialEndsAt: projection.trialEndsAt ?? claim.billing.trialEndsAt,
 		}),
 		ignored: false,

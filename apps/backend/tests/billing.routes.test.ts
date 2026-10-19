@@ -181,10 +181,11 @@ describe('billing.getStatus', () => {
 	});
 
 	it('returns the organization billing projection and matching plan', async () => {
-		const trialEndsAt = new Date('2026-10-05T00:00:00.000Z');
+		const trialEndsAt = new Date('2099-10-05T00:00:00.000Z');
 		testState.membership = membership({
 			billingPlan: 'cloud_monthly_v2',
 			billingStatus: 'trialing',
+			billingAccessEndsAt: trialEndsAt,
 			hasDefaultPaymentMethod: true,
 			trialEndsAt,
 		});
@@ -201,7 +202,8 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
-			resubscribeAvailable: true,
+			localTrialActive: true,
+			resubscribeAvailable: false,
 			trialAvailable: false,
 		});
 	});
@@ -329,16 +331,43 @@ describe('billing.createTrialCheckoutSession', () => {
 		stripeMocks.createCheckout.mockResolvedValue('https://checkout.stripe.com/trial');
 	});
 
-	it('opens a Stripe trial Checkout in the selected currency without granting local access first', async () => {
+	it('opens a legacy trial Checkout with an absolute end in the selected currency', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-24T00:00:00.000Z'));
+		try {
+			await expect(
+				caller().billing.createTrialCheckoutSession({ billingInterval: 'monthly', currency: 'eur' }),
+			).resolves.toEqual({ url: 'https://checkout.stripe.com/trial' });
+			expect(stripeMocks.createCheckout).toHaveBeenCalledWith({
+				billingInterval: 'monthly',
+				currency: 'eur',
+				organizationId: 'org-id',
+				stripeCustomerId: 'cus_cloud',
+				trialEnd: new Date('2026-10-08T00:00:00.000Z'),
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('uses the remaining local trial when an admin chooses a plan', async () => {
+		const trialEndsAt = new Date('2099-10-08T00:00:00.000Z');
+		testState.membership = membership({
+			billingStatus: 'trialing',
+			billingAccessEndsAt: trialEndsAt,
+			trialStartedAt: new Date('2099-09-24T00:00:00.000Z'),
+			trialEndsAt,
+		});
+
 		await expect(
-			caller().billing.createTrialCheckoutSession({ billingInterval: 'monthly', currency: 'eur' }),
+			caller().billing.createTrialCheckoutSession({ billingInterval: 'yearly', currency: 'usd' }),
 		).resolves.toEqual({ url: 'https://checkout.stripe.com/trial' });
 		expect(stripeMocks.createCheckout).toHaveBeenCalledWith({
-			billingInterval: 'monthly',
-			currency: 'eur',
+			billingInterval: 'yearly',
+			currency: 'usd',
 			organizationId: 'org-id',
 			stripeCustomerId: 'cus_cloud',
-			trialDays: 14,
+			trialEnd: trialEndsAt,
 		});
 	});
 

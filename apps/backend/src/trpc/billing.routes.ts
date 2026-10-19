@@ -16,7 +16,11 @@ import {
 	resumeCloudSubscriptionForAdmin,
 	syncCloudBillingForAdmin,
 } from '../services/billing-management.service';
-import { getCloudBillingAccessEndsAt, hasCloudBillingAccess } from '../services/cloud-billing-access.service';
+import {
+	getCloudBillingAccessEndsAt,
+	hasCloudBillingAccess,
+	isActiveLocalTrial,
+} from '../services/cloud-billing-access.service';
 import {
 	CloudInitialCheckoutUnavailableError,
 	CloudSubscriptionResumeError,
@@ -118,6 +122,7 @@ export const billingRoutes = {
 		});
 		const billing = organization.billing;
 		const trialAvailable = isTrialAvailable(billing);
+		const localTrialActive = isActiveLocalTrial(billing);
 		const { availablePlans, subscriptionPlan } = await (async () => {
 			const subscriptionCurrency = billing?.stripeSubscriptionId
 				? await getCloudSubscriptionCurrency(billing.stripeSubscriptionId)
@@ -139,11 +144,12 @@ export const billingRoutes = {
 			billingAccessEndsAt: billing?.billingAccessEndsAt ?? null,
 			canManageBilling: true,
 			trialAvailable,
+			localTrialActive,
 			portalAvailable: Boolean(billing?.stripeCustomerId && billing.stripeSubscriptionId),
 			invoiceHistoryAvailable: Boolean(billing?.stripeCustomerId),
 			paymentMethodManagementAvailable: Boolean(billing?.stripeCustomerId),
 			resubscribeAvailable:
-				(!billing?.stripeSubscriptionId && !trialAvailable) ||
+				(!billing?.stripeSubscriptionId && !trialAvailable && !localTrialActive) ||
 				(Boolean(billing?.stripeCustomerId && billing.stripeSubscriptionId) &&
 					isTerminalBillingStatus(billing?.billingStatus)),
 			hasStripeSubscription: Boolean(billing?.stripeSubscriptionId),

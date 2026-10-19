@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 	invoiceKind: 'subscription' as 'trial' | 'subscription' | 'no_charge',
 	invoicePromotionCodes: [] as string[],
 	invoiceTotal: 100_000,
+	localTrialActive: false,
+	openTrialCheckout: vi.fn(),
 	resubscribe: vi.fn(),
 	selectedBillingInterval: 'monthly' as 'monthly' | 'yearly',
 	setSelectedBillingInterval: vi.fn(),
@@ -53,6 +55,7 @@ beforeEach(() => {
 	mocks.invoiceKind = 'subscription';
 	mocks.invoicePromotionCodes = [];
 	mocks.invoiceTotal = 100_000;
+	mocks.localTrialActive = false;
 	mocks.selectedBillingInterval = 'monthly';
 	mocks.status = 'trialing';
 	mocks.trialAvailable = false;
@@ -71,6 +74,19 @@ it('offers a paid recovery Checkout when a recorded trial has no Stripe subscrip
 
 	expect(mocks.resubscribe).toHaveBeenCalledOnce();
 	expect(screen.getByText('Already used')).toBeTruthy();
+});
+
+it('lets an admin choose a plan during an active local trial', () => {
+	mocks.localTrialActive = true;
+	mocks.trialEndsAt = new Date('2099-10-08T00:00:00.000Z');
+
+	render(<OrganizationBillingSettings search={{}} />);
+
+	expect(screen.getByText('nao Cloud trial')).toBeTruthy();
+	expect(screen.getByText(/Your trial is already active through/)).toBeTruthy();
+	expect(screen.getByText(/enter a promotion code/)).toBeTruthy();
+	fireEvent.click(screen.getByRole('button', { name: 'Choose plan in Stripe' }));
+	expect(mocks.openTrialCheckout).toHaveBeenCalledOnce();
 });
 
 it('offers monthly and yearly choices when restarting a canceled subscription', () => {
@@ -243,8 +259,11 @@ function billingState(): BillingState {
 		plan: mocks.hasStripeSubscription ? plan : null,
 		planKey: mocks.hasStripeSubscription ? plan.key : null,
 		portalAvailable: false,
+		localTrialActive: mocks.localTrialActive,
 		resubscribeAvailable:
-			!mocks.hasStripeSubscription || mocks.status === 'canceled' || mocks.status === 'incomplete_expired',
+			(!mocks.hasStripeSubscription && !mocks.localTrialActive) ||
+			mocks.status === 'canceled' ||
+			mocks.status === 'incomplete_expired',
 		status: mocks.status,
 		trialAvailable: mocks.trialAvailable,
 		trialEndsAt: mocks.trialEndsAt,
@@ -294,6 +313,7 @@ function billingState(): BillingState {
 		isCheckoutPolling: mocks.isCheckoutPolling,
 		isEndingAtPeriodEnd: data.cancellationScheduled && (data.status === 'active' || data.status === 'trialing'),
 		isHistoricalSubscription: isTerminalBillingStatus(mocks.status),
+		localTrialActive: mocks.localTrialActive,
 		isPaymentMethodPortalPending: false,
 		isPortalPending: false,
 		isResubscribePending: false,
@@ -302,7 +322,7 @@ function billingState(): BillingState {
 		managementError: null,
 		openPaymentMethodPortal: vi.fn(),
 		openPortal: vi.fn(),
-		openTrialCheckout: vi.fn(),
+		openTrialCheckout: mocks.openTrialCheckout,
 		plan,
 		portalFeedback: null,
 		resubscribe: mocks.resubscribe,

@@ -167,8 +167,8 @@ function BillingAccessError({
 						? 'Billing details could not be loaded.'
 						: access?.trialAvailable
 							? access.canManageBilling
-								? 'Start your free trial, then retry your message.'
-								: 'Ask an organization admin to start the free trial, then retry your message.'
+								? 'Activate the available free trial, then retry your message.'
+								: 'Ask an organization admin to activate the free trial, then retry your message.'
 							: 'Manage your subscription, then retry your message.'}
 			</p>
 			<div className='mt-3 flex flex-wrap gap-2'>

@@ -17,7 +17,7 @@ import {
 import {
 	adminProtectedProcedure,
 	cloudBillingAdminProcedure,
-	cloudBillingOrganizationProcedure,
+	organizationProtectedProcedure,
 	protectedProcedure,
 } from './trpc';
 
@@ -62,7 +62,7 @@ export const gitlabRoutes = {
 			}
 		}),
 
-	createProjectFromRepo: cloudBillingOrganizationProcedure
+	createProjectFromRepo: organizationProtectedProcedure
 		.input(
 			z.object({
 				projectPathWithNamespace: z.string(),

@@ -29,6 +29,7 @@ vi.mock('../src/db/db', async () => {
 
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
+import { __reloadEnvForTesting } from '../src/env';
 import {
 	attachStripeCustomer,
 	claimBillingSync,
@@ -36,6 +37,7 @@ import {
 	type SubscriptionProjection,
 	updateSubscriptionProjection,
 } from '../src/queries/billing.queries';
+import { createProject } from '../src/queries/project.queries';
 import { claimDueJobs, enqueueOnceJob } from '../src/queries/scheduled-job.queries';
 
 describe('billing consistency queries', () => {
@@ -73,6 +75,117 @@ describe('billing consistency queries', () => {
 			orgId: 'uninitialized-billing-org',
 			stripeCustomerId: 'cus_new',
 		});
+	});
+
+	it('attaches Stripe to an existing local trial without replacing its dates', async () => {
+		const trialStartedAt = new Date('2026-10-01T00:00:00.000Z');
+		const trialEndsAt = new Date('2026-10-15T00:00:00.000Z');
+		await db.insert(s.organization).values({
+			id: 'local-trial-billing-org',
+			name: 'Local Trial Billing',
+			slug: 'local-trial-billing',
+		});
+		await db.insert(s.organizationBilling).values({
+			orgId: 'local-trial-billing-org',
+			billingStatus: 'trialing',
+			trialStartedAt,
+			trialEndsAt,
+			billingAccessEndsAt: trialEndsAt,
+		});
+
+		await expect(attachStripeCustomer('local-trial-billing-org', 'cus_local_trial')).resolves.toMatchObject({
+			billingStatus: 'trialing',
+			stripeCustomerId: 'cus_local_trial',
+			trialStartedAt,
+			trialEndsAt,
+		});
+	});
+
+	it('starts one local trial when the first project is created', async () => {
+		const originalEnv = { ...process.env };
+		Object.assign(process.env, {
+			NAO_MODE: 'cloud',
+			CLOUD_BILLING_ENABLED: 'true',
+			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
+			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
+			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
+			STRIPE_SECRET_KEY: 'sk_test_example',
+			STRIPE_WEBHOOK_SECRET: 'whsec_example',
+		});
+		__reloadEnvForTesting();
+		await db.insert(s.organization).values({
+			id: 'automatic-trial-org',
+			name: 'Automatic Trial',
+			slug: 'automatic-trial',
+		});
+
+		try {
+			await createProject({
+				id: 'automatic-trial-project-1',
+				orgId: 'automatic-trial-org',
+				name: 'First',
+				type: 'local',
+				path: '/tmp/automatic-trial-1',
+			});
+			const firstBilling = await getOrganizationBilling('automatic-trial-org');
+
+			expect(firstBilling).toMatchObject({
+				billingStatus: 'trialing',
+				stripeCustomerId: null,
+				stripeSubscriptionId: null,
+			});
+			expect(firstBilling?.trialStartedAt).toBeInstanceOf(Date);
+			expect(firstBilling?.trialEndsAt?.getTime()).toBe(
+				firstBilling!.trialStartedAt!.getTime() + 14 * 24 * 60 * 60 * 1000,
+			);
+			expect(firstBilling?.billingAccessEndsAt).toEqual(firstBilling?.trialEndsAt);
+
+			await createProject({
+				id: 'automatic-trial-project-2',
+				orgId: 'automatic-trial-org',
+				name: 'Second',
+				type: 'local',
+				path: '/tmp/automatic-trial-2',
+			});
+			expect(await getOrganizationBilling('automatic-trial-org')).toEqual(firstBilling);
+		} finally {
+			process.env = originalEnv;
+			__reloadEnvForTesting();
+		}
+	});
+
+	it('does not consume a trial for a bypass-billing organization', async () => {
+		const originalEnv = { ...process.env };
+		Object.assign(process.env, {
+			NAO_MODE: 'cloud',
+			CLOUD_BILLING_ENABLED: 'true',
+			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
+			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
+			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
+			STRIPE_SECRET_KEY: 'sk_test_example',
+			STRIPE_WEBHOOK_SECRET: 'whsec_example',
+		});
+		__reloadEnvForTesting();
+		await db.insert(s.organization).values({
+			id: 'bypass-trial-org',
+			name: 'Bypass Trial',
+			slug: 'bypass-trial',
+			bypassBilling: true,
+		});
+
+		try {
+			await createProject({
+				id: 'bypass-trial-project',
+				orgId: 'bypass-trial-org',
+				name: 'Bypass',
+				type: 'local',
+				path: '/tmp/bypass-trial',
+			});
+			await expect(getOrganizationBilling('bypass-trial-org')).resolves.toBeNull();
+		} finally {
+			process.env = originalEnv;
+			__reloadEnvForTesting();
+		}
 	});
 
 	it('rejects a superseded projection', async () => {

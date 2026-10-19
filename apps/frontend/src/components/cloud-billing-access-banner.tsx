@@ -58,10 +58,10 @@ function getAccessNotice(access: CloudBillingAccess | undefined, now = Date.now(
 	if (access.trialAvailable) {
 		return {
 			restricted: true,
-			title: 'Start your free trial when you are ready.',
+			title: 'A 14-day free trial is available.',
 			description: access.canManageBilling
-				? 'Add a payment method to activate 14 days of nao Cloud.'
-				: 'An organization admin can activate 14 days of nao Cloud.',
+				? 'New organizations start it with their first project, or you can configure billing now.'
+				: 'An organization admin can configure billing for the organization.',
 		};
 	}
 	if (!access.hasAccess) {

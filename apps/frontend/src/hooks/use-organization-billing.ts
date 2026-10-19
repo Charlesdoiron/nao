@@ -68,6 +68,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		? (billing.data.plan ?? selectedPlan)
 		: (selectedPlan ?? billing.data?.plan);
 	const { hasStripeSubscription, isHistoricalSubscription, status } = billingSync;
+	const localTrialActive = billing.data?.localTrialActive === true;
 	const statusView = getBillingStatusView(
 		status,
 		billing.data?.cancellationScheduled ?? false,
@@ -84,6 +85,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		status,
 		statusView,
 		hasStripeSubscription,
+		localTrialActive,
 		isHistoricalSubscription,
 		isEndingAtPeriodEnd,
 		selectedBillingInterval,

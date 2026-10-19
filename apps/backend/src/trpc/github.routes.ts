@@ -15,8 +15,8 @@ import {
 } from '../utils/project-import.utils';
 import {
 	cloudBillingAdminProcedure,
-	cloudBillingOrganizationProcedure,
 	contextAdminProtectedProcedure,
+	organizationProtectedProcedure,
 	protectedProcedure,
 } from './trpc';
 
@@ -61,7 +61,7 @@ export const githubRoutes = {
 			}
 		}),
 
-	createProjectFromRepo: cloudBillingOrganizationProcedure
+	createProjectFromRepo: organizationProtectedProcedure
 		.input(
 			z.object({
 				repoFullName: z.string(),

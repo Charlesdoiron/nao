@@ -37,7 +37,7 @@ export function getCloudBillingAccessEndsAt(entitlement: CloudBillingEntitlement
 	switch (entitlement.billingStatus) {
 		case 'trialing':
 			if (entitlement.stripeSubscriptionId === null) {
-				return null;
+				return getLocalTrialAccessEndsAt(entitlement);
 			}
 			if (entitlement.hasDefaultPaymentMethod && !entitlement.cancellationScheduled) {
 				return addGrace(entitlement.trialEndsAt);
@@ -52,6 +52,21 @@ export function getCloudBillingAccessEndsAt(entitlement: CloudBillingEntitlement
 		default:
 			return null;
 	}
+}
+
+export function isActiveLocalTrial(entitlement: CloudBillingEntitlement | null, now = Date.now()): boolean {
+	const accessEndsAt = getLocalTrialAccessEndsAt(entitlement);
+	return accessEndsAt !== null && accessEndsAt.getTime() > now;
+}
+
+function getLocalTrialAccessEndsAt(entitlement: CloudBillingEntitlement | null): Date | null {
+	if (entitlement?.billingStatus !== 'trialing' || entitlement.stripeSubscriptionId !== null) {
+		return null;
+	}
+	if (!entitlement.trialEndsAt || !entitlement.billingAccessEndsAt) {
+		return null;
+	}
+	return earlierDate(entitlement.trialEndsAt, entitlement.billingAccessEndsAt);
 }
 
 export async function hasOrganizationCloudBillingAccess(organizationId: string): Promise<boolean> {

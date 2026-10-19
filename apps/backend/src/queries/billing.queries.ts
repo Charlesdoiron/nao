@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import s, {
 	DBOrganization,
@@ -6,8 +6,9 @@ import s, {
 	DBStripeWebhookEvent,
 	NewStripeWebhookEvent,
 } from '../db/abstractSchema';
-import { db } from '../db/db';
-import { BillingStatus } from '../types/billing';
+import { db, type DBExecutor } from '../db/db';
+import dbConfig, { Dialect } from '../db/dbConfig';
+import { type BillingStatus, CLOUD_BILLING_TRIAL_DAYS } from '../types/billing';
 
 export interface SubscriptionProjection {
 	billingPlan: string;
@@ -50,10 +51,36 @@ export async function getOrganizationBilling(orgId: string): Promise<DBOrganizat
 	return billing ?? null;
 }
 
+export function startOrganizationTrial(orgId: string, now: Date, executor: DBExecutor): void | Promise<void> {
+	const trialEndsAt = new Date(now);
+	trialEndsAt.setUTCDate(trialEndsAt.getUTCDate() + CLOUD_BILLING_TRIAL_DAYS);
+	const query = executor
+		.insert(s.organizationBilling)
+		.values({
+			orgId,
+			billingStatus: 'trialing',
+			trialStartedAt: now,
+			trialEndsAt,
+			billingAccessEndsAt: trialEndsAt,
+			billingUpdatedAt: now,
+		})
+		.onConflictDoNothing();
+	if (dbConfig.dialect === Dialect.Postgres) {
+		return query.execute().then(() => undefined);
+	}
+	query.run();
+}
+
 export async function attachStripeCustomer(orgId: string, stripeCustomerId: string): Promise<DBOrganizationBilling> {
+	const billingUpdatedAt = new Date();
+	await db
+		.update(s.organizationBilling)
+		.set({ stripeCustomerId, billingUpdatedAt })
+		.where(and(eq(s.organizationBilling.orgId, orgId), isNull(s.organizationBilling.stripeCustomerId)))
+		.execute();
 	await db
 		.insert(s.organizationBilling)
-		.values({ orgId, stripeCustomerId, billingUpdatedAt: new Date() })
+		.values({ orgId, stripeCustomerId, billingUpdatedAt })
 		.onConflictDoNothing()
 		.execute();
 

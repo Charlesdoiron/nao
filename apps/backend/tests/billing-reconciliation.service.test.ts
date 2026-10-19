@@ -82,15 +82,15 @@ describe('cloud billing reconciliation', () => {
 		);
 	});
 
-	it('prefers live subscription trial dates over persisted history', async () => {
-		const trialStartedAt = new Date('2026-02-01T00:00:00.000Z');
+	it('preserves the local trial start and accepts the live subscription trial end', async () => {
+		const stripeTrialStartedAt = new Date('2026-02-01T00:00:00.000Z');
 		const trialEndsAt = new Date('2026-02-15T00:00:00.000Z');
 		mocks.listSubscriptions.mockResolvedValue([buildSubscription()]);
 		mocks.subscriptionProjection.mockResolvedValue({
 			billingStatus: 'trialing',
 			stripeCustomerId: 'cus_cloud',
 			stripeSubscriptionId: 'sub_active',
-			trialStartedAt,
+			trialStartedAt: stripeTrialStartedAt,
 			trialEndsAt,
 		});
 
@@ -99,7 +99,10 @@ describe('cloud billing reconciliation', () => {
 		expect(mocks.updateSubscription).toHaveBeenCalledWith(
 			'org-id',
 			'sync-token',
-			expect.objectContaining({ trialStartedAt, trialEndsAt }),
+			expect.objectContaining({
+				trialStartedAt: new Date('2026-01-01T00:00:00.000Z'),
+				trialEndsAt,
+			}),
 		);
 	});
 

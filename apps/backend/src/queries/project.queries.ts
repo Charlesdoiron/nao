@@ -21,9 +21,10 @@ import type { AgentSettings, DBProject, DBProjectMember, NewProject, NewProjectM
 import s from '../db/abstractSchema';
 import { db, type DBExecutor, type DBTransaction } from '../db/db';
 import dbConfig, { Dialect } from '../db/dbConfig';
-import { env, isCloud } from '../env';
+import { env, isCloud, isCloudBillingEnabled } from '../env';
 import type { ListProjectChatsResponse, ProjectChatsFacetKey, UserWithRole } from '../types/project';
 import { HandlerError } from '../utils/error';
+import { startOrganizationTrial } from './billing.queries';
 import { createCostLookup, TOTAL_COST_EXPR } from './usage.queries';
 import { userMemberStatus } from './user.queries';
 
@@ -446,21 +447,78 @@ type Lockable<Query> = { for(strength: 'update'): Query };
 const createProjectWithDefaultGroup = (
 	project: NewProject,
 	transaction: DBTransaction,
-): DBProject | Promise<DBProject> => {
-	if (dbConfig.dialect === Dialect.Postgres) {
-		return createPostgresProjectWithDefaultGroup(project, transaction);
-	}
+): DBProject | Promise<DBProject> =>
+	dbConfig.dialect === Dialect.Postgres
+		? createPostgresProjectWithDefaultGroup(project, transaction)
+		: createSqliteProjectWithDefaultGroup(project, transaction);
+
+function createSqliteProjectWithDefaultGroup(project: NewProject, transaction: DBTransaction): DBProject {
+	const shouldStartTrial = shouldStartSqliteOrganizationTrial(project.orgId, transaction);
 	const [created] = transaction.insert(s.project).values(project).returning().all();
 	transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).run();
+	if (shouldStartTrial && created.orgId) {
+		startOrganizationTrial(created.orgId, new Date(), transaction);
+	}
 	return created;
-};
+}
+
+function shouldStartSqliteOrganizationTrial(orgId: string | null | undefined, executor: DBExecutor): boolean {
+	if (!orgId || !isCloudBillingEnabled()) {
+		return false;
+	}
+	const [organization] = executor
+		.select({ bypassBilling: s.organization.bypassBilling })
+		.from(s.organization)
+		.where(eq(s.organization.id, orgId))
+		.limit(1)
+		.all();
+	if (!organization || organization.bypassBilling) {
+		return false;
+	}
+	const [existingProject] = executor
+		.select({ id: s.project.id })
+		.from(s.project)
+		.where(eq(s.project.orgId, orgId))
+		.limit(1)
+		.all();
+	return !existingProject;
+}
+
+async function shouldStartPostgresOrganizationTrial(
+	orgId: string | null | undefined,
+	executor: DBExecutor,
+): Promise<boolean> {
+	if (!orgId || !isCloudBillingEnabled()) {
+		return false;
+	}
+	const [organization] = await executor
+		.select({ bypassBilling: s.organization.bypassBilling })
+		.from(s.organization)
+		.where(eq(s.organization.id, orgId))
+		.limit(1)
+		.execute();
+	if (!organization || organization.bypassBilling) {
+		return false;
+	}
+	const [existingProject] = await executor
+		.select({ id: s.project.id })
+		.from(s.project)
+		.where(eq(s.project.orgId, orgId))
+		.limit(1)
+		.execute();
+	return !existingProject;
+}
 
 const createPostgresProjectWithDefaultGroup = async (
 	project: NewProject,
 	transaction: DBTransaction,
 ): Promise<DBProject> => {
+	const shouldStartTrial = await shouldStartPostgresOrganizationTrial(project.orgId, transaction);
 	const [created] = await transaction.insert(s.project).values(project).returning().execute();
 	await transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).execute();
+	if (shouldStartTrial && created.orgId) {
+		await startOrganizationTrial(created.orgId, new Date(), transaction);
+	}
 	return created;
 };
 
