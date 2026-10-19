@@ -1046,6 +1046,23 @@ code.dollar:before {
 	transition: opacity 150ms;
 }
 
+.sql-filter-marker {
+	border-radius: 4px;
+	background: color-mix(in oklab, var(--primary) 12%, transparent);
+	color: var(--primary) !important;
+	font-style: normal !important;
+	font-weight: 500;
+}
+
+.sql-filter-marker--error {
+	background: color-mix(in oklab, var(--destructive) 14%, transparent);
+	color: var(--destructive) !important;
+}
+
+.sql-filter-marker--active {
+	outline: 1.5px solid color-mix(in oklab, var(--primary) 55%, transparent);
+}
+
 .chart-editor-table th:hover .nao-table-display__sort,
 .chart-editor-table th:focus-within .nao-table-display__sort,
 .chart-editor-table th[aria-sort='ascending'] .nao-table-display__sort,

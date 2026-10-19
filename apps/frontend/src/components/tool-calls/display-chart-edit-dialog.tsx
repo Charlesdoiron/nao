@@ -26,6 +26,7 @@ import { ChartEditorQueryPane } from './chart-editor-query-pane';
 import { ChartTypePicker, chartTypeLabel } from './chart-type-picker';
 import type { ColumnValueKind } from '@/lib/chart-selection-summary';
 import type { SourceQuery } from '@/lib/execute-sql-messages';
+import type { SqlFilterEditing } from '@/components/side-panel/sql-filter-query-editor';
 import type { LucideIcon } from 'lucide-react';
 import type { executeSql } from '@nao/shared/tools';
 import type { ChartType } from '@nao/shared/chart-types';
@@ -118,6 +119,7 @@ interface ChartConfigEditDialogProps extends Omit<
 	description?: string;
 	sourceQuery?: SourceQuery | null;
 	initialView?: ChartEditorView;
+	filterEditing?: SqlFilterEditing;
 }
 
 export type ChartEditorView = 'chart' | 'query';
@@ -147,6 +149,7 @@ export function ChartConfigEditDialog({
 	description = 'Tweak the chart parameters.',
 	sourceQuery,
 	initialView = 'chart',
+	filterEditing,
 	...form
 }: ChartConfigEditDialogProps) {
 	const formId = useId();
@@ -230,6 +233,7 @@ export function ChartConfigEditDialog({
 								toolCallId={editableQuery.toolCallId}
 								onOutputChange={setEditedOutput}
 								onClose={() => setQueryEditorState('hidden')}
+								filterEditing={filterEditing}
 							/>
 						)}
 						<div className={cn('flex min-h-0 flex-1', isEditingQuery && 'hidden')}>

@@ -99,18 +99,20 @@ export function StoryFilterBar({
 	);
 }
 
-function StoryFilterControl({
+export function StoryFilterControl({
 	filter,
 	selection,
 	onChange,
 	onOptionError,
 	api,
+	label = filter.label,
 }: {
 	filter: ParsedFilterBlock;
 	selection: StoryFilterSelection | undefined;
 	onChange: (selection: StoryFilterSelection) => void;
 	onOptionError: (filterId: string, error: string | null) => void;
 	api?: StoryFilterApi | null;
+	label?: string;
 }) {
 	const { options, error, isLoading } = useFilterOptions(filter, api);
 
@@ -123,12 +125,12 @@ function StoryFilterControl({
 	return (
 		<div className='flex min-w-36 flex-col gap-1'>
 			<div className='flex items-center justify-between gap-1'>
-				<span className='text-xs font-medium text-muted-foreground'>{filter.label}</span>
+				<span className='text-xs font-medium text-muted-foreground'>{label}</span>
 				{isActive && (
 					<button
 						type='button'
 						className='rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground'
-						aria-label={`Clear ${filter.label}`}
+						aria-label={`Clear ${label}`}
 						onClick={() => onChange(emptySelection(filter.filterType))}
 					>
 						<X className='size-3' />
