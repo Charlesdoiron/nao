@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sqlIncludesFilterTemplate } from '@nao/shared/sql-template';
 import { ChartEditorFiltersPanel } from './chart-editor-filters-panel';
 import type { Monaco } from '@monaco-editor/react';
@@ -22,6 +22,7 @@ const FILTERS_PANEL_MAX_WIDTH = 720;
 const LINT_MARKER_OWNER = 'nao-story-filters';
 const PANEL_OVERFLOW_HIDDEN = { overflow: 'hidden' } as const;
 const EMPTY_FILTERS: ParsedFilterBlock[] = [];
+const EMPTY_USAGES: FilterBlockUsage[] = [];
 
 interface ChartEditorQueryPaneProps {
 	input: executeSql.Input;
@@ -60,13 +61,12 @@ export function ChartEditorQueryPane({
 	const filters = storyFilters ?? EMPTY_FILTERS;
 	const showFiltersWorkspace = storyFilters !== undefined && (filters.length > 0 || sqlIncludesFilterTemplate(sql));
 	const lint = useMemo(() => lintSqlFilters(sql, filters), [sql, filters]);
-	const focusedUsages = useMemo(
-		() => lint.usages.filter((usage) => usage.filterId === focusedFilterId),
-		[lint.usages, focusedFilterId],
-	);
+	const workspaceLint = showFiltersWorkspace ? lint : null;
+	const workspaceUsages = workspaceLint?.usages ?? EMPTY_USAGES;
 
-	useLintMarkers(editorHandle, showFiltersWorkspace ? lint : null);
-	useFilterBlockHighlight(editorHandle, focusedUsages);
+	useLintMarkers(editorHandle, workspaceLint);
+	useFilterBlockHighlight(editorHandle, workspaceUsages, focusedFilterId);
+	useFocusFilterOnClick(editorHandle, workspaceUsages, setFocusedFilterId);
 
 	const handleOutputChange = useCallback(
 		(next: executeSql.Output) => {
@@ -196,7 +196,11 @@ function useLintMarkers(handle: EditorHandle | null, lint: SqlFilterLint | null)
 	}, [handle, lint]);
 }
 
-function useFilterBlockHighlight(handle: EditorHandle | null, usages: FilterBlockUsage[]) {
+function useFilterBlockHighlight(
+	handle: EditorHandle | null,
+	usages: FilterBlockUsage[],
+	focusedFilterId: string | null,
+) {
 	useEffect(() => {
 		const model = handle?.instance.getModel();
 		if (!handle || !model || usages.length === 0) {
@@ -205,11 +209,42 @@ function useFilterBlockHighlight(handle: EditorHandle | null, usages: FilterBloc
 		const collection = handle.instance.createDecorationsCollection(
 			usages.map((usage) => ({
 				range: toMonacoRange(handle.monaco, model, usage.start, usage.end),
-				options: { className: 'bg-primary/15 rounded-sm' },
+				options: {
+					className:
+						usage.filterId === focusedFilterId ? 'bg-primary/20 rounded-sm' : 'bg-primary/5 rounded-sm',
+					hoverMessage: { value: `Story filter \`${usage.filterId}\`, see the Filters panel` },
+				},
 			})),
 		);
 		return () => collection.clear();
-	}, [handle, usages]);
+	}, [handle, usages, focusedFilterId]);
+}
+
+function useFocusFilterOnClick(
+	handle: EditorHandle | null,
+	usages: FilterBlockUsage[],
+	onFocusFilter: (filterId: string) => void,
+) {
+	const usagesRef = useRef(usages);
+	usagesRef.current = usages;
+
+	useEffect(() => {
+		if (!handle) {
+			return;
+		}
+		const disposable = handle.instance.onDidChangeCursorPosition((event) => {
+			const model = handle.instance.getModel();
+			if (event.source !== 'mouse' || !model) {
+				return;
+			}
+			const offset = model.getOffsetAt(event.position);
+			const usage = usagesRef.current.find(({ start, end }) => offset >= start && offset <= end);
+			if (usage) {
+				onFocusFilter(usage.filterId);
+			}
+		});
+		return () => disposable.dispose();
+	}, [handle, onFocusFilter]);
 }
 
 function toMonacoRange(monaco: Monaco, model: editor.ITextModel, start: number, end: number) {
