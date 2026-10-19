@@ -303,7 +303,6 @@ export const StoryTableEmbed = memo(function StoryTableEmbed({
 				columns={visibleColumns}
 				title={table.title}
 				conditionalFormats={table.conditionalFormats}
-				maxRowsBeforePagination={viewOptions.pageSize}
 				headerActions={
 					<>
 						<ManualFilterBadge filters={manualFilters} />

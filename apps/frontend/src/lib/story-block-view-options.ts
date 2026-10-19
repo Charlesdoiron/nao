@@ -9,8 +9,6 @@ export const CHART_VIEW_TYPES = [
 	{ id: 'horizontal_bar', label: 'Horizontal bar' },
 ] as const;
 
-export const TABLE_PAGE_SIZES = [10, 25, 50] as const;
-
 export interface ChartViewOptions {
 	seriesKeys: string[] | null;
 	chartType: string | null;
@@ -21,7 +19,6 @@ export interface ChartViewOptions {
 
 export interface TableViewOptions {
 	hiddenColumns: string[];
-	pageSize: number;
 }
 
 export const DEFAULT_CHART_VIEW_OPTIONS: ChartViewOptions = {
@@ -34,7 +31,6 @@ export const DEFAULT_CHART_VIEW_OPTIONS: ChartViewOptions = {
 
 export const DEFAULT_TABLE_VIEW_OPTIONS: TableViewOptions = {
 	hiddenColumns: [],
-	pageSize: TABLE_PAGE_SIZES[0],
 };
 
 export interface ChartSeriesCandidate {
@@ -87,7 +83,7 @@ export function isChartViewCustomized(options: ChartViewOptions): boolean {
 }
 
 export function isTableViewCustomized(options: TableViewOptions): boolean {
-	return options.hiddenColumns.length > 0 || options.pageSize !== DEFAULT_TABLE_VIEW_OPTIONS.pageSize;
+	return options.hiddenColumns.length > 0;
 }
 
 export function toggleKey(keys: string[], key: string, enabled: boolean): string[] {

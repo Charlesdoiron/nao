@@ -41,31 +41,33 @@ export function StoryManualFilterBar({
 	}
 
 	return (
-		<div className='sticky top-0 z-20 flex min-h-10 flex-wrap items-center gap-1.5 rounded-xl border bg-background/90 px-2 py-1.5 shadow-xs backdrop-blur'>
-			<ListFilter className='mx-1 size-3.5 shrink-0 text-muted-foreground' />
-			{filters.map((filter) => (
-				<FilterChip
-					key={filter.id}
-					filter={filter}
-					blocks={blocks}
-					queryData={queryData}
-					onUpdate={onUpdate}
-					onRemove={() => onRemove(filter.id)}
-				/>
-			))}
-			<AddFilterPopover fields={fields} blocks={blocks} queryData={queryData} onAdd={onAdd} />
-			{filters.length === 0 ? (
-				<span className='truncate text-xs text-muted-foreground'>
-					{`Filter by ${fields
-						.slice(0, 3)
-						.map((field) => field.label)
-						.join(', ')}…`}
-				</span>
-			) : (
-				<Button variant='ghost-muted' size='sm' className='ml-auto h-7 text-xs' onClick={onClear}>
-					Clear all
-				</Button>
-			)}
+		<div className='sticky top-0 z-20 -my-2 bg-background py-2'>
+			<div className='flex min-h-10 flex-wrap items-center gap-1.5 rounded-xl border bg-background px-2 py-1.5 shadow-xs'>
+				<ListFilter className='mx-1 size-3.5 shrink-0 text-muted-foreground' />
+				{filters.map((filter) => (
+					<FilterChip
+						key={filter.id}
+						filter={filter}
+						blocks={blocks}
+						queryData={queryData}
+						onUpdate={onUpdate}
+						onRemove={() => onRemove(filter.id)}
+					/>
+				))}
+				<AddFilterPopover fields={fields} blocks={blocks} queryData={queryData} onAdd={onAdd} />
+				{filters.length === 0 ? (
+					<span className='truncate text-xs text-muted-foreground'>
+						{`Filter by ${fields
+							.slice(0, 3)
+							.map((field) => field.label)
+							.join(', ')}…`}
+					</span>
+				) : (
+					<Button variant='ghost-muted' size='sm' className='ml-auto h-7 text-xs' onClick={onClear}>
+						Clear all
+					</Button>
+				)}
+			</div>
 		</div>
 	);
 }

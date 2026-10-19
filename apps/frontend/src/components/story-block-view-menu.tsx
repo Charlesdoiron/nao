@@ -24,7 +24,6 @@ import {
 	CHART_VIEW_TYPES,
 	DEFAULT_CHART_VIEW_OPTIONS,
 	DEFAULT_TABLE_VIEW_OPTIONS,
-	TABLE_PAGE_SIZES,
 	isChartViewCustomized,
 	isTableViewCustomized,
 	toggleKey,
@@ -184,26 +183,6 @@ export function StoryTableViewMenu({
 						);
 					})}
 				</div>
-				<DropdownMenuSeparator />
-				<DropdownMenuLabel className='text-xs text-muted-foreground'>Display</DropdownMenuLabel>
-				<DropdownMenuSub>
-					<DropdownMenuSubTrigger className='text-xs'>
-						Rows per page
-						<span className='ml-auto text-muted-foreground'>{options.pageSize}</span>
-					</DropdownMenuSubTrigger>
-					<DropdownMenuSubContent>
-						<DropdownMenuRadioGroup
-							value={String(options.pageSize)}
-							onValueChange={(value) => onChange({ ...options, pageSize: Number(value) })}
-						>
-							{TABLE_PAGE_SIZES.map((size) => (
-								<DropdownMenuRadioItem key={size} value={String(size)} className='text-xs'>
-									{size}
-								</DropdownMenuRadioItem>
-							))}
-						</DropdownMenuRadioGroup>
-					</DropdownMenuSubContent>
-				</DropdownMenuSub>
 				<ResetViewItem isCustomized={isCustomized} onReset={() => onChange(DEFAULT_TABLE_VIEW_OPTIONS)} />
 			</DropdownMenuContent>
 		</DropdownMenu>
