@@ -182,6 +182,7 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 			context,
 		);
 
+		expect(fetch).toHaveBeenCalledOnce();
 		const request = vi.mocked(fetch).mock.calls[0]?.[1];
 		const body = JSON.parse(String(request?.body)) as { query_parameters: unknown };
 		expect(body.query_parameters).toEqual([{ name: 'users', type: 'STRING', values: ['a'] }]);
