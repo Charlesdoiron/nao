@@ -1419,4 +1419,12 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		keywords: ['files', 'context', 'documents', 'knowledge base'],
 		adminOrContextAdmin: true,
 	},
+	{
+		page: '/settings/tests',
+		pageLabel: 'Tests',
+		title: 'Tests',
+		description: 'Add, tag and run test questions against production or a working branch.',
+		keywords: ['evals', 'tests', 'reliability', 'accuracy', 'branch', 'tag', 'owner', 'pass rate'],
+		adminOrContextAdmin: true,
+	},
 ];
