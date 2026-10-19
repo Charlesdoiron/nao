@@ -1,17 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/shared/story-segments';
 import type { ChartType } from '@nao/shared/chart-types';
 
+import type { StoryChartViewMenuActions } from '@/components/side-panel/story-chart-embed';
 import { DataTableCard } from '@/components/data-table-card';
 import { StoryChartEmbedShell } from '@/components/side-panel/story-chart-embed';
 import { StoryMapEmbedShell } from '@/components/side-panel/story-map-embed';
 import { StoryTableEditControls } from '@/components/side-panel/story-table-embed';
+import { ManualFilterBadge, StoryChartViewMenu, StoryTableViewMenu } from '@/components/story-block-view-menu';
 import { StoryMapRender } from '@/components/story-map-embed';
 import { ChartDisplay } from '@/components/tool-calls/display-chart';
+import { useManualFiltersForQuery, useStoryViewControlsEnabled } from '@/contexts/story-manual-filters';
 import { useSourceQuery } from '@/hooks/use-source-query';
 import { sortByDateKey } from '@/lib/charts.utils';
+import {
+	DEFAULT_CHART_VIEW_OPTIONS,
+	DEFAULT_TABLE_VIEW_OPTIONS,
+	applyChartViewOptions,
+	getChartSeriesCandidates,
+	getVisibleSeriesKeys,
+	supportsChartViewOptions,
+} from '@/lib/story-block-view-options';
 import { cn } from '@/lib/utils';
 
 export type QueryDataMap = Record<string, { data: Record<string, unknown>[]; columns: string[] }>;
@@ -100,6 +111,10 @@ export const StoryChartEmbed = memo(function StoryChartEmbed({
 }) {
 	const resolvedData = useResolvedEmbedData(chart.queryId, { queryData, liveQuery });
 	const resolved = resolvedData.data;
+	const viewControlsEnabled = useStoryViewControlsEnabled();
+	const manualFilters = useManualFiltersForQuery(chart.queryId);
+	const [viewOptions, setViewOptions] = useState(DEFAULT_CHART_VIEW_OPTIONS);
+	const viewChart = useMemo(() => applyChartViewOptions(chart, viewOptions), [chart, viewOptions]);
 	const displayData = useMemo(
 		() =>
 			resolved?.data && chart.xAxisType === 'date'
@@ -133,28 +148,51 @@ export const StoryChartEmbed = memo(function StoryChartEmbed({
 		return <EmbedPlaceholder>No series configured for chart</EmbedPlaceholder>;
 	}
 
+	const renderViewMenu = viewControlsEnabled
+		? (actions: StoryChartViewMenuActions) => (
+				<StoryChartViewMenu
+					options={viewOptions}
+					onChange={setViewOptions}
+					candidates={getChartSeriesCandidates(chart, resolved.data, resolvedColumns)}
+					visibleSeriesKeys={getVisibleSeriesKeys(chart, viewOptions)}
+					chartType={viewChart.chartType}
+					showDataLabels={Boolean(viewChart.showDataLabels)}
+					supportsChartType={supportsChartViewOptions(chart)}
+					actions={actions}
+				/>
+			)
+		: undefined;
+
 	return (
-		<StoryChartEmbedShell chart={chart} availableColumns={resolvedColumns} data={resolved.data}>
+		<StoryChartEmbedShell
+			chart={chart}
+			availableColumns={resolvedColumns}
+			data={resolved.data}
+			titleAccessory={<ManualFilterBadge filters={manualFilters} />}
+			renderViewMenu={renderViewMenu}
+		>
 			<EmbedRefreshing isRefreshing={showRefreshing}>
 				<ChartDisplay
 					data={displayData}
-					chartType={chart.chartType as ChartType}
-					xAxisKey={chart.xAxisKey}
-					xAxisType={chart.xAxisType === 'number' ? 'number' : 'category'}
-					xAxisLabel={chart.xAxisLabel}
-					series={chart.series}
-					title={chart.title}
-					yAxisMin={chart.yAxisMin}
-					yAxisMax={chart.yAxisMax}
-					yAxisLabel={chart.yAxisLabel}
-					yAxisRightMin={chart.yAxisRightMin}
-					yAxisRightMax={chart.yAxisRightMax}
-					yAxisRightLabel={chart.yAxisRightLabel}
-					showDataLabels={chart.showDataLabels}
-					comparisonMode={chart.comparisonMode}
+					chartType={viewChart.chartType as ChartType}
+					xAxisKey={viewChart.xAxisKey}
+					xAxisType={viewChart.xAxisType === 'number' ? 'number' : 'category'}
+					xAxisLabel={viewChart.xAxisLabel}
+					series={viewChart.series}
+					title={viewChart.title}
+					yAxisMin={viewChart.yAxisMin}
+					yAxisMax={viewChart.yAxisMax}
+					yAxisLabel={viewChart.yAxisLabel}
+					yAxisRightMin={viewChart.yAxisRightMin}
+					yAxisRightMax={viewChart.yAxisRightMax}
+					yAxisRightLabel={viewChart.yAxisRightLabel}
+					showDataLabels={viewChart.showDataLabels}
+					showLegend={viewOptions.showLegend}
+					showGrid={viewOptions.showGrid}
+					comparisonMode={viewChart.comparisonMode}
 					animate
 					normalSize
-					hideTotal={chart.hideTotal}
+					hideTotal={viewChart.hideTotal}
 				/>
 			</EmbedRefreshing>
 		</StoryChartEmbedShell>
@@ -233,6 +271,9 @@ export const StoryTableEmbed = memo(function StoryTableEmbed({
 	const resolvedData = useResolvedEmbedData(table.queryId, { queryData, liveQuery });
 	const resolvedResult = resolvedData.data;
 	const showRefreshing = isRefreshing || resolvedData.isFetching;
+	const viewControlsEnabled = useStoryViewControlsEnabled();
+	const manualFilters = useManualFiltersForQuery(table.queryId);
+	const [viewOptions, setViewOptions] = useState(DEFAULT_TABLE_VIEW_OPTIONS);
 
 	if (resolvedData.isLoading) {
 		return <EmbedLoading />;
@@ -254,14 +295,24 @@ export const StoryTableEmbed = memo(function StoryTableEmbed({
 	}
 
 	const columns = resolvedResult.columns ?? [];
+	const visibleColumns = columns.filter((column) => !viewOptions.hiddenColumns.includes(column));
 	return (
 		<EmbedRefreshing isRefreshing={showRefreshing}>
 			<DataTableCard
 				data={resolvedResult.data}
-				columns={columns}
+				columns={visibleColumns}
 				title={table.title}
 				conditionalFormats={table.conditionalFormats}
-				headerActions={<StoryTableEditControls table={table} data={resolvedResult.data} columns={columns} />}
+				maxRowsBeforePagination={viewOptions.pageSize}
+				headerActions={
+					<>
+						<ManualFilterBadge filters={manualFilters} />
+						<StoryTableEditControls table={table} data={resolvedResult.data} columns={columns} />
+						{viewControlsEnabled && (
+							<StoryTableViewMenu options={viewOptions} onChange={setViewOptions} columns={columns} />
+						)}
+					</>
+				}
 			/>
 		</EmbedRefreshing>
 	);

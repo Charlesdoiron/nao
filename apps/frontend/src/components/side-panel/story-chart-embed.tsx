@@ -104,12 +104,20 @@ export const StoryChartEmbed = memo(function StoryChartEmbed({
 	);
 });
 
+export interface StoryChartViewMenuActions {
+	isQueryVisible: boolean;
+	onViewQuery?: () => void;
+	onEditChart?: () => void;
+}
+
 interface StoryChartEmbedShellProps {
 	chart: ChartBlock;
 	availableColumns: string[];
 	data?: Record<string, unknown>[];
 	dragHandle?: React.ReactNode;
 	dragHandlePlacement?: 'leading' | 'trailing';
+	titleAccessory?: React.ReactNode;
+	renderViewMenu?: (actions: StoryChartViewMenuActions) => React.ReactNode;
 	children: React.ReactNode;
 }
 
@@ -123,6 +131,8 @@ export function StoryChartEmbedShell({
 	data,
 	dragHandle,
 	dragHandlePlacement = 'trailing',
+	titleAccessory,
+	renderViewMenu,
 	children,
 }: StoryChartEmbedShellProps) {
 	const edit = useStoryChartEdit();
@@ -198,21 +208,36 @@ export function StoryChartEmbedShell({
 			<Code className='size-3.5' />
 		</Button>
 	) : null;
+	const viewMenu =
+		renderViewMenu && !isKpi
+			? renderViewMenu({
+					isQueryVisible: showQuery,
+					onViewQuery: canViewQuery
+						? () => (canOpenQueryEditor ? openEditor('query') : setShowQuery((current) => !current))
+						: undefined,
+					onEditChart: canEdit ? () => openEditor('chart') : undefined,
+				})
+			: null;
 
 	return (
 		<div className='my-2 flex flex-col gap-4'>
-			{!isKpi && (canEdit || canViewQuery || dragHandle != null || chart.title) && (
+			{!isKpi && (canEdit || canViewQuery || dragHandle != null || chart.title || viewMenu) && (
 				<div className='flex w-full items-center justify-between gap-2'>
-					<div className='flex min-w-0 flex-1 items-center gap-1'>
+					<div className='flex min-w-0 flex-1 items-center gap-1.5'>
 						{dragHandlePlacement === 'leading' ? dragHandle : null}
 						{chart.title ? (
 							<span className='text-sm font-medium text-foreground min-w-0 truncate'>{chart.title}</span>
 						) : null}
+						{titleAccessory}
 					</div>
 					<div className='flex shrink-0 items-center gap-1'>
 						{dragHandlePlacement === 'leading' ? null : dragHandle}
-						{queryButton}
-						{editButton}
+						{viewMenu ?? (
+							<>
+								{queryButton}
+								{editButton}
+							</>
+						)}
 					</div>
 				</div>
 			)}

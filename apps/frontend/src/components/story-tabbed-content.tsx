@@ -6,10 +6,13 @@ import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/sh
 import type { QueryDataMap } from '@/components/story-embeds';
 import type { StoryFilterApi } from '@/hooks/use-story-filters';
 import { StoryFilterBar } from '@/components/story-filter-bar';
+import { StoryManualFilterBar } from '@/components/story-manual-filter-bar';
 import { StoryTabsBar } from '@/components/side-panel/story-tabs-bar';
 import { SegmentList } from '@/components/story-rendering';
+import { StoryManualFiltersProvider } from '@/contexts/story-manual-filters';
 import { StoryQuerySqlProvider } from '@/contexts/story-query-sql';
 import { useStoryFilters } from '@/hooks/use-story-filters';
+import { useStoryManualFilters } from '@/hooks/use-story-manual-filters';
 
 export interface StoryEmbedRenderOptions {
 	queryData: QueryDataMap | null;
@@ -49,6 +52,9 @@ export function StoryTabbedContent({
 		api: filterApi,
 		enabled: Boolean(filterApi),
 	});
+	const manualFilters = useStoryManualFilters({ code, queryData: storyFilters.queryData });
+	const queryData = manualFilters.queryData;
+	const hasActiveFilters = storyFilters.hasActiveFilters || manualFilters.hasActiveFilters;
 	const querySqlSource = useMemo(
 		() =>
 			filterApi
@@ -59,57 +65,54 @@ export function StoryTabbedContent({
 				: null,
 		[filterApi, storyFilters.filtersEnabled, storyFilters.debouncedSelections],
 	);
+	const renderOptions = (key: number): StoryEmbedRenderOptions => ({
+		queryData,
+		hasActiveFilters,
+		isRefreshing: storyFilters.isFiltering,
+		key,
+	});
 
 	return (
 		<StoryQuerySqlProvider value={querySqlSource}>
-			<div className='flex flex-1 min-h-0 flex-col'>
-				{isTabbed && tabs && (
-					<StoryTabsBar
-						tabs={tabs.map((tab) => ({ title: tab.title }))}
-						activeIndex={activeTabIndex}
-						onSelect={setActiveIndex}
-						contentClassName='mx-auto w-full max-w-5xl px-4 md:px-8'
-					/>
-				)}
-				<div className='flex-1 overflow-auto'>
-					<div className={contentClassName}>
-						<StoryFilterBar
-							filters={storyFilters.filters}
-							selections={storyFilters.selections}
-							onSelectionChange={storyFilters.setSelection}
-							onClear={storyFilters.clearSelections}
-							api={filterApi}
+			<StoryManualFiltersProvider filters={manualFilters.activeFilters}>
+				<div className='flex flex-1 min-h-0 flex-col'>
+					{isTabbed && tabs && (
+						<StoryTabsBar
+							tabs={tabs.map((tab) => ({ title: tab.title }))}
+							activeIndex={activeTabIndex}
+							onSelect={setActiveIndex}
+							contentClassName='mx-auto w-full max-w-5xl px-4 md:px-8'
 						/>
-						<SegmentList
-							segments={segments}
-							renderChart={(chart, key) =>
-								renderChart(chart, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-							renderTable={(table, key) =>
-								renderTable(table, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-							renderMap={(map, key) =>
-								renderMap(map, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-						/>
+					)}
+					<div className='flex-1 overflow-auto'>
+						<div className={contentClassName}>
+							<StoryFilterBar
+								filters={storyFilters.filters}
+								selections={storyFilters.selections}
+								onSelectionChange={storyFilters.setSelection}
+								onClear={storyFilters.clearSelections}
+								api={filterApi}
+							/>
+							<StoryManualFilterBar
+								fields={manualFilters.fields}
+								blocks={manualFilters.blocks}
+								filters={manualFilters.filters}
+								queryData={storyFilters.queryData}
+								onAdd={manualFilters.addFilter}
+								onUpdate={manualFilters.updateFilter}
+								onRemove={manualFilters.removeFilter}
+								onClear={manualFilters.clearFilters}
+							/>
+							<SegmentList
+								segments={segments}
+								renderChart={(chart, key) => renderChart(chart, renderOptions(key))}
+								renderTable={(table, key) => renderTable(table, renderOptions(key))}
+								renderMap={(map, key) => renderMap(map, renderOptions(key))}
+							/>
+						</div>
 					</div>
 				</div>
-			</div>
+			</StoryManualFiltersProvider>
 		</StoryQuerySqlProvider>
 	);
 }
