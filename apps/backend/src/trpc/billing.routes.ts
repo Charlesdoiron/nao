@@ -20,6 +20,7 @@ import {
 	getCloudBillingAccessEndsAt,
 	hasCloudBillingAccess,
 	isActiveLocalTrial,
+	isActiveTrialWithoutPaidPlan,
 } from '../services/cloud-billing-access.service';
 import {
 	CloudInitialCheckoutUnavailableError,
@@ -123,11 +124,18 @@ export const billingRoutes = {
 		const billing = organization.billing;
 		const trialAvailable = isTrialAvailable(billing);
 		const localTrialActive = isActiveLocalTrial(billing);
+		const needsPaidPlanSelection = isActiveTrialWithoutPaidPlan(billing);
+		const paidPlanSelected = Boolean(billing?.stripeSubscriptionId && billing.billingPlan);
 		const { availablePlans, subscriptionPlan } = await (async () => {
-			const subscriptionCurrency = billing?.stripeSubscriptionId
-				? await getCloudSubscriptionCurrency(billing.stripeSubscriptionId)
-				: null;
-			return getCloudBillingPlans(billing?.stripePriceId ?? null, input?.currency ?? 'usd', subscriptionCurrency);
+			const subscriptionCurrency =
+				paidPlanSelected && billing?.stripeSubscriptionId
+					? await getCloudSubscriptionCurrency(billing.stripeSubscriptionId)
+					: null;
+			return getCloudBillingPlans(
+				paidPlanSelected ? (billing?.stripePriceId ?? null) : null,
+				input?.currency ?? 'usd',
+				subscriptionCurrency,
+			);
 		})().catch((error: unknown) => throwBillingFailure('plan lookup', 'Unable to load billing plans', error));
 		const projectedPlan =
 			subscriptionPlan ?? Object.values(availablePlans).find((plan) => plan.key === billing?.billingPlan) ?? null;
@@ -145,9 +153,11 @@ export const billingRoutes = {
 			canManageBilling: true,
 			trialAvailable,
 			localTrialActive,
-			portalAvailable: Boolean(billing?.stripeCustomerId && billing.stripeSubscriptionId),
+			needsPaidPlanSelection,
+			paidPlanSelected,
+			portalAvailable: Boolean(billing?.stripeCustomerId && paidPlanSelected),
 			invoiceHistoryAvailable: Boolean(billing?.stripeCustomerId),
-			paymentMethodManagementAvailable: Boolean(billing?.stripeCustomerId),
+			paymentMethodManagementAvailable: Boolean(billing?.stripeCustomerId && paidPlanSelected),
 			resubscribeAvailable:
 				(!billing?.stripeSubscriptionId && !trialAvailable && !localTrialActive) ||
 				(Boolean(billing?.stripeCustomerId && billing.stripeSubscriptionId) &&
@@ -169,7 +179,7 @@ export const billingRoutes = {
 			if (error instanceof CloudInitialCheckoutUnavailableError) {
 				throw new TRPCError({ code: 'CONFLICT', message: error.message });
 			}
-			throwBillingFailure('trial activation', 'Unable to start the free trial', error);
+			throwBillingFailure('plan Checkout', 'Unable to open Stripe Checkout', error);
 		}
 	}),
 

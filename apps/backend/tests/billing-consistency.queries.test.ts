@@ -34,6 +34,7 @@ import {
 	attachStripeCustomer,
 	claimBillingSync,
 	getOrganizationBilling,
+	listOrganizationTrialsPendingStripeProvisioning,
 	type SubscriptionProjection,
 	updateSubscriptionProjection,
 } from '../src/queries/billing.queries';
@@ -101,6 +102,37 @@ describe('billing consistency queries', () => {
 		});
 	});
 
+	it('lists only active local trials that still need a Stripe subscription', async () => {
+		const now = new Date('2026-10-19T12:00:00.000Z');
+		await db.insert(s.organization).values([
+			{ id: 'pending-trial-org', name: 'Pending Trial', slug: 'pending-trial' },
+			{ id: 'expired-trial-org', name: 'Expired Trial', slug: 'expired-trial' },
+			{ id: 'provisioned-trial-org', name: 'Provisioned Trial', slug: 'provisioned-trial' },
+		]);
+		await db.insert(s.organizationBilling).values([
+			{
+				orgId: 'pending-trial-org',
+				billingStatus: 'trialing',
+				trialEndsAt: new Date('2026-10-20T12:00:00.000Z'),
+			},
+			{
+				orgId: 'expired-trial-org',
+				billingStatus: 'trialing',
+				trialEndsAt: new Date('2026-10-18T12:00:00.000Z'),
+			},
+			{
+				orgId: 'provisioned-trial-org',
+				billingStatus: 'trialing',
+				trialEndsAt: new Date('2026-10-20T12:00:00.000Z'),
+				stripeSubscriptionId: 'sub_trial',
+			},
+		]);
+
+		await expect(listOrganizationTrialsPendingStripeProvisioning(now)).resolves.toMatchObject([
+			{ orgId: 'pending-trial-org' },
+		]);
+	});
+
 	it('starts one local trial when the first project is created', async () => {
 		const originalEnv = { ...process.env };
 		Object.assign(process.env, {
@@ -139,6 +171,15 @@ describe('billing consistency queries', () => {
 				firstBilling!.trialStartedAt!.getTime() + 14 * 24 * 60 * 60 * 1000,
 			);
 			expect(firstBilling?.billingAccessEndsAt).toEqual(firstBilling?.trialEndsAt);
+			const [provisioningJob] = await db
+				.select()
+				.from(s.scheduledJob)
+				.where(eq(s.scheduledJob.uniqueKey, 'billing-cloud-provision-trial:automatic-trial-org'));
+			expect(provisioningJob).toMatchObject({
+				name: 'billing.cloud.provision-trial',
+				payload: { organizationId: 'automatic-trial-org' },
+				status: 'pending',
+			});
 
 			await createProject({
 				id: 'automatic-trial-project-2',
@@ -148,6 +189,38 @@ describe('billing consistency queries', () => {
 				path: '/tmp/automatic-trial-2',
 			});
 			expect(await getOrganizationBilling('automatic-trial-org')).toEqual(firstBilling);
+			const jobs = await db
+				.select()
+				.from(s.scheduledJob)
+				.where(eq(s.scheduledJob.uniqueKey, 'billing-cloud-provision-trial:automatic-trial-org'));
+			expect(jobs).toHaveLength(1);
+
+			await db.insert(s.organization).values({
+				id: 'customer-first-trial-org',
+				name: 'Customer First Trial',
+				slug: 'customer-first-trial',
+			});
+			await attachStripeCustomer('customer-first-trial-org', 'cus_before_project');
+			await createProject({
+				id: 'customer-first-trial-project',
+				orgId: 'customer-first-trial-org',
+				name: 'First',
+				type: 'local',
+				path: '/tmp/customer-first-trial',
+			});
+			const customerFirstBilling = await getOrganizationBilling('customer-first-trial-org');
+			expect(customerFirstBilling).toMatchObject({
+				billingStatus: 'trialing',
+				stripeCustomerId: 'cus_before_project',
+				stripeSubscriptionId: null,
+			});
+			expect(customerFirstBilling?.trialStartedAt).toBeInstanceOf(Date);
+			expect(customerFirstBilling?.trialEndsAt).toBeInstanceOf(Date);
+			const customerFirstJobs = await db
+				.select()
+				.from(s.scheduledJob)
+				.where(eq(s.scheduledJob.uniqueKey, 'billing-cloud-provision-trial:customer-first-trial-org'));
+			expect(customerFirstJobs).toHaveLength(1);
 		} finally {
 			process.env = originalEnv;
 			__reloadEnvForTesting();
@@ -182,6 +255,11 @@ describe('billing consistency queries', () => {
 				path: '/tmp/bypass-trial',
 			});
 			await expect(getOrganizationBilling('bypass-trial-org')).resolves.toBeNull();
+			const jobs = await db
+				.select()
+				.from(s.scheduledJob)
+				.where(eq(s.scheduledJob.uniqueKey, 'billing-cloud-provision-trial:bypass-trial-org'));
+			expect(jobs).toHaveLength(0);
 		} finally {
 			process.env = originalEnv;
 			__reloadEnvForTesting();

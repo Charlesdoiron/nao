@@ -76,7 +76,8 @@ function BillingFeedback({ billingState }: { billingState: BillingState }) {
 }
 
 function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, isHistoricalSubscription, localTrialActive, statusView } = billingState;
+	const { billing, hasStripeSubscription, isHistoricalSubscription, needsPaidPlanSelection, statusView } =
+		billingState;
 	const currentPlan = billing.data?.plan;
 
 	return (
@@ -92,7 +93,7 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 				</p>
 			)}
 			{billing.data &&
-				(localTrialActive ? (
+				(needsPaidPlanSelection ? (
 					<div className='flex flex-col gap-2'>
 						<div className='flex flex-wrap items-center gap-2'>
 							<p className='font-medium text-foreground'>nao Cloud trial</p>
@@ -189,14 +190,9 @@ function UpcomingPaymentEstimate({ billingState }: { billingState: BillingState 
 }
 
 function BillingSetupCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, localTrialActive, plan } = billingState;
-	const trialCheckoutAvailable = billing.data?.trialAvailable === true || localTrialActive;
-	if (
-		!billing.data ||
-		hasStripeSubscription ||
-		!plan ||
-		(!trialCheckoutAvailable && !billing.data.resubscribeAvailable)
-	) {
+	const { billing, needsPaidPlanSelection, paidPlanSelected, plan } = billingState;
+	const trialCheckoutAvailable = billing.data?.trialAvailable === true || needsPaidPlanSelection;
+	if (!billing.data || paidPlanSelected || !plan || (!trialCheckoutAvailable && !billing.data.resubscribeAvailable)) {
 		return null;
 	}
 	const isTrialAvailable = billing.data.trialAvailable;
@@ -225,7 +221,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 					<PlanDetail
 						label='Free trial'
 						value={
-							localTrialActive
+							needsPaidPlanSelection
 								? `Ends ${formatBillingDate(billing.data.trialEndsAt)}`
 								: isTrialAvailable
 									? `${plan.trialDays} days, starting after Stripe Checkout`
@@ -239,7 +235,7 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 
 				<div className='flex flex-col items-start gap-3 border-t border-border pt-5'>
 					<p className='text-sm text-muted-foreground'>
-						{localTrialActive
+						{needsPaidPlanSelection
 							? `Your trial is already active through ${formatBillingDate(billing.data.trialEndsAt)}. Choose monthly or yearly billing in Stripe, where you can enter a promotion code. Nothing is charged before the trial ends.`
 							: isTrialAvailable
 								? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
@@ -349,8 +345,8 @@ function BillingIntervalOption({
 }
 
 function PlanDetailsCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, isHistoricalSubscription, plan, status } = billingState;
-	if (!billing.data || !hasStripeSubscription) {
+	const { billing, isHistoricalSubscription, paidPlanSelected, plan, status } = billingState;
+	if (!billing.data || !paidPlanSelected) {
 		return null;
 	}
 	if (billingState.isEndingAtPeriodEnd) {
@@ -469,8 +465,8 @@ function InvoicesCard({ billingState }: { billingState: BillingState }) {
 }
 
 function BillingManagementCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, status } = billingState;
-	if (!billing.data || !hasStripeSubscription) {
+	const { billing, paidPlanSelected, status } = billingState;
+	if (!billing.data || !paidPlanSelected) {
 		return null;
 	}
 

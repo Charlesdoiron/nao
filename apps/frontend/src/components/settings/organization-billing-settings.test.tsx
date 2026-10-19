@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 	resubscribe: vi.fn(),
 	selectedBillingInterval: 'monthly' as 'monthly' | 'yearly',
 	setSelectedBillingInterval: vi.fn(),
+	stripeTrialPlaceholder: false,
 	status: 'trialing' as BillingData['status'],
 	trialAvailable: false,
 	trialEndsAt: new Date('2026-10-08T00:00:00.000Z') as Date | null,
@@ -57,6 +58,7 @@ beforeEach(() => {
 	mocks.invoiceTotal = 100_000;
 	mocks.localTrialActive = false;
 	mocks.selectedBillingInterval = 'monthly';
+	mocks.stripeTrialPlaceholder = false;
 	mocks.status = 'trialing';
 	mocks.trialAvailable = false;
 	mocks.trialEndsAt = new Date('2026-10-08T00:00:00.000Z');
@@ -87,6 +89,18 @@ it('lets an admin choose a plan during an active local trial', () => {
 	expect(screen.getByText(/enter a promotion code/)).toBeTruthy();
 	fireEvent.click(screen.getByRole('button', { name: 'Choose plan in Stripe' }));
 	expect(mocks.openTrialCheckout).toHaveBeenCalledOnce();
+});
+
+it('keeps plan selection visible for a Stripe-backed placeholder trial', () => {
+	mocks.hasStripeSubscription = true;
+	mocks.stripeTrialPlaceholder = true;
+	mocks.trialEndsAt = new Date('2099-10-08T00:00:00.000Z');
+
+	render(<OrganizationBillingSettings search={{}} />);
+
+	expect(screen.getByText('nao Cloud trial')).toBeTruthy();
+	expect(screen.getByRole('button', { name: 'Choose plan in Stripe' })).toBeTruthy();
+	expect(screen.queryByText('Subscription details')).toBeNull();
 });
 
 it('offers monthly and yearly choices when restarting a canceled subscription', () => {
@@ -246,6 +260,8 @@ function billingState(): BillingState {
 		interval: 'year',
 		key: 'cloud_yearly_v1',
 	} as const;
+	const paidPlanSelected = mocks.hasStripeSubscription && !mocks.stripeTrialPlaceholder;
+	const needsPaidPlanSelection = mocks.localTrialActive || mocks.stripeTrialPlaceholder;
 	const data = {
 		availablePlans: { monthly: plan, yearly: yearlyPlan },
 		billingAccessEndsAt: null,
@@ -256,8 +272,10 @@ function billingState(): BillingState {
 		hasStripeSubscription: mocks.hasStripeSubscription,
 		invoiceHistoryAvailable: mocks.invoiceHistoryAvailable,
 		paymentMethodManagementAvailable: false,
-		plan: mocks.hasStripeSubscription ? plan : null,
-		planKey: mocks.hasStripeSubscription ? plan.key : null,
+		needsPaidPlanSelection,
+		paidPlanSelected,
+		plan: paidPlanSelected ? plan : null,
+		planKey: paidPlanSelected ? plan.key : null,
 		portalAvailable: false,
 		localTrialActive: mocks.localTrialActive,
 		resubscribeAvailable:
@@ -278,11 +296,13 @@ function billingState(): BillingState {
 		} as BillingState['billing'],
 		canLoadUpcomingInvoice:
 			data.canManageBilling === true &&
-			data.hasStripeSubscription &&
+			data.paidPlanSelected &&
 			!data.cancellationScheduled &&
 			(data.status === 'trialing' || data.status === 'active' || data.status === 'past_due'),
 		checkoutFeedback: null,
 		hasStripeSubscription: mocks.hasStripeSubscription,
+		needsPaidPlanSelection,
+		paidPlanSelected,
 		invoices: {
 			data: mocks.invoiceHistoryAvailable
 				? [
@@ -313,7 +333,6 @@ function billingState(): BillingState {
 		isCheckoutPolling: mocks.isCheckoutPolling,
 		isEndingAtPeriodEnd: data.cancellationScheduled && (data.status === 'active' || data.status === 'trialing'),
 		isHistoricalSubscription: isTerminalBillingStatus(mocks.status),
-		localTrialActive: mocks.localTrialActive,
 		isPaymentMethodPortalPending: false,
 		isPortalPending: false,
 		isResubscribePending: false,

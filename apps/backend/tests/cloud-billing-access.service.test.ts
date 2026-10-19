@@ -79,35 +79,64 @@ describe('cloud billing access entitlement', () => {
 			}),
 			false,
 		],
-		['active before its period end', entitlement('active', { currentPeriodEndsAt: future }), true],
 		[
-			'renewing active within reconciliation grace',
-			entitlement('active', { currentPeriodEndsAt: recentlyPast }),
+			'active before its period end',
+			entitlement('active', { billingPlan: 'cloud_monthly_v2', currentPeriodEndsAt: future }),
 			true,
 		],
-		['renewing active past reconciliation grace', entitlement('active', { currentPeriodEndsAt: past }), false],
-		['active missing its period end', entitlement('active'), false],
+		[
+			'renewing active within reconciliation grace',
+			entitlement('active', { billingPlan: 'cloud_monthly_v2', currentPeriodEndsAt: recentlyPast }),
+			true,
+		],
+		[
+			'renewing active past reconciliation grace',
+			entitlement('active', { billingPlan: 'cloud_monthly_v2', currentPeriodEndsAt: past }),
+			false,
+		],
+		['active missing its period end', entitlement('active', { billingPlan: 'cloud_monthly_v2' }), false],
+		['active trial placeholder', entitlement('active', { currentPeriodEndsAt: future }), false],
 		[
 			'scheduled cancellation before access end',
-			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: future }),
+			entitlement('active', {
+				billingPlan: 'cloud_monthly_v2',
+				cancellationScheduled: true,
+				billingAccessEndsAt: future,
+			}),
 			true,
 		],
 		[
 			'scheduled cancellation past access end',
-			entitlement('active', { cancellationScheduled: true, billingAccessEndsAt: past }),
+			entitlement('active', {
+				billingPlan: 'cloud_monthly_v2',
+				cancellationScheduled: true,
+				billingAccessEndsAt: past,
+			}),
 			false,
 		],
 		[
 			'past due within its bounded payment grace',
-			entitlement('past_due', { currentPeriodStartsAt: past, currentPeriodEndsAt: recentlyPast }),
+			entitlement('past_due', {
+				billingPlan: 'cloud_monthly_v2',
+				currentPeriodStartsAt: past,
+				currentPeriodEndsAt: recentlyPast,
+			}),
 			true,
 		],
 		[
 			'past due beyond its bounded payment grace',
-			entitlement('past_due', { currentPeriodStartsAt: recentlyPast, currentPeriodEndsAt: past }),
+			entitlement('past_due', {
+				billingPlan: 'cloud_monthly_v2',
+				currentPeriodStartsAt: recentlyPast,
+				currentPeriodEndsAt: past,
+			}),
 			false,
 		],
-		['past due without a period end', entitlement('past_due', { currentPeriodStartsAt: recentlyPast }), false],
+		[
+			'past due without a period end',
+			entitlement('past_due', { billingPlan: 'cloud_monthly_v2', currentPeriodStartsAt: recentlyPast }),
+			false,
+		],
 		['unpaid', entitlement('unpaid'), false],
 		['paused', entitlement('paused'), false],
 		['incomplete', entitlement('incomplete'), false],
@@ -150,7 +179,10 @@ describe('project cloud billing access', () => {
 	it('delegates organization billing access for an assigned project', async () => {
 		mocks.getProjectById.mockResolvedValue({ orgId: 'organization-1' });
 		mocks.getOrganizationBilling.mockResolvedValue(
-			entitlement('active', { currentPeriodEndsAt: new Date('2999-01-01T00:00:00.000Z') }),
+			entitlement('active', {
+				billingPlan: 'cloud_monthly_v2',
+				currentPeriodEndsAt: new Date('2999-01-01T00:00:00.000Z'),
+			}),
 		);
 
 		await expect(hasProjectCloudBillingAccess('project-1')).resolves.toBe(true);
@@ -210,6 +242,7 @@ describe('cloud billing access assertions', () => {
 function entitlement(
 	billingStatus: BillingStatus,
 	overrides: Partial<{
+		billingPlan: string | null;
 		stripeSubscriptionId: string;
 		trialEndsAt: Date;
 		currentPeriodStartsAt: Date;
@@ -220,6 +253,7 @@ function entitlement(
 	}> = {},
 ) {
 	return {
+		billingPlan: null,
 		billingStatus,
 		stripeSubscriptionId: null,
 		trialEndsAt: null,

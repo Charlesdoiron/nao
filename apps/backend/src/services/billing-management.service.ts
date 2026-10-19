@@ -12,7 +12,7 @@ import {
 import { HandlerError } from '../utils/error';
 import { logger, serializeError } from '../utils/logger';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
-import { isActiveLocalTrial } from './cloud-billing-access.service';
+import { isActiveTrialWithoutPaidPlan } from './cloud-billing-access.service';
 import { issueCreditPurchase } from './credit-wallet.service';
 import {
 	createCloudCheckoutSession,
@@ -53,13 +53,13 @@ export async function getCloudBillingOrganizationForAdmin(input: AdminBillingInp
 }
 
 export async function createCloudTrialCheckoutForAdmin(input: AdminBillingCheckoutInput): Promise<string> {
-	const organization = await loadCloudBillingOrganization(input.organizationId);
-	const localTrialActive = isActiveLocalTrial(organization.billing);
-	if (!isTrialAvailable(organization.billing) && !localTrialActive) {
+	const organization = await loadReconciledCloudBillingOrganization(input.organizationId);
+	const trialWithoutPaidPlanActive = isActiveTrialWithoutPaidPlan(organization.billing);
+	if (!isTrialAvailable(organization.billing) && !trialWithoutPaidPlanActive) {
 		throw new CloudBillingManagementInputError('This organization has already used its free trial');
 	}
 	const trialEnd =
-		localTrialActive && organization.billing?.trialEndsAt
+		trialWithoutPaidPlanActive && organization.billing?.trialEndsAt
 			? organization.billing.trialEndsAt
 			: trialEndFromNow(CLOUD_BILLING_TRIAL_DAYS);
 	const stripeCustomerId = await ensureCloudCustomer(organization, input.userId);
@@ -138,7 +138,7 @@ export async function listCloudInvoicesForAdmin(input: AdminBillingInput) {
 
 export async function getCloudUpcomingInvoiceForAdmin(input: AdminBillingInput) {
 	const organization = await loadCloudBillingOrganization(input.organizationId);
-	return organization.billing?.stripeSubscriptionId
+	return organization.billing?.stripeSubscriptionId && organization.billing.billingPlan
 		? getCloudUpcomingInvoice(organization.billing.stripeSubscriptionId)
 		: null;
 }
@@ -157,7 +157,11 @@ export async function syncCloudBillingForAdmin(input: AdminBillingInput): Promis
 
 export async function createCloudPortalForAdmin(input: AdminBillingRequestInput): Promise<string> {
 	const organization = await loadCloudBillingOrganization(input.organizationId);
-	if (!organization.billing?.stripeCustomerId || !organization.billing.stripeSubscriptionId) {
+	if (
+		!organization.billing?.stripeCustomerId ||
+		!organization.billing.stripeSubscriptionId ||
+		!organization.billing.billingPlan
+	) {
 		throw new CloudBillingManagementInputError('No Stripe subscription is available to manage');
 	}
 	return createCloudPortalSession({
@@ -169,8 +173,8 @@ export async function createCloudPortalForAdmin(input: AdminBillingRequestInput)
 
 export async function createCloudPaymentMethodPortalForAdmin(input: AdminBillingRequestInput): Promise<string> {
 	const organization = await loadCloudBillingOrganization(input.organizationId);
-	if (!organization.billing?.stripeCustomerId) {
-		throw new CloudBillingManagementInputError('No Stripe Customer is available to manage');
+	if (!organization.billing?.stripeCustomerId || !organization.billing.billingPlan) {
+		throw new CloudBillingManagementInputError('No Stripe subscription is available to manage');
 	}
 	return createCloudPaymentMethodSession({
 		organizationId: organization.id,
@@ -180,7 +184,7 @@ export async function createCloudPaymentMethodPortalForAdmin(input: AdminBilling
 }
 
 export async function createCloudResubscribeForAdmin(input: AdminBillingCheckoutInput): Promise<string> {
-	const organization = await loadCloudBillingOrganization(input.organizationId);
+	const organization = await loadReconciledCloudBillingOrganization(input.organizationId);
 	const billing = organization.billing;
 	const isMissingSubscriptionRecovery =
 		!billing?.stripeSubscriptionId &&
@@ -204,7 +208,7 @@ export async function createCloudResubscribeForAdmin(input: AdminBillingCheckout
 
 export async function resumeCloudSubscriptionForAdmin(input: AdminBillingRequestInput): Promise<void> {
 	const organization = await loadCloudBillingOrganization(input.organizationId);
-	if (!organization.billing?.stripeSubscriptionId) {
+	if (!organization.billing?.stripeSubscriptionId || !organization.billing.billingPlan) {
 		throw new CloudBillingManagementInputError('No Stripe subscription is available to resume');
 	}
 	await resumeCloudSubscription({
@@ -220,6 +224,18 @@ async function loadCloudBillingOrganization(organizationId: string): Promise<Org
 		throw new HandlerError('NOT_FOUND', 'Organization was not found');
 	}
 	return organization;
+}
+
+async function loadReconciledCloudBillingOrganization(organizationId: string): Promise<OrganizationWithBilling> {
+	const organization = await loadCloudBillingOrganization(organizationId);
+	if (!organization.billing?.stripeCustomerId) {
+		return organization;
+	}
+	await reconcileCloudBillingCustomer({
+		stripeCustomerId: organization.billing.stripeCustomerId,
+		organizationIdHint: organization.id,
+	});
+	return loadCloudBillingOrganization(organizationId);
 }
 
 async function ensureCloudCustomer(organization: OrganizationWithBilling, userId: string): Promise<string> {

@@ -46,6 +46,7 @@ vi.mock('../src/services/billing-reconciliation.service', () => ({
 vi.mock('../src/services/stripe.service', () => ({
 	findCloudSubscription: mocks.findSubscription,
 	getCreditTopUpPurchase: mocks.getCreditTopUpPurchase,
+	findManagedCloudSubscription: mocks.findSubscription,
 	getCloudCheckoutSubscription: mocks.getCheckoutSubscription,
 	getStripeCharge: mocks.getCharge,
 	getStripeCheckoutSession: mocks.getCheckoutSession,

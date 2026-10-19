@@ -1,17 +1,43 @@
 import * as billingQueries from '../queries/billing.queries';
 import { logger, serializeError } from '../utils/logger';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
+import { provisionCloudTrial } from './cloud-trial-provisioning.service';
 
-const RECONCILIATION_CONCURRENCY = 5;
+const BILLING_LIFECYCLE_CONCURRENCY = 5;
 
 export async function runCloudBillingLifecycle(): Promise<void> {
-	await reconcileMappedOrganizations();
+	const pendingTrials = await billingQueries.listOrganizationTrialsPendingStripeProvisioning(new Date());
+	await provisionPendingTrials(pendingTrials);
+	await reconcileMappedOrganizations(new Set(pendingTrials.map((billing) => billing.orgId)));
 }
 
-async function reconcileMappedOrganizations(): Promise<void> {
-	const billings = await billingQueries.listOrganizationBillingsWithStripeCustomers();
-	for (let index = 0; index < billings.length; index += RECONCILIATION_CONCURRENCY) {
-		await Promise.all(billings.slice(index, index + RECONCILIATION_CONCURRENCY).map(reconcileOrganization));
+async function provisionPendingTrials(
+	billings: Awaited<ReturnType<typeof billingQueries.listOrganizationTrialsPendingStripeProvisioning>>,
+): Promise<void> {
+	for (let index = 0; index < billings.length; index += BILLING_LIFECYCLE_CONCURRENCY) {
+		await Promise.all(billings.slice(index, index + BILLING_LIFECYCLE_CONCURRENCY).map(provisionOrganizationTrial));
+	}
+}
+
+async function provisionOrganizationTrial(
+	billing: Awaited<ReturnType<typeof billingQueries.listOrganizationTrialsPendingStripeProvisioning>>[number],
+): Promise<void> {
+	try {
+		await provisionCloudTrial(billing.orgId);
+	} catch (error) {
+		logger.error(`Cloud trial provisioning recovery failed for organization ${billing.orgId}`, {
+			source: 'system',
+			context: serializeError(error),
+		});
+	}
+}
+
+async function reconcileMappedOrganizations(provisionedOrganizationIds: Set<string>): Promise<void> {
+	const billings = (await billingQueries.listOrganizationBillingsWithStripeCustomers()).filter(
+		(billing) => !provisionedOrganizationIds.has(billing.orgId),
+	);
+	for (let index = 0; index < billings.length; index += BILLING_LIFECYCLE_CONCURRENCY) {
+		await Promise.all(billings.slice(index, index + BILLING_LIFECYCLE_CONCURRENCY).map(reconcileOrganization));
 	}
 }
 

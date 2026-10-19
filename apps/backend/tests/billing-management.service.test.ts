@@ -31,6 +31,8 @@ vi.mock('../src/services/billing-reconciliation.service', () => ({
 
 vi.mock('../src/services/cloud-billing-access.service', () => ({
 	assertOrganizationCloudBillingAccess: mocks.assertAccess,
+	isActiveTrialWithoutPaidPlan: (billing: { billingPlan?: string | null; billingStatus?: string } | null) =>
+		billing?.billingPlan == null && billing?.billingStatus === 'trialing',
 }));
 
 vi.mock('../src/services/stripe.service', () => ({
@@ -47,6 +49,8 @@ vi.mock('../src/services/stripe.service', () => ({
 }));
 
 import {
+	createCloudResubscribeForAdmin,
+	createCloudTrialCheckoutForAdmin,
 	createCreditTopUpCheckoutForAdmin,
 	getCloudBillingOrganizationForAdmin,
 } from '../src/services/billing-management.service';
@@ -105,5 +109,77 @@ describe('billing management organization loading', () => {
 			initiatingUserId: 'user-id',
 			requestId: 'request-id',
 		});
+	});
+
+	it('reconciles a Stripe Customer before allowing initial Checkout', async () => {
+		mocks.getOrganizationWithBilling
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: null,
+					billingStatus: 'trialing',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_placeholder',
+					trialEndsAt: new Date('2099-01-15T00:00:00.000Z'),
+					billingAccessEndsAt: new Date('2099-01-15T00:00:00.000Z'),
+				},
+			})
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: 'cloud_monthly_v2',
+					billingStatus: 'active',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_paid',
+				},
+			});
+
+		await expect(
+			createCloudTrialCheckoutForAdmin({ ...adminInput, billingInterval: 'monthly', currency: 'usd' }),
+		).rejects.toThrow('already used its free trial');
+
+		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
+			stripeCustomerId: 'cus_cloud',
+			organizationIdHint: 'org-id',
+		});
+		expect(mocks.createCheckout).not.toHaveBeenCalled();
+	});
+
+	it('reconciles a Stripe Customer before allowing recovery Checkout', async () => {
+		mocks.getOrganizationWithBilling
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: null,
+					billingStatus: 'canceled',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_placeholder',
+				},
+			})
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: null,
+					billingStatus: 'trialing',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_placeholder',
+					trialEndsAt: new Date('2099-01-15T00:00:00.000Z'),
+					billingAccessEndsAt: new Date('2099-01-15T00:00:00.000Z'),
+				},
+			});
+
+		await expect(
+			createCloudResubscribeForAdmin({ ...adminInput, billingInterval: 'monthly', currency: 'usd' }),
+		).rejects.toThrow('A new subscription is not available');
+
+		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
+			stripeCustomerId: 'cus_cloud',
+			organizationIdHint: 'org-id',
+		});
+		expect(mocks.createResubscribe).not.toHaveBeenCalled();
 	});
 });

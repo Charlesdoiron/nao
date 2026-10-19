@@ -22,9 +22,11 @@ import s from '../db/abstractSchema';
 import { db, type DBExecutor, type DBTransaction } from '../db/db';
 import dbConfig, { Dialect } from '../db/dbConfig';
 import { env, isCloud, isCloudBillingEnabled } from '../env';
+import { CLOUD_TRIAL_PROVISIONING_JOB_NAME } from '../types/billing';
 import type { ListProjectChatsResponse, ProjectChatsFacetKey, UserWithRole } from '../types/project';
 import { HandlerError } from '../utils/error';
 import { startOrganizationTrial } from './billing.queries';
+import { enqueueOnceJob } from './scheduled-job.queries';
 import { createCostLookup, TOTAL_COST_EXPR } from './usage.queries';
 import { userMemberStatus } from './user.queries';
 
@@ -56,6 +58,16 @@ export const getProjectByOrgAndName = async (orgId: string, name: string): Promi
 		.where(and(eq(s.project.orgId, orgId), eq(s.project.name, name)))
 		.execute();
 	return project ?? null;
+};
+
+export const organizationHasProjects = async (orgId: string): Promise<boolean> => {
+	const [project] = await db
+		.select({ id: s.project.id })
+		.from(s.project)
+		.where(eq(s.project.orgId, orgId))
+		.limit(1)
+		.execute();
+	return Boolean(project);
 };
 
 export const touchProjectUpdatedAt = async (projectId: string): Promise<void> => {
@@ -457,7 +469,13 @@ function createSqliteProjectWithDefaultGroup(project: NewProject, transaction: D
 	const [created] = transaction.insert(s.project).values(project).returning().all();
 	transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).run();
 	if (shouldStartTrial && created.orgId) {
-		startOrganizationTrial(created.orgId, new Date(), transaction);
+		const started = startOrganizationTrial(created.orgId, new Date(), transaction);
+		if (typeof started !== 'boolean') {
+			throw new Error('SQLite trial creation must complete synchronously');
+		}
+		if (started) {
+			enqueueOnceJob(cloudTrialProvisioningJob(created.orgId), transaction);
+		}
 	}
 	return created;
 }
@@ -517,10 +535,18 @@ const createPostgresProjectWithDefaultGroup = async (
 	const [created] = await transaction.insert(s.project).values(project).returning().execute();
 	await transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).execute();
 	if (shouldStartTrial && created.orgId) {
-		await startOrganizationTrial(created.orgId, new Date(), transaction);
+		if (await startOrganizationTrial(created.orgId, new Date(), transaction)) {
+			await enqueueOnceJob(cloudTrialProvisioningJob(created.orgId), transaction);
+		}
 	}
 	return created;
 };
+
+const cloudTrialProvisioningJob = (organizationId: string) => ({
+	name: CLOUD_TRIAL_PROVISIONING_JOB_NAME,
+	payload: { organizationId },
+	uniqueKey: `billing-cloud-provision-trial:${organizationId}`,
+});
 
 const defaultUserGroupValues = (projectId: string) => ({
 	projectId,

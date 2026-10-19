@@ -16,9 +16,11 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	const selectedBillingCurrency = getBrowserBillingCurrency();
 	const billingSync = useOrganizationBillingSync(search, selectedBillingCurrency);
 	const { billing, invoices } = billingSync;
+	const paidPlanSelected = billing.data?.paidPlanSelected === true;
+	const needsPaidPlanSelection = billing.data?.needsPaidPlanSelection === true;
 	const canLoadUpcomingInvoice =
 		billing.data?.canManageBilling === true &&
-		billing.data.hasStripeSubscription &&
+		paidPlanSelected &&
 		!billing.data.cancellationScheduled &&
 		(billing.data.status === 'trialing' || billing.data.status === 'active' || billing.data.status === 'past_due');
 	const upcomingInvoice = useQuery({
@@ -64,11 +66,8 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 	);
 
 	const selectedPlan = billing.data?.availablePlans?.[selectedBillingInterval];
-	const plan = billing.data?.hasStripeSubscription
-		? (billing.data.plan ?? selectedPlan)
-		: (selectedPlan ?? billing.data?.plan);
+	const plan = paidPlanSelected ? (billing.data?.plan ?? selectedPlan) : (selectedPlan ?? billing.data?.plan);
 	const { hasStripeSubscription, isHistoricalSubscription, status } = billingSync;
-	const localTrialActive = billing.data?.localTrialActive === true;
 	const statusView = getBillingStatusView(
 		status,
 		billing.data?.cancellationScheduled ?? false,
@@ -85,7 +84,8 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		status,
 		statusView,
 		hasStripeSubscription,
-		localTrialActive,
+		paidPlanSelected,
+		needsPaidPlanSelection,
 		isHistoricalSubscription,
 		isEndingAtPeriodEnd,
 		selectedBillingInterval,
