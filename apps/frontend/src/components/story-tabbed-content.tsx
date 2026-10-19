@@ -5,11 +5,15 @@ import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/sh
 
 import type { QueryDataMap } from '@/components/story-embeds';
 import type { StoryFilterApi } from '@/hooks/use-story-filters';
+import { StoryControlsSidebar } from '@/components/story-controls-sidebar';
 import { StoryFilterBar } from '@/components/story-filter-bar';
 import { StoryTabsBar } from '@/components/side-panel/story-tabs-bar';
 import { SegmentList } from '@/components/story-rendering';
 import { StoryQuerySqlProvider } from '@/contexts/story-query-sql';
+import { useLocalStorage } from '@/hooks/use-local-storage';
+import { useStoryControls } from '@/hooks/use-story-controls';
 import { useStoryFilters } from '@/hooks/use-story-filters';
+import { createLocalStorage } from '@/lib/local-storage';
 
 export interface StoryEmbedRenderOptions {
 	queryData: QueryDataMap | null;
@@ -26,7 +30,11 @@ interface StoryTabbedContentProps {
 	contentClassName?: string;
 	baselineQueryData?: QueryDataMap | null;
 	filterApi?: StoryFilterApi | null;
+	/** Enables the manual story controls sidebar, persisted under this key. */
+	controlsKey?: string | null;
 }
+
+const controlsSidebarOpenStorage = createLocalStorage('nao:story-controls-open', true);
 
 export function StoryTabbedContent({
 	code,
@@ -36,6 +44,7 @@ export function StoryTabbedContent({
 	contentClassName = 'max-w-5xl mx-auto p-4 md:p-8 flex flex-col gap-4',
 	baselineQueryData,
 	filterApi,
+	controlsKey = null,
 }: StoryTabbedContentProps) {
 	const tabs = useMemo(() => parseStoryTabs(code), [code]);
 	const [activeIndex, setActiveIndex] = useState(0);
@@ -49,6 +58,10 @@ export function StoryTabbedContent({
 		api: filterApi,
 		enabled: Boolean(filterApi),
 	});
+	const controls = useStoryControls({ storyKey: controlsKey, code, queryData: baselineQueryData ?? null });
+	const [isControlsOpen, setIsControlsOpen] = useLocalStorage(controlsSidebarOpenStorage);
+	const hasControls = Boolean(controlsKey);
+	const hasActiveFilters = storyFilters.hasActiveFilters || (hasControls && controls.activeFilterCount > 0);
 	const querySqlSource = useMemo(
 		() =>
 			filterApi
@@ -60,55 +73,68 @@ export function StoryTabbedContent({
 		[filterApi, storyFilters.filtersEnabled, storyFilters.debouncedSelections],
 	);
 
+	const embedOptions = (key: number, queryData: QueryDataMap | null): StoryEmbedRenderOptions => ({
+		queryData,
+		hasActiveFilters,
+		isRefreshing: storyFilters.isFiltering,
+		key,
+	});
+
+	const renderControlledChart = (chart: ParsedChartBlock, key: number) => {
+		if (!hasControls) {
+			return renderChart(chart, embedOptions(key, storyFilters.queryData));
+		}
+		const derived = controls.deriveChart(chart, storyFilters.queryData);
+		return renderChart(derived.chart, embedOptions(key, derived.queryData));
+	};
+
+	const renderControlledTable = (table: ParsedTableBlock, key: number) =>
+		renderTable(
+			table,
+			embedOptions(
+				key,
+				hasControls ? controls.deriveTable(table, storyFilters.queryData) : storyFilters.queryData,
+			),
+		);
+
 	return (
 		<StoryQuerySqlProvider value={querySqlSource}>
-			<div className='flex flex-1 min-h-0 flex-col'>
-				{isTabbed && tabs && (
-					<StoryTabsBar
-						tabs={tabs.map((tab) => ({ title: tab.title }))}
-						activeIndex={activeTabIndex}
-						onSelect={setActiveIndex}
-						contentClassName='mx-auto w-full max-w-5xl px-4 md:px-8'
-					/>
-				)}
-				<div className='flex-1 overflow-auto'>
-					<div className={contentClassName}>
-						<StoryFilterBar
-							filters={storyFilters.filters}
-							selections={storyFilters.selections}
-							onSelectionChange={storyFilters.setSelection}
-							onClear={storyFilters.clearSelections}
-							api={filterApi}
+			<div className='flex flex-1 min-h-0'>
+				<div className='flex flex-1 min-h-0 min-w-0 flex-col'>
+					{isTabbed && tabs && (
+						<StoryTabsBar
+							tabs={tabs.map((tab) => ({ title: tab.title }))}
+							activeIndex={activeTabIndex}
+							onSelect={setActiveIndex}
+							contentClassName='mx-auto w-full max-w-5xl px-4 md:px-8'
 						/>
-						<SegmentList
-							segments={segments}
-							renderChart={(chart, key) =>
-								renderChart(chart, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-							renderTable={(table, key) =>
-								renderTable(table, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-							renderMap={(map, key) =>
-								renderMap(map, {
-									queryData: storyFilters.queryData,
-									hasActiveFilters: storyFilters.hasActiveFilters,
-									isRefreshing: storyFilters.isFiltering,
-									key,
-								})
-							}
-						/>
+					)}
+					<div className='flex-1 overflow-auto'>
+						<div className={contentClassName}>
+							<StoryFilterBar
+								filters={storyFilters.filters}
+								selections={storyFilters.selections}
+								onSelectionChange={storyFilters.setSelection}
+								onClear={storyFilters.clearSelections}
+								api={filterApi}
+							/>
+							<SegmentList
+								segments={segments}
+								renderChart={renderControlledChart}
+								renderTable={renderControlledTable}
+								renderMap={(map, key) => renderMap(map, embedOptions(key, storyFilters.queryData))}
+							/>
+						</div>
 					</div>
 				</div>
+				{hasControls && (
+					<StoryControlsSidebar
+						controls={controls}
+						queryData={baselineQueryData ?? null}
+						isOpen={isControlsOpen}
+						onOpenChange={setIsControlsOpen}
+					/>
+				)}
 			</div>
 		</StoryQuerySqlProvider>
 	);

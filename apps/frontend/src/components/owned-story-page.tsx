@@ -353,6 +353,7 @@ function PreviewContent({
 			code={code}
 			baselineQueryData={queryData}
 			filterApi={filterApi}
+			controlsKey={`${chatId}/${storySlug}`}
 			renderChart={renderChart}
 			renderTable={renderTable}
 			renderMap={renderMap}
