@@ -9,8 +9,23 @@ import type * as displayChart from './tools/display-chart';
 const DATA_LABEL_PROPS = {
 	fill: 'var(--foreground, #111827)',
 	fontSize: 11,
+	fontWeight: 500,
 	fontFamily: CHART_FONT_STACK,
 };
+const DATA_LABEL_CHIP_PROPS = {
+	fill: 'var(--background, #ffffff)',
+	fillOpacity: 0.88,
+	stroke: 'var(--border, #e5e7eb)',
+	strokeWidth: 1,
+	rx: 4,
+	ry: 4,
+};
+const DATA_LABEL_CHIP_PADDING_X = 4;
+/** Chip extent above/below the alphabetic baseline: clears the cap height on top and commas below. */
+const DATA_LABEL_CHIP_ASCENT = 11;
+const DATA_LABEL_CHIP_DESCENT = 4;
+/** Clearance kept between neighbouring chips when resolving collisions. */
+const DATA_LABEL_CHIP_GAP = 1;
 export const DATA_LABEL_MARGIN_TOP = 24;
 export const DATA_LABEL_X_AXIS_FOOTROOM = 24;
 const DATA_LABEL_HEADROOM_RATIO = 0.9;
@@ -78,6 +93,7 @@ interface LabelCandidate {
 	cx: number;
 	baselineY: number;
 	box: LabelBox;
+	chip: LabelBox;
 	text: string;
 	rank: number[];
 	textAnchor: LabelTextAnchor;
@@ -206,19 +222,37 @@ function renderLabels(labels: LabelCandidate[]) {
 	return (
 		<g className='recharts-data-labels'>
 			{labels.map((label, index) => (
-				<text
-					key={index}
-					x={label.cx}
-					y={label.baselineY}
-					textAnchor={label.textAnchor}
-					dominantBaseline='alphabetic'
-					{...DATA_LABEL_PROPS}
-				>
-					{label.text}
-				</text>
+				<g key={index} className='recharts-data-label'>
+					<rect
+						x={label.chip.left}
+						y={label.chip.top}
+						width={label.chip.right - label.chip.left}
+						height={label.chip.bottom - label.chip.top}
+						{...DATA_LABEL_CHIP_PROPS}
+					/>
+					<text
+						x={labelTextX(label)}
+						y={label.baselineY}
+						textAnchor={label.textAnchor}
+						dominantBaseline='alphabetic'
+						{...DATA_LABEL_PROPS}
+					>
+						{label.text}
+					</text>
+				</g>
 			))}
 		</g>
 	);
+}
+
+function labelTextX(label: LabelCandidate): number {
+	if (label.textAnchor === 'start') {
+		return label.chip.left + DATA_LABEL_CHIP_PADDING_X;
+	}
+	if (label.textAnchor === 'end') {
+		return label.chip.right - DATA_LABEL_CHIP_PADDING_X;
+	}
+	return label.cx;
 }
 
 function isCartesianLabelChart(chartType: ChartType): boolean {
@@ -521,14 +555,35 @@ function buildLabelCandidate(
 	rank: number[],
 	options: LabelCandidateOptions,
 ): LabelCandidate | null {
-	const halfWidth = (text.length * DATA_LABEL_FONT_SIZE * DATA_LABEL_CHAR_WIDTH_RATIO) / 2;
-	const middleBox = labelBox(cx, baselineY, halfWidth);
-	const textAnchor = options.textAnchor ?? selectTextAnchor(middleBox, options.bounds);
-	const box = labelBox(cx, baselineY, halfWidth, textAnchor);
-	if (!boxFitsBounds(box, options.bounds)) {
+	const textWidth = text.length * DATA_LABEL_FONT_SIZE * DATA_LABEL_CHAR_WIDTH_RATIO;
+	const middleChip = labelChipBox(cx, baselineY, textWidth, 'middle');
+	const textAnchor = options.textAnchor ?? selectTextAnchor(middleChip, options.bounds);
+	const chip = labelChipBox(cx, baselineY, textWidth, textAnchor);
+	if (!boxFitsBounds(chip, options.bounds)) {
 		return null;
 	}
-	return { cx, baselineY, box, text, rank, textAnchor };
+	return { cx, baselineY, box: expandBox(chip, DATA_LABEL_CHIP_GAP), chip, text, rank, textAnchor };
+}
+
+/** Edge-anchored chips start/end exactly at `cx` so they never spill past the plot bounds. */
+function labelChipBox(cx: number, baselineY: number, textWidth: number, textAnchor: LabelTextAnchor): LabelBox {
+	const width = textWidth + DATA_LABEL_CHIP_PADDING_X * 2;
+	const left = textAnchor === 'start' ? cx : textAnchor === 'end' ? cx - width : cx - width / 2;
+	return {
+		left,
+		right: left + width,
+		top: baselineY - DATA_LABEL_CHIP_ASCENT,
+		bottom: baselineY + DATA_LABEL_CHIP_DESCENT,
+	};
+}
+
+function expandBox(box: LabelBox, amount: number): LabelBox {
+	return {
+		left: box.left - amount,
+		right: box.right + amount,
+		top: box.top - amount,
+		bottom: box.bottom + amount,
+	};
 }
 
 /** Area/line points carry `value` as a `[baseLine, value]` range; bars carry a scalar. Unwrap both. */

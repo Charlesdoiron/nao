@@ -41,27 +41,21 @@ interface RenderedLabel {
 }
 
 function parseDataLabels(html: string): RenderedLabel[] {
-	const group = html.match(/<g class="recharts-data-labels">(.*?)<\/g>/s)?.[1] ?? '';
 	const labels: RenderedLabel[] = [];
-	const regex = /<text([^>]*)>([^<]*)<\/text>/g;
-	for (let match = regex.exec(group); match !== null; match = regex.exec(group)) {
-		const attributes = match[1];
-		const x = Number(readAttribute(attributes, 'x'));
-		const y = Number(readAttribute(attributes, 'y'));
-		const text = match[2];
-		const textAnchor = (readAttribute(attributes, 'text-anchor') ?? 'middle') as RenderedLabel['textAnchor'];
-		const halfWidth = (text.length * 11 * 0.6) / 2;
-		const left = textAnchor === 'start' ? x : textAnchor === 'end' ? x - halfWidth * 2 : x - halfWidth;
-		const right = textAnchor === 'start' ? x + halfWidth * 2 : textAnchor === 'end' ? x : x + halfWidth;
+	const regex = /<g class="recharts-data-label"><rect([^>]*?)\/?>(?:<\/rect>)?<text([^>]*)>([^<]*)<\/text><\/g>/g;
+	for (let match = regex.exec(html); match !== null; match = regex.exec(html)) {
+		const [, chipAttributes, textAttributes, text] = match;
+		const chipLeft = Number(readAttribute(chipAttributes, 'x'));
+		const chipTop = Number(readAttribute(chipAttributes, 'y'));
 		labels.push({
-			x,
-			y,
+			x: Number(readAttribute(textAttributes, 'x')),
+			y: Number(readAttribute(textAttributes, 'y')),
 			text,
-			textAnchor,
-			left: left - (textAnchor === 'start' ? 0 : 2),
-			right: right + (textAnchor === 'end' ? 0 : 2),
-			top: y - 11 - 2,
-			bottom: y + 2,
+			textAnchor: (readAttribute(textAttributes, 'text-anchor') ?? 'middle') as RenderedLabel['textAnchor'],
+			left: chipLeft,
+			right: chipLeft + Number(readAttribute(chipAttributes, 'width')),
+			top: chipTop,
+			bottom: chipTop + Number(readAttribute(chipAttributes, 'height')),
 		});
 	}
 	return labels;
