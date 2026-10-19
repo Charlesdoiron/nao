@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router';
 
+import { AnnouncementBanner } from '@/components/announcement-banner';
 import { CommandMenu } from '@/components/command-menu';
 import { CloudBillingAccessBanner } from '@/components/cloud-billing-access-banner';
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog';
@@ -35,6 +36,7 @@ function SidebarLayoutContent() {
 			<CommandMenu onOpenKeyboardShortcuts={() => setKeyboardShortcutsOpen(true)} />
 			<KeyboardShortcutsDialog open={keyboardShortcutsOpen} onOpenChange={setKeyboardShortcutsOpen} />
 			<div className='flex min-h-0 min-w-0 flex-1 flex-col'>
+				<AnnouncementBanner />
 				<CloudBillingAccessBanner />
 				<div className='flex min-h-0 min-w-0 flex-1'>
 					<Outlet />
