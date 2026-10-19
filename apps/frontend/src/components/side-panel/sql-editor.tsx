@@ -1,25 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, useMonaco } from '@monaco-editor/react';
-import { validateSqlFilterTemplate } from '@nao/shared/sql-template';
+import {
+	extractSqlFilterIds,
+	isFilterSelectionActive,
+	renderSqlTemplate,
+	stripSqlFilterBlocks,
+} from '@nao/shared/sql-template';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Loader2, Play, Save } from 'lucide-react';
+import { AlertTriangle, Braces, Filter, Loader2, Play, Save } from 'lucide-react';
 import { usePanelRef } from 'react-resizable-panels';
 import { ResizableSeparator, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
 import type { Monaco } from '@monaco-editor/react';
 import type { UIMessage } from '@nao/backend/chat';
+import type { StoryFilterSelection, StoryFilterSelections } from '@nao/shared/sql-template';
+import type { ParsedFilterBlock } from '@nao/shared/story-segments';
 import type { executeSql } from '@nao/shared/tools';
 import type { editor } from 'monaco-editor';
 
+import type { SqlFilterPopoverTarget } from '@/components/side-panel/sql-filter-popover';
+import type { StoryFilterApi } from '@/hooks/use-story-filters';
+import type { SqlFilterBlock, SqlFilterToken } from '@/lib/sql-filter-template';
 import { useOptionalAgentContext } from '@/contexts/agent.provider';
 import { useEditorTheme } from '@/hooks/use-editor-theme';
+import { useInlineSqlFilters } from '@/hooks/use-inline-sql-filters';
 import { useQueryRowsSource, useServerPaginatedRows } from '@/hooks/use-query-rows';
 import { FixInChatButton } from '@/components/fix-in-chat-button';
 import { SidePanelHeader } from '@/components/side-panel/side-panel-header';
+import { SqlFilterPopover } from '@/components/side-panel/sql-filter-popover';
+import { SqlFilterTestBar } from '@/components/side-panel/sql-filter-test-bar';
 import { TableDisplay } from '@/components/tool-calls/display-table';
 import { Button } from '@/components/ui/button';
 import { applyExecuteSqlResultToMessages } from '@/lib/execute-sql-messages';
+import { analyzeSqlFilterTemplate, buildFilterBlockSnippet, findFilterInsertOffset } from '@/lib/sql-filter-template';
 import { formatSQL } from '@/lib/sql-formatter';
 import { SQL_SHIKI_THEME, setupSqlHighlighting } from '@/lib/sql-shiki-theme';
+import { cn } from '@/lib/utils';
 import { trpc } from '@/main';
 
 const RESULTS_MIN_HEIGHT = 240;
@@ -27,6 +42,8 @@ const SQL_MIN_HEIGHT = 100;
 const SEPARATOR_HEIGHT = 12;
 const SQL_CONTENT_PADDING = 8;
 const RESULTS_PAGE_SIZE = 100;
+const EMPTY_FILTERS: ParsedFilterBlock[] = [];
+const EMPTY_SELECTIONS: StoryFilterSelections = {};
 
 interface SqlEditorProps {
 	input: executeSql.Input;
@@ -46,10 +63,22 @@ export const SidePanelContent = ({ input, output, toolCallId, editable = false }
 
 interface SqlQueryEditorProps extends SqlEditorProps {
 	onOutputChange?: (output: executeSql.Output) => void;
+	storyFilters?: ParsedFilterBlock[];
+	initialFilterSelections?: StoryFilterSelections;
+	filterApi?: StoryFilterApi | null;
 }
 
 /** SQL editor with run / save & run actions and the result table underneath. */
-export function SqlQueryEditor({ input, output, toolCallId, editable = false, onOutputChange }: SqlQueryEditorProps) {
+export function SqlQueryEditor({
+	input,
+	output,
+	toolCallId,
+	editable = false,
+	onOutputChange,
+	storyFilters,
+	initialFilterSelections = EMPTY_SELECTIONS,
+	filterApi,
+}: SqlQueryEditorProps) {
 	const queryClient = useQueryClient();
 	const monaco = useMonaco();
 	const editorTheme = useEditorTheme();
@@ -68,6 +97,11 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 		previewOutput.data as Record<string, unknown>[],
 		RESULTS_PAGE_SIZE,
 	);
+	const [testSelections, setTestSelections] = useState<StoryFilterSelections>(initialFilterSelections);
+	const [testedFilterLabels, setTestedFilterLabels] = useState<string[]>([]);
+	const [showJinja, setShowJinja] = useState(false);
+	const [filterPopover, setFilterPopover] = useState<SqlFilterPopoverTarget | null>(null);
+	const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 	const sqlPanelRef = usePanelRef();
@@ -103,11 +137,37 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 		setSavedSql(input.sql_query);
 		setPreviewOutput(output);
 		setError(null);
+		setTestSelections(initialFilterSelections);
+		setTestedFilterLabels([]);
+		setFilterPopover(null);
 	}, [queryId]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when switching queries
 
 	const canEdit = Boolean(editable && queryId && !agent?.isReadonly);
 	const isDirty = sqlQuery !== savedSql;
-	const validationIssues = useMemo(() => (canEdit ? validateSqlFilterTemplate(sqlQuery) : []), [canEdit, sqlQuery]);
+	const declaredFilters = storyFilters ?? EMPTY_FILTERS;
+	const filtersById = useMemo(() => new Map(declaredFilters.map((filter) => [filter.id, filter])), [declaredFilters]);
+	const filterAnalysis = useMemo(
+		() => analyzeSqlFilterTemplate(sqlQuery, storyFilters ? { knownFilterIds: filtersById.keys() } : undefined),
+		[sqlQuery, storyFilters, filtersById],
+	);
+	const validationIssues = canEdit ? filterAnalysis.issues : [];
+	const showFilterControls = canEdit && (declaredFilters.length > 0 || filterAnalysis.tokens.length > 0);
+	const activeTestFilters = declaredFilters.filter(
+		(filter) =>
+			filterAnalysis.referencedFilterIds.includes(filter.id) &&
+			isFilterSelectionActive(filter.filterType, testSelections[filter.id]),
+	);
+
+	useInlineSqlFilters({
+		editor: editorInstance,
+		monaco,
+		analysis: filterAnalysis,
+		filtersById,
+		selections: testSelections,
+		showJinja,
+		enabled: canEdit,
+		onChipClick: setFilterPopover,
+	});
 
 	const previewMutation = useMutation(trpc.sql.previewQuery.mutationOptions());
 	const saveMutation = useMutation(trpc.sql.updateQuery.mutationOptions());
@@ -140,15 +200,23 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 		if (!sql) {
 			return;
 		}
-		previewMutation.mutate(buildMutationInput(sql), {
+		let testRun: { sql: string; filterLabels: string[] };
+		try {
+			testRun = renderWithTestValues(sql, declaredFilters, testSelections);
+		} catch (err) {
+			setError(getMutationErrorMessage(err));
+			return;
+		}
+		previewMutation.mutate(buildMutationInput(testRun.sql), {
 			onSuccess: (result) => {
 				setPreviewOutput(result);
 				setError(null);
+				setTestedFilterLabels(testRun.filterLabels);
 				onOutputChangeRef.current?.(result);
 			},
 			onError: (err) => setError(getMutationErrorMessage(err)),
 		});
-	}, [beginMutation, buildMutationInput, previewMutation]);
+	}, [beginMutation, buildMutationInput, previewMutation, declaredFilters, testSelections]);
 
 	const handleSaveAndRun = useCallback(() => {
 		const sql = beginMutation();
@@ -161,6 +229,7 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 				setSqlQuery(result.input.sql_query);
 				setSavedSql(result.input.sql_query);
 				setError(null);
+				setTestedFilterLabels([]);
 				onOutputChangeRef.current?.(result.output);
 
 				const applyUpdate = (messages: UIMessage[]) =>
@@ -237,6 +306,7 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 	const handleEditorMount = useCallback(
 		(instance: editor.IStandaloneCodeEditor, _monaco: Monaco) => {
 			editorRef.current = instance;
+			setEditorInstance(instance);
 
 			let fitted = false;
 			const tryFit = () => {
@@ -252,14 +322,88 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 		[fitSqlPanelToContent],
 	);
 
+	const selectInEditor = useCallback((start: number, end: number) => {
+		const instance = editorRef.current;
+		const model = instance?.getModel();
+		if (!instance || !model) {
+			return;
+		}
+		const range = rangeFromOffsets(model, start, end);
+		instance.focus();
+		instance.setSelection(range);
+		instance.revealRangeInCenterIfOutsideViewport(range);
+	}, []);
+
+	const replaceInEditor = useCallback((start: number, end: number, text: string) => {
+		const instance = editorRef.current;
+		const model = instance?.getModel();
+		if (!instance || !model) {
+			return;
+		}
+		instance.executeEdits('nao-sql-filters', [
+			{ range: rangeFromOffsets(model, start, end), text, forceMoveMarkers: true },
+		]);
+		instance.pushUndoStop();
+	}, []);
+
+	const findBlock = (filterId: string): SqlFilterBlock | undefined => {
+		return filterAnalysis.blocks.find((block) => block.filterId === filterId && !block.hasIssue);
+	};
+
+	const handleEditFilterJinja = (filterId: string) => {
+		const block = findBlock(filterId);
+		setFilterPopover(null);
+		if (block) {
+			selectInEditor(block.start, block.end);
+		}
+	};
+
+	const handleRemoveFilter = (filterId: string) => {
+		const block = findBlock(filterId);
+		setFilterPopover(null);
+		if (block) {
+			replaceInEditor(block.start, block.end, '');
+		}
+	};
+
+	const handleInsertFilter = (filter: ParsedFilterBlock) => {
+		const sql = editorRef.current?.getValue() ?? sqlQuery;
+		const offset = findFilterInsertOffset(sql);
+		const needsWhere = !/\bwhere\b/i.test(stripSqlFilterBlocks(sql));
+		const snippet = buildFilterBlockSnippet(filter.id, filter.column, filter.filterType);
+		const previousLine = sql.slice(sql.lastIndexOf('\n', offset - 1) + 1, offset);
+		const indent = needsWhere ? '' : (previousLine.match(/^[ \t]*/)?.[0] ?? '');
+		replaceInEditor(offset, offset, `${needsWhere ? '\nWHERE 1 = 1' : ''}\n${indent}${snippet}`);
+	};
+
+	const handleTestSelectionChange = (filterId: string, selection: StoryFilterSelection) => {
+		setTestSelections((current) => ({ ...current, [filterId]: selection }));
+	};
+
+	const popoverBlock = filterPopover ? findBlock(filterPopover.filterId) : undefined;
+
 	return (
 		<div ref={rootRef} className='flex min-h-0 flex-1 flex-col bg-background'>
 			{canEdit && (
 				<div className='flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2'>
-					<div className='text-xs text-muted-foreground'>
-						{isDirty ? 'Unsaved changes' : 'Edit SQL, then run or save'}
-					</div>
+					<EditorStatus isDirty={isDirty} testedFilterLabels={testedFilterLabels} />
 					<div className='flex items-center gap-2'>
+						{filterAnalysis.tokens.length > 0 && (
+							<Button
+								type='button'
+								variant='ghost'
+								size='sm'
+								className={cn('h-8 gap-1.5 text-xs', showJinja && 'bg-accent text-foreground')}
+								aria-pressed={showJinja}
+								title={
+									showJinja ? 'Show filters as inline controls' : 'Show the underlying Jinja template'
+								}
+								onClick={() => setShowJinja((current) => !current)}
+							>
+								<Braces className='size-3.5' />
+								{showJinja ? 'Hide Jinja' : 'Show Jinja'}
+							</Button>
+						)}
 						<Button
 							type='button'
 							variant='outline'
@@ -267,13 +411,22 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 							className='h-8 gap-1.5'
 							onClick={handleRun}
 							disabled={isBusy || !sqlQuery.trim()}
+							title={
+								activeTestFilters.length > 0
+									? 'Run a preview with the test filter values (nothing is saved)'
+									: undefined
+							}
 						>
 							{previewMutation.isPending ? (
 								<Loader2 className='size-3.5 animate-spin' />
 							) : (
 								<Play className='size-3.5' />
 							)}
-							<span>Run</span>
+							<span>
+								{activeTestFilters.length > 0
+									? `Test with ${activeTestFilters.length} ${activeTestFilters.length === 1 ? 'filter' : 'filters'}`
+									: 'Run'}
+							</span>
 							<kbd className='text-[10px] opacity-60 font-sans'>⌘↵</kbd>
 						</Button>
 						<Button
@@ -298,7 +451,35 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 			{error && (
 				<div className='shrink-0 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive'>{error}</div>
 			)}
-			{validationIssues.length > 0 && <SqlValidationBanner queryId={queryId} issues={validationIssues} />}
+			{showFilterControls && (
+				<SqlFilterTestBar
+					filters={declaredFilters}
+					referencedFilterIds={filterAnalysis.referencedFilterIds}
+					selections={testSelections}
+					onOpenFilter={setFilterPopover}
+					onInsertFilter={handleInsertFilter}
+					onClear={() => setTestSelections({})}
+				/>
+			)}
+			{validationIssues.length > 0 && (
+				<SqlValidationBanner
+					queryId={queryId}
+					sql={sqlQuery}
+					issues={validationIssues}
+					onSelectIssue={(issue) => selectInEditor(issue.start, issue.end)}
+				/>
+			)}
+			<SqlFilterPopover
+				target={popoverBlock ? filterPopover : null}
+				filter={filterPopover ? filtersById.get(filterPopover.filterId) : undefined}
+				clause={popoverBlock ? sqlQuery.slice(popoverBlock.innerStart, popoverBlock.innerEnd) : null}
+				selection={filterPopover ? testSelections[filterPopover.filterId] : undefined}
+				api={filterApi}
+				onSelectionChange={handleTestSelectionChange}
+				onClose={() => setFilterPopover(null)}
+				onEditJinja={handleEditFilterJinja}
+				onRemove={handleRemoveFilter}
+			/>
 
 			<ResizablePanelGroup orientation='vertical' className='min-h-0 flex-1' elementRef={groupElementRef}>
 				<ResizablePanel
@@ -354,27 +535,64 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 	);
 }
 
-function SqlValidationBanner({ queryId, issues }: { queryId: string | undefined; issues: string[] }) {
+function EditorStatus({ isDirty, testedFilterLabels }: { isDirty: boolean; testedFilterLabels: string[] }) {
+	if (testedFilterLabels.length === 0) {
+		return (
+			<div className='text-xs text-muted-foreground'>
+				{isDirty ? 'Unsaved changes' : 'Edit SQL, then run or save'}
+			</div>
+		);
+	}
+	return (
+		<div className='flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground'>
+			<Filter className='size-3 shrink-0 text-primary' />
+			<span className='truncate'>
+				Previewing with {testedFilterLabels.join(', ')}
+				{isDirty ? ' · unsaved changes' : ''}
+			</span>
+		</div>
+	);
+}
+
+function SqlValidationBanner({
+	queryId,
+	sql,
+	issues,
+	onSelectIssue,
+}: {
+	queryId: string | undefined;
+	sql: string;
+	issues: SqlFilterToken[];
+	onSelectIssue: (issue: SqlFilterToken) => void;
+}) {
 	const fixMessage = [
 		`I'm seeing SQL template validation warnings${queryId ? ` for query ${queryId}` : ''}:`,
-		...issues.map((issue) => `- ${issue}`),
+		...issues.map((issue) => `- Line ${lineOfOffset(sql, issue.start)}: ${issue.issue}`),
 		'',
 		'Please fix the SQL filter template while preserving the query id.',
 	].join('\n');
 
 	return (
-		<div className='flex shrink-0 items-start justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'>
+		<div className='flex shrink-0 items-start justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'>
 			<div className='min-w-0 flex-1'>
 				<div className='flex items-center gap-1.5 font-medium'>
 					<AlertTriangle className='size-3.5 shrink-0' />
 					<span>
-						{issues.length} SQL template {issues.length === 1 ? 'warning' : 'warnings'}
+						{issues.length} filter template {issues.length === 1 ? 'error' : 'errors'} — underlined in the
+						query
 					</span>
 				</div>
 				<ul className='mt-1 flex flex-col gap-0.5'>
 					{issues.slice(0, 5).map((issue) => (
-						<li key={issue} className='truncate'>
-							{issue}
+						<li key={`${issue.start}-${issue.issue}`} className='min-w-0'>
+							<button
+								type='button'
+								className='flex w-full min-w-0 items-baseline gap-1.5 text-left hover:underline'
+								onClick={() => onSelectIssue(issue)}
+							>
+								<span className='shrink-0 font-mono opacity-70'>L{lineOfOffset(sql, issue.start)}</span>
+								<span className='truncate'>{issue.issue}</span>
+							</button>
 						</li>
 					))}
 					{issues.length > 5 && <li className='opacity-70'>and {issues.length - 5} more...</li>}
@@ -383,6 +601,42 @@ function SqlValidationBanner({ queryId, issues }: { queryId: string | undefined;
 			<FixInChatButton message={fixMessage} className='shrink-0 gap-1.5' />
 		</div>
 	);
+}
+
+/** Resolves the story filter blocks with the editor's test values so a preview reflects the filtered query. */
+function renderWithTestValues(
+	sql: string,
+	filters: ParsedFilterBlock[],
+	selections: StoryFilterSelections,
+): { sql: string; filterLabels: string[] } {
+	const referencedIds = new Set(extractSqlFilterIds(sql));
+	const activeFilters = filters.filter(
+		(filter) => referencedIds.has(filter.id) && isFilterSelectionActive(filter.filterType, selections[filter.id]),
+	);
+	if (activeFilters.length === 0) {
+		return { sql, filterLabels: [] };
+	}
+	const types = Object.fromEntries(filters.map((filter) => [filter.id, filter.filterType]));
+	const activeSelections = Object.fromEntries(activeFilters.map((filter) => [filter.id, selections[filter.id]]));
+	return {
+		sql: renderSqlTemplate(sql, activeSelections, types),
+		filterLabels: activeFilters.map((filter) => filter.label),
+	};
+}
+
+function rangeFromOffsets(model: editor.ITextModel, start: number, end: number) {
+	const startPosition = model.getPositionAt(start);
+	const endPosition = model.getPositionAt(end);
+	return {
+		startLineNumber: startPosition.lineNumber,
+		startColumn: startPosition.column,
+		endLineNumber: endPosition.lineNumber,
+		endColumn: endPosition.column,
+	};
+}
+
+function lineOfOffset(sql: string, offset: number): number {
+	return sql.slice(0, offset).split('\n').length;
 }
 
 function getMutationErrorMessage(err: unknown): string {

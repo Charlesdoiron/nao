@@ -1052,3 +1052,75 @@ code.dollar:before {
 .chart-editor-table th[aria-sort='descending'] .nao-table-display__sort {
 	opacity: 1;
 }
+
+/* Story filter Jinja rendered as inline chips in the SQL editor */
+.monaco-editor .view-line .nao-sql-jinja-hidden {
+	display: none;
+}
+
+.monaco-editor .view-line .nao-sql-jinja-token {
+	color: var(--primary) !important;
+	font-style: italic;
+}
+
+.monaco-editor .view-line .nao-sql-filter-clause {
+	background: color-mix(in oklab, var(--primary) 7%, transparent);
+}
+
+.monaco-editor .view-line .nao-sql-filter-clause--idle {
+	background: color-mix(in oklab, var(--muted-foreground) 6%, transparent);
+	opacity: 0.6;
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip {
+	display: inline-block;
+	cursor: pointer;
+	font-family: var(--font-sans);
+	font-size: 11px;
+	font-weight: 550;
+	line-height: 16px;
+	padding: 0 6px;
+	margin: 0 1px;
+	border-radius: 9999px;
+	border: 1px solid color-mix(in oklab, var(--primary) 35%, transparent);
+	background: color-mix(in oklab, var(--primary) 12%, var(--background));
+	color: var(--primary) !important;
+	opacity: 1;
+	transition:
+		background-color 0.1s ease,
+		border-color 0.1s ease;
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip:hover {
+	background: color-mix(in oklab, var(--primary) 22%, var(--background));
+	border-color: var(--primary);
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip--open::before {
+	content: '';
+	display: inline-block;
+	width: 9px;
+	height: 9px;
+	margin-right: 4px;
+	vertical-align: -1px;
+	background: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpolygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip--placeholder {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	border-style: dashed;
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip--idle {
+	color: var(--muted-foreground) !important;
+	border-color: var(--border);
+	background: var(--muted);
+}
+
+.monaco-editor .view-line .nao-sql-filter-chip--idle:hover {
+	border-color: var(--muted-foreground);
+	background: var(--accent);
+}

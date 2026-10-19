@@ -55,9 +55,10 @@ export function StoryTabbedContent({
 				? {
 						api: filterApi,
 						selections: storyFilters.filtersEnabled ? storyFilters.debouncedSelections : {},
+						filters: storyFilters.filtersEnabled ? storyFilters.filters : undefined,
 					}
 				: null,
-		[filterApi, storyFilters.filtersEnabled, storyFilters.debouncedSelections],
+		[filterApi, storyFilters.filtersEnabled, storyFilters.debouncedSelections, storyFilters.filters],
 	);
 
 	return (

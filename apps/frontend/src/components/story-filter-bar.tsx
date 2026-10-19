@@ -347,7 +347,7 @@ function FilterOptionsErrorBanner({
 	);
 }
 
-function useFilterOptions(
+export function useFilterOptions(
 	filter: ParsedFilterBlock,
 	api?: StoryFilterApi | null,
 ): { options: string[]; error: string | null; isLoading: boolean } {

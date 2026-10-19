@@ -1,12 +1,14 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { StoryFilterSelections } from '@nao/shared/sql-template';
+import type { ParsedFilterBlock } from '@nao/shared/story-segments';
 
 import type { StoryFilterApi } from '@/hooks/use-story-filters';
 
 export type StoryQuerySqlSource = {
 	api: StoryFilterApi;
 	selections: StoryFilterSelections;
+	filters?: ParsedFilterBlock[];
 };
 
 const StoryQuerySqlContext = createContext<StoryQuerySqlSource | null>(null);

@@ -75,9 +75,10 @@ export const StoryPreview = memo(function StoryPreview({
 				? {
 						api: filterApi,
 						selections: storyFilters.debouncedSelections,
+						filters: storyFilters.filters,
 					}
 				: null,
-		[filterApi, filtersEnabled, storyFilters.debouncedSelections],
+		[filterApi, filtersEnabled, storyFilters.debouncedSelections, storyFilters.filters],
 	);
 
 	const renderChart = useCallback(
