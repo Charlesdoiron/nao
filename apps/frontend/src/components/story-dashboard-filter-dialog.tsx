@@ -14,7 +14,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Input, NakedInput } from '@/components/ui/input';
 import { getDistinctValues, humanizeColumnName } from '@/lib/story-dashboard-filters';
 import { cn } from '@/lib/utils';
 
@@ -123,11 +123,11 @@ function FilterDialogBody({
 					<StepTitle step={1}>Column</StepTitle>
 					<div className='mx-4 mb-2 flex items-center gap-2 rounded-md border px-2.5'>
 						<Search className='size-3.5 text-muted-foreground' />
-						<Input
+						<NakedInput
 							value={search}
 							onChange={(event) => setSearch(event.target.value)}
 							placeholder='Search columns'
-							className='h-8 border-0 px-0 shadow-none focus-visible:ring-0'
+							className='h-8 w-full text-sm'
 						/>
 					</div>
 					<div className='max-h-80 overflow-auto px-2 pb-3'>

@@ -14,7 +14,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
+import { NakedInput } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useStoryDashboardEditContext } from '@/contexts/story-dashboard-edit';
 import {
@@ -186,6 +186,7 @@ export function DateRangeFilterControl({
 					))}
 				</div>
 				<Calendar
+					key={value?.preset ?? 'custom'}
 					mode='range'
 					selected={selectedRange}
 					onSelect={(range) => onChange(fromDateRange(range))}
@@ -255,11 +256,11 @@ function ValuesFilterControl({ filter, dashboard }: { filter: DashboardFilter; d
 			<PopoverContent className='w-60 p-0' align='start'>
 				<div className='flex items-center gap-2 border-b px-2.5'>
 					<Search className='size-3.5 text-muted-foreground' />
-					<Input
+					<NakedInput
 						value={search}
 						onChange={(event) => setSearch(event.target.value)}
 						placeholder={`Search ${filter.label.toLowerCase()}`}
-						className='h-9 border-0 px-0 shadow-none focus-visible:ring-0'
+						className='h-9 w-full text-sm'
 					/>
 				</div>
 				<div className='max-h-64 overflow-auto p-1'>
