@@ -5,7 +5,14 @@ import {
 	seriesColorAt,
 	useSeriesVisibility,
 } from '@nao/shared/chart-series';
-import { isBuiltinChartType, isComboChart, isPercentStackedChartType, isPieChart } from '@nao/shared/chart-types';
+import { shouldSummarizeDataLabels, summarizeSeriesValues } from '@nao/shared/chart-label-summary';
+import {
+	isBuiltinChartType,
+	isComboChart,
+	isPercentStackedChartType,
+	isPieChart,
+	isStackedChartType,
+} from '@nao/shared/chart-types';
 import { appendBlockToStoryCode } from '@nao/shared/story-tabs';
 import { displayChart } from '@nao/shared/tools';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,6 +31,7 @@ import { Customized } from 'recharts';
 import { useOptionalAgentContext } from '../../contexts/agent.provider';
 import { Button } from '../ui/button';
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from '../ui/chart';
+import { ChartValueLegend } from './chart-value-legend';
 import { DisplayChartEditDialog } from './display-chart-edit-dialog';
 import { DisplayChartTable } from './display-chart-table';
 import { ChartRangeSelector } from './display-chart-range-selector';
@@ -524,7 +532,6 @@ export const ChartDisplay = memo(function ChartDisplay({
 		[isPie, data, xAxisKey, pieValueKey],
 	);
 	const useInlineHeader = titleStyle === 'left' && Boolean(title) && !isPie;
-	const showInlineLegend = showLegend && chartType !== 'kpi_card';
 	const { scrollRef, canScrollLeft, canScrollRight, scrollLegend } = useHorizontalScrollControls();
 
 	const chartConfig = useMemo((): ChartConfig => {
@@ -612,6 +619,16 @@ export const ChartDisplay = memo(function ChartDisplay({
 		}
 	}
 
+	const summarizeDataLabels =
+		Boolean(showDataLabels) &&
+		supportsValueLegend(chartType) &&
+		shouldSummarizeDataLabels(data, visibleSeries, xAxisWidth);
+	const showInlineLegend = showLegend && chartType !== 'kpi_card' && !summarizeDataLabels;
+	const valueSummaries = useMemo(
+		() => (summarizeDataLabels ? summarizeSeriesValues(data, series, xAxisKey) : []),
+		[summarizeDataLabels, data, series, xAxisKey],
+	);
+
 	const tooltipLabelFormatter = useMemo(
 		() => (value: unknown, items: unknown) =>
 			isPie
@@ -641,7 +658,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 				xAxisTickFontSize,
 				xAxisMaxLabelChars,
 				showGrid,
-				showDataLabels,
+				showDataLabels: showDataLabels && !summarizeDataLabels,
 				animate,
 				comparisonMode,
 				gradientIdPrefix,
@@ -677,7 +694,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 							component={<ChartPlotWidthObserver onWidthChange={handlePlotWidthChange} />}
 						/>
 					),
-					showLegend && chartType !== 'kpi_card' && !useInlineHeader && (
+					showLegend && chartType !== 'kpi_card' && !useInlineHeader && !summarizeDataLabels && (
 						<ChartLegend
 							key='legend'
 							payload={legendPayload}
@@ -722,6 +739,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 			yAxisRightLabel,
 			isDualAxis,
 			showDataLabels,
+			summarizeDataLabels,
 			animate,
 			comparisonMode,
 			gradientIdPrefix,
@@ -807,9 +825,24 @@ export const ChartDisplay = memo(function ChartDisplay({
 					{chartElement}
 				</ChartContainer>
 			)}
+			{summarizeDataLabels && showLegend && (
+				<ChartValueLegend
+					series={legendPayload}
+					summaries={valueSummaries}
+					categoryFormatter={labelFormatter}
+					onItemClick={handleToggleSeriesVisibility}
+				/>
+			)}
 		</div>
 	);
 });
+
+function supportsValueLegend(chartType: ChartType): boolean {
+	return (
+		(chartType === 'bar' || chartType === 'line' || chartType === 'area' || isComboChart(chartType)) &&
+		!isStackedChartType(chartType)
+	);
+}
 
 interface ChartPlotWidthObserverProps {
 	offset?: { width?: number };

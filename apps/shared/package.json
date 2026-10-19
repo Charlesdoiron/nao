@@ -8,6 +8,7 @@
 		"./billing": "./src/billing.ts",
 		"./class-names": "./src/class-names.ts",
 		"./chart-builder": "./src/chart-builder.tsx",
+		"./chart-label-summary": "./src/chart-label-summary.ts",
 		"./chart-series": "./src/chart-series.ts",
 		"./chart-tooltip": "./src/chart-tooltip.tsx",
 		"./chart-types": "./src/chart-types.ts",
