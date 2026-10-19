@@ -43,6 +43,7 @@ import { Route as SidebarLayoutSettingsEnterpriseRouteImport } from './routes/_s
 import { Route as SidebarLayoutSettingsContextExplorerRouteImport } from './routes/_sidebar-layout.settings.context-explorer'
 import { Route as SidebarLayoutSettingsAppearanceRouteImport } from './routes/_sidebar-layout.settings.appearance'
 import { Route as SidebarLayoutSettingsAccountRouteImport } from './routes/_sidebar-layout.settings.account'
+import { Route as SidebarLayoutPrototypeSqlFiltersRouteImport } from './routes/_sidebar-layout.prototype.sql-filters'
 import { Route as SidebarLayoutAutomationsAutomationIdRouteImport } from './routes/_sidebar-layout.automations.$automationId'
 import { Route as SidebarLayoutChatLayoutChatIdRouteImport } from './routes/_sidebar-layout._chat-layout.$chatId'
 import { Route as SidebarLayoutSettingsProjectIndexRouteImport } from './routes/_sidebar-layout.settings.project.index'
@@ -263,6 +264,12 @@ const SidebarLayoutSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => SidebarLayoutSettingsRoute,
   } as any)
+const SidebarLayoutPrototypeSqlFiltersRoute =
+  SidebarLayoutPrototypeSqlFiltersRouteImport.update({
+    id: '/prototype/sql-filters',
+    path: '/prototype/sql-filters',
+    getParentRoute: () => SidebarLayoutRoute,
+  } as any)
 const SidebarLayoutAutomationsAutomationIdRoute =
   SidebarLayoutAutomationsAutomationIdRouteImport.update({
     id: '/automations/$automationId',
@@ -469,6 +476,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SidebarLayoutSettingsRouteWithChildren
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
+  '/prototype/sql-filters': typeof SidebarLayoutPrototypeSqlFiltersRoute
   '/settings/account': typeof SidebarLayoutSettingsAccountRoute
   '/settings/appearance': typeof SidebarLayoutSettingsAppearanceRoute
   '/settings/context-explorer': typeof SidebarLayoutSettingsContextExplorerRoute
@@ -534,6 +542,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
+  '/prototype/sql-filters': typeof SidebarLayoutPrototypeSqlFiltersRoute
   '/settings/account': typeof SidebarLayoutSettingsAccountRoute
   '/settings/appearance': typeof SidebarLayoutSettingsAppearanceRoute
   '/settings/context-explorer': typeof SidebarLayoutSettingsContextExplorerRoute
@@ -598,6 +607,7 @@ export interface FileRoutesById {
   '/_sidebar-layout/settings': typeof SidebarLayoutSettingsRouteWithChildren
   '/_sidebar-layout/_chat-layout/$chatId': typeof SidebarLayoutChatLayoutChatIdRoute
   '/_sidebar-layout/automations/$automationId': typeof SidebarLayoutAutomationsAutomationIdRoute
+  '/_sidebar-layout/prototype/sql-filters': typeof SidebarLayoutPrototypeSqlFiltersRoute
   '/_sidebar-layout/settings/account': typeof SidebarLayoutSettingsAccountRoute
   '/_sidebar-layout/settings/appearance': typeof SidebarLayoutSettingsAppearanceRoute
   '/_sidebar-layout/settings/context-explorer': typeof SidebarLayoutSettingsContextExplorerRoute
@@ -667,6 +677,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/$chatId'
     | '/automations/$automationId'
+    | '/prototype/sql-filters'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/context-explorer'
@@ -732,6 +743,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/$chatId'
     | '/automations/$automationId'
+    | '/prototype/sql-filters'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/context-explorer'
@@ -795,6 +807,7 @@ export interface FileRouteTypes {
     | '/_sidebar-layout/settings'
     | '/_sidebar-layout/_chat-layout/$chatId'
     | '/_sidebar-layout/automations/$automationId'
+    | '/_sidebar-layout/prototype/sql-filters'
     | '/_sidebar-layout/settings/account'
     | '/_sidebar-layout/settings/appearance'
     | '/_sidebar-layout/settings/context-explorer'
@@ -1101,6 +1114,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/account'
       preLoaderRoute: typeof SidebarLayoutSettingsAccountRouteImport
       parentRoute: typeof SidebarLayoutSettingsRoute
+    }
+    '/_sidebar-layout/prototype/sql-filters': {
+      id: '/_sidebar-layout/prototype/sql-filters'
+      path: '/prototype/sql-filters'
+      fullPath: '/prototype/sql-filters'
+      preLoaderRoute: typeof SidebarLayoutPrototypeSqlFiltersRouteImport
+      parentRoute: typeof SidebarLayoutRoute
     }
     '/_sidebar-layout/automations/$automationId': {
       id: '/_sidebar-layout/automations/$automationId'
@@ -1534,6 +1554,7 @@ interface SidebarLayoutRouteChildren {
   SidebarLayoutChatLayoutRoute: typeof SidebarLayoutChatLayoutRouteWithChildren
   SidebarLayoutSettingsRoute: typeof SidebarLayoutSettingsRouteWithChildren
   SidebarLayoutAutomationsAutomationIdRoute: typeof SidebarLayoutAutomationsAutomationIdRoute
+  SidebarLayoutPrototypeSqlFiltersRoute: typeof SidebarLayoutPrototypeSqlFiltersRoute
   SidebarLayoutSharedChatShareIdRoute: typeof SidebarLayoutSharedChatShareIdRoute
   SidebarLayoutStoriesStoryIdRoute: typeof SidebarLayoutStoriesStoryIdRoute
   SidebarLayoutFeedIndexRoute: typeof SidebarLayoutFeedIndexRoute
@@ -1548,6 +1569,7 @@ const SidebarLayoutRouteChildren: SidebarLayoutRouteChildren = {
   SidebarLayoutSettingsRoute: SidebarLayoutSettingsRouteWithChildren,
   SidebarLayoutAutomationsAutomationIdRoute:
     SidebarLayoutAutomationsAutomationIdRoute,
+  SidebarLayoutPrototypeSqlFiltersRoute: SidebarLayoutPrototypeSqlFiltersRoute,
   SidebarLayoutSharedChatShareIdRoute: SidebarLayoutSharedChatShareIdRoute,
   SidebarLayoutStoriesStoryIdRoute: SidebarLayoutStoriesStoryIdRoute,
   SidebarLayoutFeedIndexRoute: SidebarLayoutFeedIndexRoute,
