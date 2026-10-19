@@ -1077,6 +1077,14 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		keywords: ['thumbs up', 'thumbs down', 'rating', 'review'],
 		adminOnly: true,
 	},
+	{
+		page: '/stories/feedback',
+		pageLabel: 'Story feedback',
+		title: 'Story feedback',
+		description: 'Thumbs up and down left on every shared story, with positive and negative totals.',
+		keywords: ['stories', 'thumbs up', 'thumbs down', 'rating', 'votes', 'approval'],
+		adminOnly: true,
+	},
 
 	// ── Usage & Costs > Chats Replay ─────────────────────────
 	{

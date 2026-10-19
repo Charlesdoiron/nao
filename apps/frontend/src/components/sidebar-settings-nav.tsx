@@ -126,6 +126,12 @@ const settingsNavGroups: NavGroup[] = [
 				visible: ({ isAdmin, isContextAdmin }) => !isAdmin && isContextAdmin,
 			},
 			{
+				label: 'Story feedback',
+				to: '/stories/feedback',
+				visible: ({ isAdmin }) => isAdmin,
+				leavesSettings: true,
+			},
+			{
 				label: 'Server logs',
 				to: '/settings/logs',
 				visible: ({ isAdmin, isCloud }) => isAdmin && !isCloud,
@@ -350,7 +356,7 @@ export function SidebarSettingsNav({
 												aria-hidden='true'
 												className={cn('size-3.5 text-muted-foreground', !badge && 'ml-auto')}
 											/>
-											<span className='sr-only'>Opens a chat outside settings</span>
+											<span className='sr-only'>Opens outside settings</span>
 										</>
 									) : null;
 

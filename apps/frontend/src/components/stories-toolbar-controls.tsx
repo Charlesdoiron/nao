@@ -1,4 +1,5 @@
-import { ArchiveIcon, LayoutGrid, List, ListChecks, ShieldCheck, X } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { ArchiveIcon, LayoutGrid, List, ListChecks, ShieldCheck, ThumbsUp, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { StoryPanelDisplayMode } from '@nao/shared/types';
 import type { StoriesScope } from '@/lib/stories-page';
@@ -30,6 +31,14 @@ export function StoriesToolbarControls({
 		<div className='flex items-center gap-3'>
 			{!showArchived && <ScopeToggle value={scope} onChange={onScopeChange} />}
 			{!isViewer && <SelectionToggle active={selectionActive} onToggle={onToggleSelection} />}
+			{!isViewer && !showArchived && (
+				<Button variant='ghost' size='sm' className='text-foreground gap-1.5 rounded-full border' asChild>
+					<Link to='/stories/feedback'>
+						<ThumbsUp className='size-4' />
+						<span className='text-xs'>Feedback</span>
+					</Link>
+				</Button>
+			)}
 			<Button
 				variant='ghost'
 				size='sm'
