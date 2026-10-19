@@ -32,7 +32,7 @@ describe('managed AI credit migration', () => {
 		`);
 
 		const migration = readFileSync(
-			new URL('../migrations-sqlite/0078_managed_ai_usage_wallet.sql', import.meta.url),
+			new URL('../migrations-sqlite/0079_managed_ai_usage_wallet.sql', import.meta.url),
 			'utf8',
 		);
 		sqlite.exec(migration);

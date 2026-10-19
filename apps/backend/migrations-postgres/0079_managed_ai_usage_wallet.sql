@@ -18,6 +18,85 @@ CREATE TABLE "credit_grant_policy" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+INSERT INTO "credit_grant_policy" ("grant_type", "amount_micro_usd") VALUES
+	('organization_setup', 20000000),
+	('user_join', 5000000);
+--> statement-breakpoint
+INSERT INTO "credit_grant_candidate" (
+	"id",
+	"grant_type",
+	"org_id",
+	"project_id",
+	"source_key",
+	"created_at"
+)
+SELECT
+	'legacy-project-setup:' || "project"."id",
+	'organization_setup',
+	"project"."org_id",
+	"project"."id",
+	'project:' || "project"."id",
+	"project"."created_at"
+FROM "project"
+WHERE "project"."org_id" IS NOT NULL
+ON CONFLICT ("source_key") DO NOTHING;
+--> statement-breakpoint
+INSERT INTO "credit_grant_candidate" (
+	"id",
+	"grant_type",
+	"org_id",
+	"user_id",
+	"source_key",
+	"activated_at",
+	"created_at"
+)
+SELECT
+	'legacy-org-member:' || "org_member"."org_id" || ':' || "org_member"."user_id",
+	'user_join',
+	"org_member"."org_id",
+	"org_member"."user_id",
+	'org-member:' || "org_member"."org_id" || ':' || "org_member"."user_id",
+	CASE
+		WHEN NOT "user"."requires_password_reset"
+			OR EXISTS (SELECT 1 FROM "session" WHERE "session"."user_id" = "org_member"."user_id")
+		THEN now()
+		ELSE NULL
+	END,
+	"org_member"."created_at"
+FROM "org_member"
+INNER JOIN "user" ON "user"."id" = "org_member"."user_id"
+ON CONFLICT ("source_key") DO NOTHING;
+--> statement-breakpoint
+INSERT INTO "credit_grant_candidate" (
+	"id",
+	"grant_type",
+	"org_id",
+	"user_id",
+	"project_id",
+	"source_key",
+	"activated_at",
+	"created_at"
+)
+SELECT
+	'legacy-project-member:' || "project_member"."project_id" || ':' || "project_member"."user_id",
+	'user_join',
+	"project"."org_id",
+	"project_member"."user_id",
+	"project_member"."project_id",
+	'project-member:' || "project_member"."project_id" || ':' || "project_member"."user_id",
+	CASE
+		WHEN NOT "user"."requires_password_reset"
+			OR EXISTS (SELECT 1 FROM "session" WHERE "session"."user_id" = "project_member"."user_id")
+		THEN now()
+		ELSE NULL
+	END,
+	"project_member"."created_at"
+FROM "project_member"
+INNER JOIN "project" ON "project"."id" = "project_member"."project_id"
+INNER JOIN "user" ON "user"."id" = "project_member"."user_id"
+WHERE "project"."org_id" IS NOT NULL
+ON CONFLICT ("source_key") DO NOTHING;
+--> statement-breakpoint
 CREATE TABLE "credit_ledger" (
 	"id" text PRIMARY KEY NOT NULL,
 	"wallet_id" text,
