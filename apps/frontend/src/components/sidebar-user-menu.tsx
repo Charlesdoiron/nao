@@ -1,15 +1,14 @@
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, SlidersVertical } from 'lucide-react';
+import { SlidersVertical } from 'lucide-react';
 import { Avatar } from './ui/avatar';
 import { useSession } from '@/lib/auth-client';
 import { cn, hideIf } from '@/lib/utils';
 
 interface SidebarUserMenuProps {
 	isCollapsed: boolean;
-	isInSettings: boolean;
 }
 
-export function SidebarUserMenu({ isCollapsed, isInSettings }: SidebarUserMenuProps) {
+export function SidebarUserMenu({ isCollapsed }: SidebarUserMenuProps) {
 	const { data: session } = useSession();
 	const username = session?.user?.name;
 	const email = session?.user?.email;
@@ -43,18 +42,12 @@ export function SidebarUserMenu({ isCollapsed, isInSettings }: SidebarUserMenuPr
 					</div>
 				</Link>
 				<div className={cn('flex items-center gap-2', isCollapsed ? 'p-2' : 'p-0.5')}>
-					{!isInSettings ? (
-						<Link
-							to='/settings'
-							className='text-muted-foreground group-hover/user:text-foreground hover:text-foreground'
-						>
-							<SlidersVertical className='size-4' />
-						</Link>
-					) : (
-						<Link to='/' className='text-muted-foreground hover:text-foreground'>
-							<ArrowLeft className='size-4' />
-						</Link>
-					)}
+					<Link
+						to='/settings'
+						className='text-muted-foreground group-hover/user:text-foreground hover:text-foreground'
+					>
+						<SlidersVertical className='size-4' />
+					</Link>
 				</div>
 			</div>
 		</div>

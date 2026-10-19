@@ -7,14 +7,13 @@ import {
 	NewspaperIcon,
 	PlusIcon,
 	SearchIcon,
+	SettingsIcon,
 	X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { ProjectSwitcher } from './project-selector';
+import { SettingsNavPanel } from './settings-nav-panel';
 import { ChatFilterMenu } from './sidebar-chat-filter-menu';
 import { ChatListItem } from './sidebar-chat-list-item';
-import { SidebarCommunity } from './sidebar-community';
-import { SidebarSettingsNav } from './sidebar-settings-nav';
 import { SidebarUserMenu } from './sidebar-user-menu';
 import { SidebarVersionNotice } from './sidebar-version-notice';
 import { Spinner } from './ui/spinner';
@@ -29,8 +28,6 @@ import { useCommandMenuCallback } from '@/contexts/command-menu-callback';
 import { useSidebar } from '@/contexts/sidebar';
 import { brandingAssetUrl, useBranding } from '@/hooks/use-branding';
 import { useChatViewPreferences } from '@/hooks/use-chat-view-preferences';
-import { useIsCloud } from '@/hooks/use-nao-mode';
-import { useProjectSwitch } from '@/hooks/use-project-switch';
 import { useSidebarSectionOpen } from '@/hooks/use-sidebar-section-open';
 import { useTimeAgo } from '@/hooks/use-time-ago';
 import { getActiveProjectId, setActiveProjectId } from '@/lib/active-project';
@@ -49,13 +46,10 @@ export function Sidebar() {
 	const [toggleHintOpen, setToggleHintOpen] = useState(false);
 	const { fire: openCommandMenu } = useCommandMenuCallback();
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
-	const projects = useQuery(trpc.project.listForCurrentUser.queryOptions());
-	const switchProject = useProjectSwitch(project.data?.id);
 	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
 	const branding = useBranding();
 	const customColor = branding.enabled ? branding.brandColor : null;
-	const { isAdmin, isContextAdmin, isOrgAdmin, isViewer } = usePermissions();
-	const isCloud = useIsCloud();
+	const { isAdmin, isViewer } = usePermissions();
 	const betaAutomationsEnabled = config.data?.betaAutomationsEnabled === true;
 	const showAutomations = !isViewer && betaAutomationsEnabled;
 	const unreadCount = useUnreadCount(project.data?.id).data ?? 0;
@@ -66,6 +60,8 @@ export function Sidebar() {
 	const locationPath = useRouterState({ select: (s) => s.location.pathname });
 	const isSettingsRoute = matchRoute({ to: '/settings', fuzzy: true });
 	const isInSettings = !!isSettingsRoute && !isViewer;
+	const isStoriesRoute = !!matchRoute({ to: '/stories', fuzzy: true });
+	const isFeedRoute = !!matchRoute({ to: '/feed', fuzzy: true });
 	const effectiveIsCollapsed = isMobile ? false : isCollapsed;
 
 	useEffect(() => {
@@ -100,6 +96,10 @@ export function Sidebar() {
 		}
 	}, [navigate, isMobile, closeMobile]);
 
+	const handleNavigateSettings = useCallback(() => {
+		navigate({ to: '/settings' });
+	}, [navigate]);
+
 	const handleSearchChats = useCallback(() => {
 		openCommandMenu();
 		if (isMobile) {
@@ -116,16 +116,6 @@ export function Sidebar() {
 			setActiveProjectId(project.data.id);
 		}
 	}, [project.data?.id]);
-
-	const handleProjectChange = useCallback(
-		async (projectId: string) => {
-			const didSwitch = await switchProject(projectId);
-			if (didSwitch && isMobile) {
-				closeMobile();
-			}
-		},
-		[closeMobile, isMobile, switchProject],
-	);
 
 	const sidebarContent = (
 		<div
@@ -206,68 +196,55 @@ export function Sidebar() {
 						)}
 					</div>
 				</div>
-				{isInSettings && (
-					<ProjectSwitcher
-						projects={projects.data ?? []}
-						currentProjectId={project.data?.id}
-						onChange={handleProjectChange}
-						variant='sidebar'
-						className={cn(
-							'overflow-hidden transition-[height,margin,opacity,visibility] duration-300',
-							effectiveIsCollapsed ? 'h-0 mt-0' : 'h-[30px] mt-2',
-							hideIf(effectiveIsCollapsed),
-						)}
+				<div className='py-4'>
+					{!isViewer && (
+						<SidebarMenuButton
+							icon={PlusIcon}
+							label='New chat'
+							shortcut={getShortcutLabel('new-chat')}
+							isCollapsed={effectiveIsCollapsed}
+							onClick={handleNavigateHome}
+						/>
+					)}
+					<SidebarMenuButton
+						icon={SearchIcon}
+						label='Search chats'
+						shortcut={getShortcutLabel('command-menu')}
+						isCollapsed={effectiveIsCollapsed}
+						onClick={handleSearchChats}
 					/>
-				)}
-				{!isInSettings && (
-					<>
-						<div className='py-4'>
-							{!isViewer && (
-								<SidebarMenuButton
-									icon={PlusIcon}
-									label='New chat'
-									shortcut={getShortcutLabel('new-chat')}
-									isCollapsed={effectiveIsCollapsed}
-									onClick={handleNavigateHome}
-								/>
-							)}
-							<SidebarMenuButton
-								icon={SearchIcon}
-								label='Search chats'
-								shortcut={getShortcutLabel('command-menu')}
-								isCollapsed={effectiveIsCollapsed}
-								onClick={handleSearchChats}
-							/>
-							<SidebarMenuButton
-								icon={StoryIcon as unknown as LucideIcon}
-								label='Stories'
-								shortcut={getShortcutLabel('go-to-stories')}
-								isCollapsed={effectiveIsCollapsed}
-								onClick={handleNavigateStories}
-							/>
-							<SidebarMenuButton
-								icon={NewspaperIcon as unknown as LucideIcon}
-								label='Feed'
-								shortcut=''
-								isCollapsed={effectiveIsCollapsed}
-								onClick={handleNavigateFeed}
-								indicator={hasFeedActivity}
-							/>
-						</div>
-					</>
-				)}
+					<SidebarMenuButton
+						icon={StoryIcon as unknown as LucideIcon}
+						label='Stories'
+						shortcut={getShortcutLabel('go-to-stories')}
+						isCollapsed={effectiveIsCollapsed}
+						onClick={handleNavigateStories}
+						isActive={isStoriesRoute}
+					/>
+					<SidebarMenuButton
+						icon={NewspaperIcon as unknown as LucideIcon}
+						label='Feed'
+						shortcut=''
+						isCollapsed={effectiveIsCollapsed}
+						onClick={handleNavigateFeed}
+						indicator={hasFeedActivity}
+						isActive={isFeedRoute}
+					/>
+					{!isViewer && (
+						<SidebarMenuButton
+							icon={SettingsIcon}
+							label='Settings'
+							shortcut=''
+							isCollapsed={effectiveIsCollapsed}
+							onClick={handleNavigateSettings}
+							isActive={isInSettings}
+						/>
+					)}
+				</div>
 			</div>
 
-			{isInSettings ? (
-				<SidebarSettingsNav
-					isCollapsed={effectiveIsCollapsed}
-					isAdmin={isAdmin}
-					isContextAdmin={isContextAdmin}
-					isViewer={isViewer}
-					isCloud={isCloud}
-					isCloudBillingEnabled={config.data?.cloudBillingEnabled === true}
-					isOrgAdmin={isOrgAdmin}
-				/>
+			{isInSettings && isMobile ? (
+				<SettingsNavPanel className='flex-1' onProjectSwitched={closeMobile} />
 			) : (
 				<>
 					<SidebarAutomationsNav isCollapsed={effectiveIsCollapsed} enabled={showAutomations} />
@@ -287,12 +264,11 @@ export function Sidebar() {
 				</>
 			)}
 
-			{!isInSettings && <div className='border-b border-sidebar-border mx-2'></div>}
+			<div className='border-b border-sidebar-border mx-2'></div>
 
 			<div className={cn('mt-auto transition-[padding] duration-300', effectiveIsCollapsed ? 'p-1' : 'p-2')}>
-				{isInSettings && <SidebarCommunity isCollapsed={effectiveIsCollapsed} />}
 				{isAdmin && <SidebarVersionNotice isCollapsed={effectiveIsCollapsed} />}
-				<SidebarUserMenu isCollapsed={effectiveIsCollapsed} isInSettings={!!isInSettings} />
+				<SidebarUserMenu isCollapsed={effectiveIsCollapsed} />
 			</div>
 		</div>
 	);
@@ -323,6 +299,7 @@ function SidebarMenuButton({
 	isCollapsed,
 	onClick,
 	indicator = false,
+	isActive = false,
 }: {
 	icon: LucideIcon;
 	label: string;
@@ -330,13 +307,16 @@ function SidebarMenuButton({
 	isCollapsed: boolean;
 	onClick: () => void;
 	indicator?: boolean;
+	isActive?: boolean;
 }) {
 	return (
 		<Button
 			variant='ghost'
+			aria-current={isActive ? 'page' : undefined}
 			className={cn(
 				'w-full justify-start relative group shadow-none transition-[padding,height,background-color] duration-300 p-[10px_!important] gap-4',
 				isCollapsed ? 'h-9' : '',
+				isActive && 'bg-sidebar-accent text-foreground font-medium',
 			)}
 			onClick={onClick}
 		>
