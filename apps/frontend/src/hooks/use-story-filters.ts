@@ -146,7 +146,7 @@ function areSelectionsEqual(a: StoryFilterSelections, b: StoryFilterSelections):
 	return true;
 }
 
-function dedupeFilters(filters: ParsedFilterBlock[]): ParsedFilterBlock[] {
+export function dedupeFilters(filters: ParsedFilterBlock[]): ParsedFilterBlock[] {
 	const seen = new Set<string>();
 	return filters.filter((filter) => {
 		if (seen.has(filter.id)) {

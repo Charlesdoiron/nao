@@ -1,7 +1,11 @@
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { buildStoryChartBlock } from '@nao/shared';
+import { getStoryFiltersFromCode } from '@nao/shared/story-segments';
 import { useStoryBlockEdit } from './use-story-block-edit';
+import type { ParsedFilterBlock } from '@nao/shared/story-segments';
 import type { displayChart } from '@nao/shared/tools';
+import type { StoryFilterApi } from '@/hooks/use-story-filters';
+import { dedupeFilters } from '@/hooks/use-story-filters';
 
 type EditableChartInput = displayChart.ChartInput | displayChart.KpiCardInput;
 
@@ -18,6 +22,9 @@ export interface StoryChartEditHandlers {
 	saveDescription: string;
 	/** The saved story being edited, used to load chart SQL when the chat is not loaded. */
 	story?: { chatId: string; storySlug: string };
+	/** The `<filter />` tags declared in the story, so the SQL editor can lint and test filter templates. */
+	filters?: ParsedFilterBlock[];
+	filterApi?: StoryFilterApi;
 }
 
 const VERSION_SAVE_DESCRIPTION = 'Tweak the chart parameters. Changes are saved to the story as a new version.';
@@ -74,9 +81,18 @@ export function StoryChartEditProvider({
 		[replaceBlock],
 	);
 
+	const filters = useMemo(() => dedupeFilters(getStoryFiltersFromCode(storyCode)), [storyCode]);
+
 	const value = useMemo<StoryChartEditHandlers>(
-		() => ({ saveChart, isSaving, saveDescription: VERSION_SAVE_DESCRIPTION, story: { chatId, storySlug } }),
-		[saveChart, isSaving, chatId, storySlug],
+		() => ({
+			saveChart,
+			isSaving,
+			saveDescription: VERSION_SAVE_DESCRIPTION,
+			story: { chatId, storySlug },
+			filters,
+			filterApi: { kind: 'owned', chatId, storySlug },
+		}),
+		[saveChart, isSaving, chatId, storySlug, filters],
 	);
 
 	return <StoryChartEditContext.Provider value={value}>{children}</StoryChartEditContext.Provider>;

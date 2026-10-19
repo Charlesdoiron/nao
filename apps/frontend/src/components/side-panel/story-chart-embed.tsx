@@ -241,6 +241,8 @@ export function StoryChartEmbedShell({
 					onSave={(next) => edit.saveChart(chart.rawTag!, next)}
 					description={edit.saveDescription}
 					sourceQuery={sourceQuery}
+					storyFilters={edit.filters}
+					storyFilterApi={edit.filterApi}
 					initialView={editorView}
 				/>
 			)}

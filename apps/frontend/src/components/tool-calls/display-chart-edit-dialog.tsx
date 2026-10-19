@@ -24,6 +24,8 @@ import { ChartEditorDataPanel, ChartEditorDataRail } from './chart-editor-data-p
 import { ChartEditorPreview } from './chart-editor-preview';
 import { ChartEditorQueryPane } from './chart-editor-query-pane';
 import { ChartTypePicker, chartTypeLabel } from './chart-type-picker';
+import type { ParsedFilterBlock } from '@nao/shared/story-segments';
+import type { StoryFilterApi } from '@/hooks/use-story-filters';
 import type { ColumnValueKind } from '@/lib/chart-selection-summary';
 import type { SourceQuery } from '@/lib/execute-sql-messages';
 import type { LucideIcon } from 'lucide-react';
@@ -117,6 +119,8 @@ interface ChartConfigEditDialogProps extends Omit<
 	onOpenChange: (open: boolean) => void;
 	description?: string;
 	sourceQuery?: SourceQuery | null;
+	storyFilters?: ParsedFilterBlock[];
+	storyFilterApi?: StoryFilterApi;
 	initialView?: ChartEditorView;
 }
 
@@ -146,6 +150,8 @@ export function ChartConfigEditDialog({
 	onOpenChange,
 	description = 'Tweak the chart parameters.',
 	sourceQuery,
+	storyFilters,
+	storyFilterApi,
 	initialView = 'chart',
 	...form
 }: ChartConfigEditDialogProps) {
@@ -228,6 +234,8 @@ export function ChartConfigEditDialog({
 								input={editableQuery.input}
 								output={editableQuery.output}
 								toolCallId={editableQuery.toolCallId}
+								storyFilters={storyFilters}
+								storyFilterApi={storyFilterApi}
 								onOutputChange={setEditedOutput}
 								onClose={() => setQueryEditorState('hidden')}
 							/>

@@ -46,10 +46,22 @@ export const SidePanelContent = ({ input, output, toolCallId, editable = false }
 
 interface SqlQueryEditorProps extends SqlEditorProps {
 	onOutputChange?: (output: executeSql.Output) => void;
+	onSqlChange?: (sql: string) => void;
+	onEditorMount?: (instance: editor.IStandaloneCodeEditor, monaco: Monaco) => void;
+	showTemplateWarnings?: boolean;
 }
 
 /** SQL editor with run / save & run actions and the result table underneath. */
-export function SqlQueryEditor({ input, output, toolCallId, editable = false, onOutputChange }: SqlQueryEditorProps) {
+export function SqlQueryEditor({
+	input,
+	output,
+	toolCallId,
+	editable = false,
+	onOutputChange,
+	onSqlChange,
+	onEditorMount,
+	showTemplateWarnings = true,
+}: SqlQueryEditorProps) {
 	const queryClient = useQueryClient();
 	const monaco = useMonaco();
 	const editorTheme = useEditorTheme();
@@ -76,6 +88,14 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 	sqlQueryRef.current = sqlQuery;
 	const onOutputChangeRef = useRef(onOutputChange);
 	onOutputChangeRef.current = onOutputChange;
+	const onSqlChangeRef = useRef(onSqlChange);
+	onSqlChangeRef.current = onSqlChange;
+	const onEditorMountRef = useRef(onEditorMount);
+	onEditorMountRef.current = onEditorMount;
+
+	useEffect(() => {
+		onSqlChangeRef.current?.(sqlQuery);
+	}, [sqlQuery]);
 
 	useEffect(() => {
 		if (!monaco) {
@@ -107,7 +127,10 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 
 	const canEdit = Boolean(editable && queryId && !agent?.isReadonly);
 	const isDirty = sqlQuery !== savedSql;
-	const validationIssues = useMemo(() => (canEdit ? validateSqlFilterTemplate(sqlQuery) : []), [canEdit, sqlQuery]);
+	const validationIssues = useMemo(
+		() => (canEdit && showTemplateWarnings ? validateSqlFilterTemplate(sqlQuery) : []),
+		[canEdit, showTemplateWarnings, sqlQuery],
+	);
 
 	const previewMutation = useMutation(trpc.sql.previewQuery.mutationOptions());
 	const saveMutation = useMutation(trpc.sql.updateQuery.mutationOptions());
@@ -235,8 +258,9 @@ export function SqlQueryEditor({ input, output, toolCallId, editable = false, on
 	);
 
 	const handleEditorMount = useCallback(
-		(instance: editor.IStandaloneCodeEditor, _monaco: Monaco) => {
+		(instance: editor.IStandaloneCodeEditor, monacoInstance: Monaco) => {
 			editorRef.current = instance;
+			onEditorMountRef.current?.(instance, monacoInstance);
 
 			let fitted = false;
 			const tryFit = () => {

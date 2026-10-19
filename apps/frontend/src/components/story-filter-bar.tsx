@@ -99,7 +99,7 @@ export function StoryFilterBar({
 	);
 }
 
-function StoryFilterControl({
+export function StoryFilterControl({
 	filter,
 	selection,
 	onChange,
