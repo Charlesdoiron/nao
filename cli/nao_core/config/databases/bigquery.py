@@ -668,6 +668,8 @@ class BigQueryConfig(DatabaseConfig):
 
 def _convert_query_parameter_value(parameter_type: str, value: Any) -> Any:
     try:
+        if value is None:
+            return None
         if parameter_type in {"NUMERIC", "BIGNUMERIC"}:
             return Decimal(str(value))
         if parameter_type == "DATE":
@@ -683,6 +685,8 @@ def _convert_query_parameter_value(parameter_type: str, value: Any) -> Any:
                 raise ValueError("TIME values cannot include a timezone")
             return parsed
         if parameter_type == "TIMESTAMP":
+            if not isinstance(value, str):
+                raise ValueError("TIMESTAMP values must be ISO strings")
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         if parameter_type == "BYTES":
             return base64.b64decode(value, validate=True)

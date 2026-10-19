@@ -1116,18 +1116,51 @@ export const getQueryResultByQueryIdInProject = async (
 };
 
 function extractQueryResultFromToolOutput(toolOutput: unknown): QueryResult | null {
-	const output = toolOutput as { columns?: unknown; data?: unknown; applied_limit?: unknown } | null | undefined;
+	const output = toolOutput as
+		| { columns?: unknown; data?: unknown; decimal_columns?: unknown; applied_limit?: unknown }
+		| null
+		| undefined;
 	if (!output || !Array.isArray(output.columns) || !Array.isArray(output.data)) {
 		return null;
 	}
+	const columns = output.columns as string[];
+	const decimalColumns = parseDecimalColumns(output.decimal_columns, columns);
 
 	return {
-		columns: output.columns as string[],
+		columns,
 		data: output.data as Record<string, unknown>[],
+		...(decimalColumns && { decimalColumns }),
 		...(typeof output.applied_limit === 'number' &&
 			Number.isInteger(output.applied_limit) &&
-			output.applied_limit >= 0 && { appliedLimit: output.applied_limit }),
+			output.applied_limit > 0 && { appliedLimit: output.applied_limit }),
 	};
+}
+
+function parseDecimalColumns(
+	value: unknown,
+	columns: string[],
+): NonNullable<QueryResult['decimalColumns']> | undefined {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		return undefined;
+	}
+	const availableColumns = new Set(columns);
+	const entries = Object.entries(value).flatMap(([column, type]) => {
+		if (!availableColumns.has(column) || !type || typeof type !== 'object' || Array.isArray(type)) {
+			return [];
+		}
+		const { precision, scale } = type as { precision?: unknown; scale?: unknown };
+		return typeof precision === 'number' &&
+			Number.isInteger(precision) &&
+			precision >= 1 &&
+			precision <= 38 &&
+			typeof scale === 'number' &&
+			Number.isInteger(scale) &&
+			scale >= 0 &&
+			scale <= precision
+			? [[column, { precision, scale }] as const]
+			: [];
+	});
+	return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 export async function getChatInfo(

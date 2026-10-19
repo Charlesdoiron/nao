@@ -44,6 +44,7 @@ export const SaveToSchema = z.object({
 export const ArrayParameterSchema = z.object({
 	name: z
 		.string()
+		.max(128)
 		.regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
 		.describe('The BigQuery named parameter without the leading @.'),
 	query_id: QueryIdSchema.describe('The earlier query whose complete result supplies the parameter values.'),
@@ -85,6 +86,16 @@ export const OutputSchema = z.object({
 	data: z.array(z.any()),
 	row_count: z.number(),
 	columns: z.array(z.string()),
+	decimal_columns: z
+		.record(
+			z
+				.object({
+					precision: z.number().int().min(1).max(38),
+					scale: z.number().int().min(0).max(38),
+				})
+				.refine(({ precision, scale }) => scale <= precision),
+		)
+		.optional(),
 	/** The id of the query result. May be referenced by the `display_chart` tool call. */
 	id: QueryIdSchema,
 	dialect: z.string().optional(),

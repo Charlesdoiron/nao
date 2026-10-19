@@ -1,3 +1,4 @@
+import base64
 import math
 import os
 import secrets
@@ -268,7 +269,7 @@ def _convert_value(v: object):
     if isinstance(v, (datetime, date)):
         return v.isoformat()
     if isinstance(v, bytes):
-        return v.decode("utf-8", errors="replace")
+        return base64.b64encode(v).decode("ascii")
 
     # Catch-all for remaining numpy scalars (e.g. np.str_, np.bytes_)
     item_method = getattr(v, "item", None)

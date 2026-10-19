@@ -7,8 +7,11 @@ import { getConnections } from '../src/agents/user-rules';
 import { SystemPrompt } from '../src/components/ai/system-prompt';
 import { renderToMarkdown } from '../src/lib/markdown';
 
-function renderWith(connections: { type: string; database: string }[]): string {
-	return renderToMarkdown(SystemPrompt({ connections }));
+function renderWith(
+	connections: { type: string; database: string }[],
+	options: { toolNames?: string[]; semanticLayerMode?: 'exclusive' } = {},
+): string {
+	return renderToMarkdown(SystemPrompt({ connections, ...options }));
 }
 
 function sqlQueryRulesSection(markdown: string): string {
@@ -80,6 +83,28 @@ describe('dialect-aware system prompt', () => {
 		expect(toolCalls).toContain('filter with `IN UNNEST(@name)`');
 		expect(toolCalls).toContain("`types = {'user_id': 'VARCHAR'}`");
 		expect(toolCalls).toContain('numeric-looking IDs and leading zeroes are preserved');
+	});
+
+	it('omits BigQuery warehouse tool rules when execute_sql is unavailable', () => {
+		const markdown = renderWith(
+			[
+				{ type: 'bigquery', database: 'analytics' },
+				{ type: 'clickhouse', database: 'events' },
+			],
+			{ toolNames: ['read'] },
+		);
+
+		expect(markdown).not.toContain('first query the file with `execute_sql`');
+		expect(markdown).toContain('use `indexes.md` to see how the table is ordered and indexed');
+	});
+
+	it('omits BigQuery warehouse tool rules in semantic-layer-exclusive mode', () => {
+		const markdown = renderWith([{ type: 'bigquery', database: 'analytics' }], {
+			toolNames: ['execute_sql', 'execute_semantic_query'],
+			semanticLayerMode: 'exclusive',
+		});
+
+		expect(markdown).not.toContain('first query the file with `execute_sql`');
 	});
 });
 

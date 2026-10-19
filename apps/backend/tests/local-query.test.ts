@@ -67,6 +67,12 @@ describe('querying saved files', () => {
 		expect(result.data).toEqual([{ amount: '12345678901234567890.123456789' }]);
 	});
 
+	it('serializes BLOB values as base64', async () => {
+		const result = await run("SELECT from_hex('ff006162') AS payload");
+
+		expect(result.data).toEqual([{ payload: '/wBhYg==' }]);
+	});
+
 	it('preserves numeric-looking identifiers when the CSV column is declared VARCHAR', async () => {
 		await writeUserFile(scope, 'uploads/users.csv', 'user_id\n00123\n00456\n');
 

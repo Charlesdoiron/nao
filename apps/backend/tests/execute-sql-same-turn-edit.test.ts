@@ -69,6 +69,27 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 		});
 	});
 
+	it('retains decimal metadata in the cache and persisted tool output', async () => {
+		const context = createContext();
+		vi.mocked(runQueryOnLocalFiles).mockResolvedValueOnce({
+			result: {
+				columns: ['ratio'],
+				data: [{ ratio: '1.2500' }],
+				decimalColumns: { ratio: { precision: 20, scale: 4 } },
+			},
+		});
+
+		const output = await executeQuery(
+			{ sql_query: 'SELECT 1.2500::DECIMAL(20,4) AS ratio', database_id: 'duckdb_local' },
+			context,
+		);
+
+		expect(output.decimal_columns).toEqual({ ratio: { precision: 20, scale: 4 } });
+		expect(context.queryResults.get(output.id)?.decimalColumns).toEqual({
+			ratio: { precision: 20, scale: 4 },
+		});
+	});
+
 	it('binds a complete earlier result as a BigQuery array parameter', async () => {
 		const context = createContext();
 		context.queryResults.set('query_ab12cd34', {
@@ -161,7 +182,9 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 			context,
 		);
 
-		expect(fetch).toHaveBeenCalledOnce();
+		const request = vi.mocked(fetch).mock.calls[0]?.[1];
+		const body = JSON.parse(String(request?.body)) as { query_parameters: unknown };
+		expect(body.query_parameters).toEqual([{ name: 'users', type: 'STRING', values: ['a'] }]);
 	});
 
 	it('accepts BigQuery scalar array parameter types', async () => {
@@ -232,6 +255,33 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 				values: [context.queryResults.get('query_ab12cd34')!.data[0]![name]],
 			})),
 		);
+	});
+
+	it('rejects a BYTES source value that is not base64', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: ['payload'],
+			data: [{ payload: 'not base64!' }],
+		});
+
+		await expect(
+			executeQuery(
+				{
+					sql_query: 'SELECT * FROM files WHERE payload IN UNNEST(@payloads)',
+					database_id: 'bigquery-prod',
+					array_parameters: [
+						{
+							name: 'payloads',
+							query_id: 'query_ab12cd34',
+							column: 'payload',
+							type: 'BYTES',
+						},
+					],
+				},
+				context,
+			),
+		).rejects.toThrow('contains a value incompatible with BYTES');
+		expect(fetch).not.toHaveBeenCalled();
 	});
 
 	it.each(['NUMERIC', 'BIGNUMERIC'] as const)('rejects an inexact JavaScript number for %s', async (type) => {

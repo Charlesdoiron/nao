@@ -121,18 +121,24 @@ async function executeLocalQuery(
 	saveTo?: executeSql.SaveTo,
 ): Promise<executeSql.Output> {
 	const {
-		result: { columns, data },
+		result: { columns, data, decimalColumns },
 		savedFile,
 	} = await runQueryOnLocalFiles(sqlQuery, context, saveTo);
 	const id = queryId ?? (`query_${crypto.randomUUID().slice(0, 8)}` as const);
 	const appliedLimit = detectQueryRowLimit(sqlQuery);
-	context.queryResults.set(id, { columns, data, ...(appliedLimit !== null && { appliedLimit }) });
+	context.queryResults.set(id, {
+		columns,
+		data,
+		...(decimalColumns && { decimalColumns }),
+		...(appliedLimit !== null && { appliedLimit }),
+	});
 
 	return {
 		_version: '1',
 		data,
 		row_count: data.length,
 		columns,
+		...(decimalColumns && { decimal_columns: decimalColumns }),
 		id,
 		dialect: 'duckdb',
 		...(appliedLimit !== null && { applied_limit: appliedLimit }),
@@ -243,7 +249,11 @@ async function resolveArrayParameters(
 			if (!result) {
 				throw new Error(`Query ${parameter.query_id} not found in this chat.`);
 			}
-			if (result.appliedLimit !== undefined && result.data.length >= result.appliedLimit) {
+			if (
+				result.appliedLimit !== undefined &&
+				result.appliedLimit > 0 &&
+				result.data.length >= result.appliedLimit
+			) {
 				throw new Error(
 					`Query ${parameter.query_id} may be truncated by LIMIT ${result.appliedLimit}. Rerun the source query without LIMIT before using it as a BigQuery array parameter.`,
 				);
@@ -353,10 +363,20 @@ function normalizeParameterValue(
 	if (type === 'INTERVAL' && typeof value === 'string' && value.trim().length > 0) {
 		return value.trim();
 	}
-	if ((type === 'BYTES' || type === 'GEOGRAPHY') && typeof value === 'string' && value.length > 0) {
+	if (type === 'BYTES' && typeof value === 'string' && isBase64(value)) {
+		return value;
+	}
+	if (type === 'GEOGRAPHY' && typeof value === 'string' && value.length > 0) {
 		return value;
 	}
 	if (type === 'JSON' && isJsonParameterValue(value)) {
+		if (typeof value === 'string') {
+			try {
+				JSON.parse(value);
+			} catch {
+				throw new Error(`BigQuery array parameter "${name}" contains invalid JSON.`);
+			}
+		}
 		return value;
 	}
 	throw new Error(`BigQuery array parameter "${name}" contains a value incompatible with ${type}.`);
@@ -376,6 +396,10 @@ function isJsonParameterValue(value: unknown): value is WarehouseQueryParameterV
 		return Object.values(value).every((item) => item === null || isJsonParameterValue(item));
 	}
 	return false;
+}
+
+function isBase64(value: string): boolean {
+	return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value);
 }
 
 /** Semantics-only mode: the warehouse is reached through the layer, raw SQL stays for the local database. */
