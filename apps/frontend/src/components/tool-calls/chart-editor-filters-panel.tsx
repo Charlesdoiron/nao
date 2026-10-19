@@ -392,7 +392,7 @@ function FilterUsageList({
 					title={`Show the ${filter.label} block in the SQL`}
 				>
 					<span className='shrink-0 pt-px font-mono text-[11px] text-muted-foreground'>L{usage.line}</span>
-					<code className='min-w-0 flex-1 font-mono text-xs break-all text-foreground'>
+					<code className='min-w-0 flex-1 font-mono text-xs break-words text-foreground'>
 						<HighlightedClause clause={usage.clause} />
 					</code>
 					<CornerDownLeft className='size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100' />
@@ -425,7 +425,7 @@ function UnusedFilterNotice({ filter, onInsert }: { filter: ParsedFilterBlock; o
 			<p className='text-xs text-muted-foreground'>
 				Changing “{filter.label}” will not affect this chart. Insert a filter block to make it apply.
 			</p>
-			<code className='rounded-md border border-dashed bg-muted/40 px-2.5 py-2 font-mono text-xs break-all text-muted-foreground'>
+			<code className='rounded-md border border-dashed bg-muted/40 px-2.5 py-2 font-mono text-xs break-words text-muted-foreground'>
 				{buildFilterSnippet(filter)}
 			</code>
 			<Button
@@ -477,7 +477,7 @@ function FilterTestSection({
 			<FieldSection label='Renders as'>
 				<code
 					className={cn(
-						'rounded-md border bg-background px-2.5 py-1.5 font-mono text-xs break-all',
+						'rounded-md border bg-background px-2.5 py-1.5 font-mono text-xs break-words',
 						!renderedClause && 'text-muted-foreground italic',
 					)}
 				>

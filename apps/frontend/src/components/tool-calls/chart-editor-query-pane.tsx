@@ -88,7 +88,7 @@ export function ChartEditorQueryPane({
 			}
 			const range = toMonacoRange(editorHandle.monaco, model, start, end);
 			editorHandle.instance.setSelection(range);
-			editorHandle.instance.revealRangeInCenter(range);
+			editorHandle.instance.revealRangeInCenterIfOutsideViewport(range);
 			editorHandle.instance.focus();
 		},
 		[editorHandle],
@@ -211,7 +211,9 @@ function useFilterBlockHighlight(
 				range: toMonacoRange(handle.monaco, model, usage.start, usage.end),
 				options: {
 					className:
-						usage.filterId === focusedFilterId ? 'bg-primary/20 rounded-sm' : 'bg-primary/5 rounded-sm',
+						usage.filterId === focusedFilterId
+							? 'sql-filter-block sql-filter-block--focused'
+							: 'sql-filter-block',
 					hoverMessage: { value: `Story filter \`${usage.filterId}\`, see the Filters panel` },
 				},
 			})),

@@ -350,6 +350,7 @@ export function SqlQueryEditor({
 									vertical: 'hidden',
 								},
 								scrollBeyondLastLine: false,
+								stickyScroll: { enabled: false },
 								padding: {
 									top: 16,
 									bottom: 16,
