@@ -4,6 +4,7 @@ import {
 	ArrowLeftFromLine,
 	ArrowRightToLine,
 	ChevronRight,
+	FlaskConical,
 	NewspaperIcon,
 	PlusIcon,
 	SearchIcon,
@@ -96,6 +97,13 @@ export function Sidebar() {
 
 	const handleNavigateFeed = useCallback(() => {
 		navigate({ to: '/feed' });
+		if (isMobile) {
+			closeMobile();
+		}
+	}, [navigate, isMobile, closeMobile]);
+
+	const handleNavigateTests = useCallback(() => {
+		navigate({ to: '/tests' });
 		if (isMobile) {
 			closeMobile();
 		}
@@ -254,6 +262,15 @@ export function Sidebar() {
 								onClick={handleNavigateFeed}
 								indicator={hasFeedActivity}
 							/>
+							{!isViewer && (
+								<SidebarMenuButton
+									icon={FlaskConical}
+									label='Tests'
+									shortcut=''
+									isCollapsed={effectiveIsCollapsed}
+									onClick={handleNavigateTests}
+								/>
+							)}
 						</div>
 					</>
 				)}

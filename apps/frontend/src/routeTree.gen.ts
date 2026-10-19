@@ -21,6 +21,7 @@ import { Route as SidebarLayoutRouteImport } from './routes/_sidebar-layout'
 import { Route as SidebarLayoutSettingsRouteImport } from './routes/_sidebar-layout.settings'
 import { Route as SidebarLayoutOnboardingRouteImport } from './routes/_sidebar-layout.onboarding'
 import { Route as SidebarLayoutChatLayoutRouteImport } from './routes/_sidebar-layout._chat-layout'
+import { Route as SidebarLayoutTestsIndexRouteImport } from './routes/_sidebar-layout.tests.index'
 import { Route as SidebarLayoutStoriesIndexRouteImport } from './routes/_sidebar-layout.stories.index'
 import { Route as SidebarLayoutSettingsIndexRouteImport } from './routes/_sidebar-layout.settings.index'
 import { Route as SidebarLayoutFeedIndexRouteImport } from './routes/_sidebar-layout.feed.index'
@@ -133,6 +134,11 @@ const SidebarLayoutOnboardingRoute = SidebarLayoutOnboardingRouteImport.update({
 } as any)
 const SidebarLayoutChatLayoutRoute = SidebarLayoutChatLayoutRouteImport.update({
   id: '/_chat-layout',
+  getParentRoute: () => SidebarLayoutRoute,
+} as any)
+const SidebarLayoutTestsIndexRoute = SidebarLayoutTestsIndexRouteImport.update({
+  id: '/tests/',
+  path: '/tests/',
   getParentRoute: () => SidebarLayoutRoute,
 } as any)
 const SidebarLayoutStoriesIndexRoute =
@@ -498,6 +504,7 @@ export interface FileRoutesByFullPath {
   '/feed/': typeof SidebarLayoutFeedIndexRoute
   '/settings/': typeof SidebarLayoutSettingsIndexRoute
   '/stories/': typeof SidebarLayoutStoriesIndexRoute
+  '/tests/': typeof SidebarLayoutTestsIndexRoute
   '/settings/organization/billing': typeof SidebarLayoutSettingsOrganizationBillingRoute
   '/settings/organization/members': typeof SidebarLayoutSettingsOrganizationMembersRoute
   '/settings/project/agent': typeof SidebarLayoutSettingsProjectAgentRoute
@@ -562,6 +569,7 @@ export interface FileRoutesByTo {
   '/feed': typeof SidebarLayoutFeedIndexRoute
   '/settings': typeof SidebarLayoutSettingsIndexRoute
   '/stories': typeof SidebarLayoutStoriesIndexRoute
+  '/tests': typeof SidebarLayoutTestsIndexRoute
   '/settings/organization/billing': typeof SidebarLayoutSettingsOrganizationBillingRoute
   '/settings/organization/members': typeof SidebarLayoutSettingsOrganizationMembersRoute
   '/settings/project/agent': typeof SidebarLayoutSettingsProjectAgentRoute
@@ -630,6 +638,7 @@ export interface FileRoutesById {
   '/_sidebar-layout/feed/': typeof SidebarLayoutFeedIndexRoute
   '/_sidebar-layout/settings/': typeof SidebarLayoutSettingsIndexRoute
   '/_sidebar-layout/stories/': typeof SidebarLayoutStoriesIndexRoute
+  '/_sidebar-layout/tests/': typeof SidebarLayoutTestsIndexRoute
   '/_sidebar-layout/settings/organization/billing': typeof SidebarLayoutSettingsOrganizationBillingRoute
   '/_sidebar-layout/settings/organization/members': typeof SidebarLayoutSettingsOrganizationMembersRoute
   '/_sidebar-layout/settings/project/agent': typeof SidebarLayoutSettingsProjectAgentRoute
@@ -699,6 +708,7 @@ export interface FileRouteTypes {
     | '/feed/'
     | '/settings/'
     | '/stories/'
+    | '/tests/'
     | '/settings/organization/billing'
     | '/settings/organization/members'
     | '/settings/project/agent'
@@ -763,6 +773,7 @@ export interface FileRouteTypes {
     | '/feed'
     | '/settings'
     | '/stories'
+    | '/tests'
     | '/settings/organization/billing'
     | '/settings/organization/members'
     | '/settings/project/agent'
@@ -830,6 +841,7 @@ export interface FileRouteTypes {
     | '/_sidebar-layout/feed/'
     | '/_sidebar-layout/settings/'
     | '/_sidebar-layout/stories/'
+    | '/_sidebar-layout/tests/'
     | '/_sidebar-layout/settings/organization/billing'
     | '/_sidebar-layout/settings/organization/members'
     | '/_sidebar-layout/settings/project/agent'
@@ -958,6 +970,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof SidebarLayoutChatLayoutRouteImport
+      parentRoute: typeof SidebarLayoutRoute
+    }
+    '/_sidebar-layout/tests/': {
+      id: '/_sidebar-layout/tests/'
+      path: '/tests'
+      fullPath: '/tests/'
+      preLoaderRoute: typeof SidebarLayoutTestsIndexRouteImport
       parentRoute: typeof SidebarLayoutRoute
     }
     '/_sidebar-layout/stories/': {
@@ -1558,6 +1577,7 @@ interface SidebarLayoutRouteChildren {
   SidebarLayoutStoriesStoryIdRoute: typeof SidebarLayoutStoriesStoryIdRoute
   SidebarLayoutFeedIndexRoute: typeof SidebarLayoutFeedIndexRoute
   SidebarLayoutStoriesIndexRoute: typeof SidebarLayoutStoriesIndexRoute
+  SidebarLayoutTestsIndexRoute: typeof SidebarLayoutTestsIndexRoute
   SidebarLayoutStoriesSharedShareIdRoute: typeof SidebarLayoutStoriesSharedShareIdRoute
   SidebarLayoutStoriesStandaloneStoryIdRoute: typeof SidebarLayoutStoriesStandaloneStoryIdRoute
   SidebarLayoutStoriesPreviewChatIdStorySlugRoute: typeof SidebarLayoutStoriesPreviewChatIdStorySlugRoute
@@ -1573,6 +1593,7 @@ const SidebarLayoutRouteChildren: SidebarLayoutRouteChildren = {
   SidebarLayoutStoriesStoryIdRoute: SidebarLayoutStoriesStoryIdRoute,
   SidebarLayoutFeedIndexRoute: SidebarLayoutFeedIndexRoute,
   SidebarLayoutStoriesIndexRoute: SidebarLayoutStoriesIndexRoute,
+  SidebarLayoutTestsIndexRoute: SidebarLayoutTestsIndexRoute,
   SidebarLayoutStoriesSharedShareIdRoute:
     SidebarLayoutStoriesSharedShareIdRoute,
   SidebarLayoutStoriesStandaloneStoryIdRoute:
