@@ -115,6 +115,7 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 				}}
 				download={{ chatId, storySlug, isOwner: true }}
 				storyId={storyId}
+				isOwner
 				canRename
 				isShared={isShared}
 				onShare={() => setIsShareDialogOpen(true)}

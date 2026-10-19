@@ -103,6 +103,7 @@ export function CustomStoryPreviewPage({ chatId, storySlug, authorName }: Custom
 				}}
 				download={{ chatId, storySlug, isOwner: true, onDownload: story.download }}
 				storyId={storyId}
+				isOwner
 				canRename
 				isShared={sharing.isShared}
 				onShare={() => sharing.setIsShareDialogOpen(true)}

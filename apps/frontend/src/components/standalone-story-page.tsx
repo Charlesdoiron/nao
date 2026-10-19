@@ -80,6 +80,7 @@ export function StandaloneStoryPage({ storyId }: { storyId: string }) {
 				isOpeningChat={openStandaloneMutation.isPending}
 				download={{ storyId, isOwner: true }}
 				storyId={storyId}
+				isOwner
 				canRename
 				live={
 					story.isLive

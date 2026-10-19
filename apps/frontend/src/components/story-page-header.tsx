@@ -19,6 +19,7 @@ import type { CustomStoryViewModeControls } from '@/components/custom-story/cust
 import { CustomStoryViewModeToggle, isCustomStoryViewMode } from '@/components/custom-story/custom-story-view-mode';
 import { EditableStoryTitle } from '@/components/editable-story-title';
 import { StoryDownloadMenu, canDownloadStory } from '@/components/story-download';
+import { StoryFeedbackActions } from '@/components/story-feedback-actions';
 import {
 	ShareButton,
 	StoryCertifyMenuItem,
@@ -91,6 +92,7 @@ export interface StoryPageHeaderProps {
 	live?: LiveControls;
 	download?: StoryDownloadOptions;
 	storyId?: string | null;
+	isOwner?: boolean;
 	canRename?: boolean;
 	isShared?: boolean;
 	onShare?: () => void;
@@ -108,6 +110,7 @@ export function StoryPageHeader({
 	live,
 	download,
 	storyId,
+	isOwner = false,
 	canRename = false,
 	isShared = false,
 	onShare,
@@ -176,6 +179,15 @@ export function StoryPageHeader({
 					)}
 
 					{live && <LiveStoryControls live={live} />}
+
+					{storyId && (
+						<StoryFeedbackActions
+							storyId={storyId}
+							storyTitle={title}
+							authorName={authorName}
+							isOwner={isOwner}
+						/>
+					)}
 
 					{storyId && <StoryFavoritedButton storyId={storyId} />}
 
