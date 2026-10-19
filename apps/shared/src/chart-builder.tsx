@@ -26,7 +26,6 @@ import {
 import {
 	boxesOverlap,
 	DATA_LABEL_ANCHOR_GAP,
-	DATA_LABEL_MARGIN_TOP,
 	DATA_LABEL_X_AXIS_FOOTROOM,
 	getDataLabelSetup,
 	getRenderedSeries,
@@ -35,7 +34,7 @@ import {
 	PIE_LABELLED_OUTER_RADIUS,
 	renderDataLabelsLayer,
 	renderPieDataLabelsLayer,
-	shouldReserveDataLabelHeadroom,
+	resolveDataLabelHeadroom,
 	shouldReserveStackTotalFootroom,
 	sumStackValue,
 } from './chart-data-labels';
@@ -475,7 +474,7 @@ type ResolvedProps = BuildChartProps &
 
 function buildChartMargin(props: BuildChartProps, showTitle: boolean) {
 	const titleTop = showTitle ? 30 : 0;
-	const labelsTop = shouldReserveDataLabelHeadroom(props) ? DATA_LABEL_MARGIN_TOP : 0;
+	const labelsTop = resolveDataLabelHeadroom(props);
 	if (titleTop === 0 && labelsTop === 0) {
 		return props.margin;
 	}
@@ -967,7 +966,7 @@ function buildBarChart(props: ResolvedProps) {
 		: resolveBarYAxisDomain(yAxisMin, yAxisMax, axisValues, showDataLabels === true);
 	const valueAxisValues = typeof yAxisDomain?.[1] === 'number' ? [...axisValues, yAxisDomain[1]] : axisValues;
 	const valueAxisWidth = computeValueAxisWidth(valueAxisValues, chartLevelFormat, Boolean(yAxisLabel));
-	const dataLabelsLayer = showDataLabels && !isStacked ? renderDataLabelsLayer(series) : undefined;
+	const dataLabelsLayer = showDataLabels && !isStacked ? renderDataLabelsLayer(series, { colorFor }) : undefined;
 
 	return (
 		<BarChart data={data} accessibilityLayer margin={margin} stackOffset={isPercent ? 'expand' : undefined}>
@@ -1134,7 +1133,7 @@ function buildAreaChart(props: ResolvedProps) {
 	const labelFootroom = shouldReserveStackTotalFootroom(props) ? DATA_LABEL_X_AXIS_FOOTROOM : 0;
 	const chartLevelFormat = getChartLevelValueFormat(series);
 	const valueAxisWidth = computeValueAxisWidth(axisValues, chartLevelFormat, Boolean(yAxisLabel));
-	const dataLabelsLayer = showDataLabels && !isStacked ? renderDataLabelsLayer(series) : undefined;
+	const dataLabelsLayer = showDataLabels && !isStacked ? renderDataLabelsLayer(series, { colorFor }) : undefined;
 
 	return (
 		<AreaChart data={data} accessibilityLayer margin={margin} stackOffset={isPercent ? 'expand' : undefined}>
@@ -1244,7 +1243,9 @@ function buildComboChart(props: ResolvedProps) {
 	const leftAxisWidth = computeComboAxisWidth(data, leftSeries, leftFormat, Boolean(yAxisLabel));
 	const rightAxisWidth = computeComboAxisWidth(data, rightSeries, rightFormat, Boolean(yAxisRightLabel));
 	const areaSeries = series.filter((s) => comboSeriesType(s, chartType) === 'area');
-	const dataLabelsLayer = showDataLabels ? renderDataLabelsLayer(series) : undefined;
+	const dataLabelsLayer = showDataLabels
+		? renderDataLabelsLayer(series, { colorFor, headroom: resolveDataLabelHeadroom(props) })
+		: undefined;
 
 	return (
 		<ComposedChart data={data} accessibilityLayer margin={margin}>

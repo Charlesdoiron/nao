@@ -2,16 +2,36 @@ import React from 'react';
 
 import { barYAxisDomainIsPadded, collectAxisValues, collectStackedAxisValues } from './chart-domain';
 import { CHART_FONT_STACK } from './chart-fonts';
-import { type ChartType, isPercentStackedChartType, isStackedChartType } from './chart-types';
+import {
+	boxesOverlap,
+	type LabelScene,
+	type PlaceableLabel,
+	placeLabels,
+	type PlacementPoint,
+	type PlacementSegment,
+	type SeriesStroke,
+} from './chart-label-placement';
+import { type ChartType, isComboChart, isPercentStackedChartType, isStackedChartType } from './chart-types';
 import { formatChartValue, getChartLevelValueFormat, niceAxisMax, toFiniteNumber } from './chart-values';
 import type * as displayChart from './tools/display-chart';
+
+export { boxesOverlap };
 
 const DATA_LABEL_PROPS = {
 	fill: 'var(--foreground, #111827)',
 	fontSize: 11,
 	fontFamily: CHART_FONT_STACK,
+	stroke: 'var(--background, #ffffff)',
+	strokeWidth: 3,
+	strokeLinejoin: 'round' as const,
+	paintOrder: 'stroke',
 };
+const LEADER_STROKE_FALLBACK = 'var(--muted-foreground, #6b7280)';
+const LEADER_BACKGROUND = 'var(--background, #ffffff)';
+const LEADER_ANCHOR_DOT_RADIUS = 2.5;
 export const DATA_LABEL_MARGIN_TOP = 24;
+/** Combo charts reserve two label rows above the plot: one for bar tops, one for leader-connected labels. */
+export const DATA_LABEL_LEADER_HEADROOM = 48;
 export const DATA_LABEL_X_AXIS_FOOTROOM = 24;
 const DATA_LABEL_HEADROOM_RATIO = 0.9;
 
@@ -81,6 +101,16 @@ interface LabelCandidate {
 	text: string;
 	rank: number[];
 	textAnchor: LabelTextAnchor;
+	anchor?: PlacementPoint;
+	seriesIndex?: number;
+	color?: string;
+	leader?: PlacementSegment;
+	column?: { left: number; right: number };
+}
+
+interface DataLabelsLayerOptions {
+	colorFor?: (key: string, index: number) => string;
+	headroom?: number;
 }
 
 interface IndexedLabelCandidate {
@@ -131,6 +161,13 @@ export function shouldReserveDataLabelHeadroom<Props extends DataLabelChartProps
 	return maxValue >= niceAxisMax(maxValue) * DATA_LABEL_HEADROOM_RATIO;
 }
 
+export function resolveDataLabelHeadroom<Props extends DataLabelChartProps>(props: Props): number {
+	if (props.showDataLabels === true && isComboChart(props.chartType) && hasBarAndPointSeries(props.series)) {
+		return DATA_LABEL_LEADER_HEADROOM;
+	}
+	return shouldReserveDataLabelHeadroom(props) ? DATA_LABEL_MARGIN_TOP : 0;
+}
+
 export function shouldReserveStackTotalFootroom<Props extends DataLabelChartProps>(props: Props): boolean {
 	if (
 		props.showDataLabels !== true ||
@@ -148,11 +185,21 @@ export function shouldReserveStackTotalFootroom<Props extends DataLabelChartProp
 	});
 }
 
-/** Coordinates cartesian labels across series so conflicts can be dropped without moving labels. */
-export function renderDataLabelsLayer(series: displayChart.SeriesConfig[]) {
-	return createLabelsLayer('DataLabelsLayer', ({ formattedGraphicalItems, offset, width, height }) =>
-		collectLabelCandidates(formattedGraphicalItems ?? [], offset ?? {}, width, height, series),
-	);
+/**
+ * Coordinates cartesian labels across series. Labels that would sit on a mark, on another series'
+ * line or on another label move outside the marks and keep a thin leader line back to their point.
+ */
+export function renderDataLabelsLayer(series: displayChart.SeriesConfig[], options: DataLabelsLayerOptions = {}) {
+	function DataLabelsLayer({ formattedGraphicalItems, offset, width, height }: DataLabelsLayerProps) {
+		const items = (formattedGraphicalItems ?? []).filter((entry) =>
+			LABELLED_SERIES_KINDS.has(entry.item?.type?.displayName ?? ''),
+		);
+		const bounds = cartesianLabelBounds(offset ?? {}, width, height, 0, options.headroom);
+		const candidates = collectLabelCandidates(items, bounds, series, options.colorFor);
+		return renderLabels(placeCartesianLabels(candidates, collectLabelScene(items, bounds)));
+	}
+	DataLabelsLayer.displayName = 'DataLabelsLayer';
+	return DataLabelsLayer;
 }
 
 export function renderStackTotalLabelsLayer(data: Record<string, unknown>[], series: displayChart.SeriesConfig[]) {
@@ -204,21 +251,164 @@ function renderLabels(labels: LabelCandidate[]) {
 		return null;
 	}
 	return (
-		<g className='recharts-data-labels'>
-			{labels.map((label, index) => (
-				<text
-					key={index}
-					x={label.cx}
-					y={label.baselineY}
-					textAnchor={label.textAnchor}
-					dominantBaseline='alphabetic'
-					{...DATA_LABEL_PROPS}
-				>
-					{label.text}
-				</text>
-			))}
+		<>
+			{renderLeaders(labels)}
+			<g className='recharts-data-labels'>
+				{labels.map((label, index) => (
+					<text
+						key={index}
+						x={label.cx}
+						y={label.baselineY}
+						textAnchor={label.textAnchor}
+						dominantBaseline='alphabetic'
+						{...DATA_LABEL_PROPS}
+					>
+						{label.text}
+					</text>
+				))}
+			</g>
+		</>
+	);
+}
+
+function renderLeaders(labels: LabelCandidate[]) {
+	const connected = labels.filter((label) => label.leader && label.anchor);
+	if (connected.length === 0) {
+		return null;
+	}
+	return (
+		<g className='recharts-data-label-leaders'>
+			{connected.flatMap((label, index) => {
+				const color = label.color ?? LEADER_STROKE_FALLBACK;
+				return [
+					<line
+						key={`leader-${index}`}
+						x1={label.leader!.from.x}
+						y1={label.leader!.from.y}
+						x2={label.leader!.to.x}
+						y2={label.leader!.to.y}
+						stroke={color}
+						strokeWidth={1}
+						strokeLinecap='round'
+					/>,
+					<circle
+						key={`anchor-${index}`}
+						cx={label.anchor!.x}
+						cy={label.anchor!.y}
+						r={LEADER_ANCHOR_DOT_RADIUS}
+						fill={color}
+						stroke={LEADER_BACKGROUND}
+						strokeWidth={1}
+					/>,
+				];
+			})}
 		</g>
 	);
+}
+
+/**
+ * Runs collision-aware placement, then maps moved labels back to centred text. Point labels go first:
+ * bar labels can still slide or stack within their own column, while a point label has nowhere else to go.
+ */
+function placeCartesianLabels(candidates: LabelCandidate[], scene: LabelScene): LabelCandidate[] {
+	const ordered = [...candidates].sort(
+		(a, b) => Number(Boolean(a.column)) - Number(Boolean(b.column)) || byLabelRank(a, b),
+	);
+	const placements = placeLabels(ordered.map(toPlaceableLabel), scene);
+	return placements.map(({ index, box, leader }) => {
+		const candidate = ordered[index];
+		if (box === candidate.box) {
+			return candidate;
+		}
+		return {
+			...candidate,
+			box,
+			leader,
+			cx: (box.left + box.right) / 2,
+			baselineY: box.bottom - DATA_LABEL_BOX_PADDING,
+			textAnchor: 'middle',
+		};
+	});
+}
+
+function toPlaceableLabel(candidate: LabelCandidate): PlaceableLabel {
+	return {
+		anchor: candidate.anchor ?? { x: candidate.cx, y: candidate.baselineY },
+		natural: candidate.box,
+		width: labelTextWidth(candidate.text) + DATA_LABEL_BOX_PADDING * 2,
+		height: DATA_LABEL_FONT_SIZE + DATA_LABEL_BOX_PADDING * 2,
+		seriesIndex: candidate.seriesIndex ?? 0,
+		canMoveOutside: candidate.anchor != null,
+		column: candidate.column,
+	};
+}
+
+/** Bars are opaque marks labels must not cover; line/area points form strokes labels must not straddle. */
+function collectLabelScene(items: GraphicalItem[], bounds: LabelBox): LabelScene {
+	const marks: LabelBox[] = [];
+	const strokes: SeriesStroke[] = [];
+	items.forEach((entry, seriesIndex) => {
+		if (entry.item?.type?.displayName === 'Bar') {
+			(entry.props?.data ?? []).forEach((point) => {
+				const mark = barRect(point);
+				if (mark) {
+					marks.push(mark);
+				}
+			});
+			return;
+		}
+		strokes.push(...seriesStrokes(entry.props?.points ?? [], seriesIndex));
+	});
+	return { bounds, marks, strokes };
+}
+
+function barColumn(point: GraphicalPoint): LabelCandidate['column'] {
+	const rect = barRect(point);
+	return rect ? { left: rect.left, right: rect.right } : undefined;
+}
+
+function barRect(point: GraphicalPoint): LabelBox | null {
+	const x = toFiniteNumber(point.x);
+	const y = toFiniteNumber(point.y);
+	const width = toFiniteNumber(point.width);
+	const height = toFiniteNumber(point.height);
+	if (x == null || y == null || width == null || height == null || width === 0 || height === 0) {
+		return null;
+	}
+	return {
+		left: Math.min(x, x + width),
+		right: Math.max(x, x + width),
+		top: Math.min(y, y + height),
+		bottom: Math.max(y, y + height),
+	};
+}
+
+function seriesStrokes(points: GraphicalPoint[], seriesIndex: number): SeriesStroke[] {
+	const strokes: SeriesStroke[] = [];
+	for (let index = 1; index < points.length; index += 1) {
+		const from = pointPosition(points[index - 1]);
+		const to = pointPosition(points[index]);
+		if (from && to) {
+			strokes.push({ from, to, seriesIndex });
+		}
+	}
+	return strokes;
+}
+
+function pointPosition(point: GraphicalPoint | undefined): PlacementPoint | null {
+	const x = toFiniteNumber(point?.x);
+	const y = toFiniteNumber(point?.y);
+	return x == null || y == null ? null : { x, y };
+}
+
+function labelTextWidth(text: string): number {
+	return text.length * DATA_LABEL_FONT_SIZE * DATA_LABEL_CHAR_WIDTH_RATIO;
+}
+
+function hasBarAndPointSeries(series: displayChart.SeriesConfig[]): boolean {
+	const hasBar = series.some((item) => !item.series_type || item.series_type === 'bar');
+	const hasPoint = series.some((item) => item.series_type === 'line' || item.series_type === 'area');
+	return hasBar && hasPoint;
 }
 
 function isCartesianLabelChart(chartType: ChartType): boolean {
@@ -390,13 +580,11 @@ function collectPieLabelCandidates(
 
 function collectLabelCandidates(
 	items: GraphicalItem[],
-	plot: PlotRect,
-	chartWidth: number | undefined,
-	chartHeight: number | undefined,
+	bounds: LabelBox,
 	series: displayChart.SeriesConfig[],
+	colorFor?: DataLabelsLayerOptions['colorFor'],
 ): LabelCandidate[] {
-	const graphicalItems = items.filter((entry) => LABELLED_SERIES_KINDS.has(entry.item?.type?.displayName ?? ''));
-	return graphicalItems.flatMap((entry, seriesIndex) => {
+	return items.flatMap((entry, seriesIndex) => {
 		const kind = entry.item?.type?.displayName;
 		if (!kind) {
 			return [];
@@ -408,15 +596,15 @@ function collectLabelCandidates(
 		const dataKey = entry.props?.dataKey ?? entry.item?.props?.dataKey;
 		const seriesConfig =
 			series.find((item) => dataKey != null && item.data_key === String(dataKey)) ?? series[seriesIndex];
+		const color = seriesConfig ? colorFor?.(seriesConfig.data_key, series.indexOf(seriesConfig)) : undefined;
 		return seriesCandidates(
 			points,
 			points.map((point) => pointValue(point, 'end')),
 			kind === 'Bar',
 			seriesIndex,
-			plot,
-			chartWidth,
-			chartHeight,
+			bounds,
 			seriesConfig?.value_format,
+			color,
 		);
 	});
 }
@@ -426,10 +614,9 @@ function seriesCandidates(
 	values: (number | null)[],
 	isBar: boolean,
 	seriesIndex: number,
-	plot: PlotRect,
-	chartWidth: number | undefined,
-	chartHeight: number | undefined,
+	bounds: LabelBox,
 	valueFormat?: displayChart.ValueFormat,
+	color?: string,
 ): LabelCandidate[] {
 	const candidates = points.flatMap((point, index): IndexedLabelCandidate[] => {
 		const value = values[index];
@@ -441,17 +628,19 @@ function seriesCandidates(
 			return [];
 		}
 		const anchor = labelAnchor(point, value, isBar);
-		if (anchor == null) {
+		const anchorPoint = labelAnchorPoint(point, value, isBar);
+		if (anchor == null || anchorPoint == null) {
 			return [];
 		}
-		const candidate = buildLabelCandidate(
+		const candidate = buildMovableLabelCandidate(
 			anchor.cx,
 			anchor.baselineY,
 			text,
 			cartesianLabelRank(isLocalExtremum(values, index), seriesIndex, anchor.cx),
-			{ bounds: cartesianLabelBounds(plot, chartWidth, chartHeight) },
+			bounds,
 		);
-		return candidate ? [{ candidate, index, value }] : [];
+		const column = isBar ? barColumn(point) : undefined;
+		return [{ candidate: { ...candidate, anchor: anchorPoint, seriesIndex, color, column }, index, value }];
 	});
 	if (isBar || candidates.length <= MAX_SERIES_DATA_LABELS) {
 		return candidates.map((entry) => entry.candidate);
@@ -529,6 +718,24 @@ function buildLabelCandidate(
 		return null;
 	}
 	return { cx, baselineY, box, text, rank, textAnchor };
+}
+
+/** Like `buildLabelCandidate`, but keeps labels whose natural box leaves the bounds so placement can move them. */
+function buildMovableLabelCandidate(
+	cx: number,
+	baselineY: number,
+	text: string,
+	rank: number[],
+	bounds: LabelBox,
+): LabelCandidate {
+	const halfWidth = labelTextWidth(text) / 2;
+	const textAnchor = selectTextAnchor(labelBox(cx, baselineY, halfWidth), bounds);
+	return { cx, baselineY, box: labelBox(cx, baselineY, halfWidth, textAnchor), text, rank, textAnchor };
+}
+
+function labelAnchorPoint(point: GraphicalPoint, value: number, isBar: boolean): PlacementPoint | null {
+	const anchor = pointEdgeAnchor(point, isBar, isBar ? value >= 0 : true);
+	return anchor ? { x: anchor.cx, y: anchor.anchorY } : null;
 }
 
 /** Area/line points carry `value` as a `[baseLine, value]` range; bars carry a scalar. Unwrap both. */
@@ -625,11 +832,12 @@ function cartesianLabelBounds(
 	chartWidth: number | undefined,
 	chartHeight: number | undefined,
 	bottomAllowance = 0,
+	headroom = DATA_LABEL_MARGIN_TOP,
 ): LabelBox {
 	return {
 		left: plot.left ?? 0,
 		right: plot.left != null && plot.width != null ? plot.left + plot.width : (chartWidth ?? 0),
-		top: plot.top != null ? Math.max(0, plot.top - DATA_LABEL_MARGIN_TOP) : 0,
+		top: plot.top != null ? Math.max(0, plot.top - headroom) : 0,
 		bottom: plot.top != null && plot.height != null ? plot.top + plot.height + bottomAllowance : (chartHeight ?? 0),
 	};
 }
@@ -653,10 +861,6 @@ export function labelBox(
 		top: baselineY - fontSize - DATA_LABEL_BOX_PADDING,
 		bottom: baselineY + DATA_LABEL_BOX_PADDING,
 	};
-}
-
-export function boxesOverlap(a: LabelBox, b: LabelBox): boolean {
-	return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
 export function sumStackValue(
