@@ -72,6 +72,7 @@ export function useOrganizationBilling(search: OrganizationBillingSearch) {
 		status,
 		billing.data?.cancellationScheduled ?? false,
 		billing.data?.hasDefaultPaymentMethod === true,
+		paidPlanSelected,
 	);
 	const isEndingAtPeriodEnd =
 		billing.data?.cancellationScheduled === true && (status === 'active' || status === 'trialing');

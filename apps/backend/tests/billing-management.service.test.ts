@@ -182,4 +182,43 @@ describe('billing management organization loading', () => {
 		});
 		expect(mocks.createResubscribe).not.toHaveBeenCalled();
 	});
+
+	it('opens recovery Checkout after Stripe reports an expired placeholder as canceled', async () => {
+		mocks.getOrganizationWithBilling
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: null,
+					billingStatus: 'trialing',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_placeholder',
+					trialEndsAt: new Date('2020-01-15T00:00:00.000Z'),
+					billingAccessEndsAt: new Date('2020-01-15T00:00:00.000Z'),
+				},
+			})
+			.mockResolvedValueOnce({
+				id: 'org-id',
+				name: 'Organization',
+				billing: {
+					billingPlan: null,
+					billingStatus: 'canceled',
+					stripeCustomerId: 'cus_cloud',
+					stripeSubscriptionId: 'sub_placeholder',
+				},
+			});
+		mocks.createResubscribe.mockResolvedValue('https://checkout.example.com');
+
+		await expect(
+			createCloudResubscribeForAdmin({ ...adminInput, billingInterval: 'monthly', currency: 'usd' }),
+		).resolves.toBe('https://checkout.example.com');
+
+		expect(mocks.createResubscribe).toHaveBeenCalledWith({
+			allowMissingHistory: false,
+			billingInterval: 'monthly',
+			currency: 'usd',
+			organizationId: 'org-id',
+			stripeCustomerId: 'cus_cloud',
+		});
+	});
 });

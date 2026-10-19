@@ -203,7 +203,6 @@ describe('billing.getStatus', () => {
 			hasDefaultPaymentMethod: true,
 			canManageBilling: true,
 			hasStripeSubscription: false,
-			localTrialActive: true,
 			resubscribeAvailable: false,
 			trialAvailable: false,
 		});
@@ -222,7 +221,6 @@ describe('billing.getStatus', () => {
 
 		await expect(caller().billing.getStatus()).resolves.toMatchObject({
 			hasStripeSubscription: true,
-			localTrialActive: false,
 			needsPaidPlanSelection: true,
 			paidPlanSelected: false,
 			paymentMethodManagementAvailable: false,
@@ -231,6 +229,24 @@ describe('billing.getStatus', () => {
 		});
 		expect(stripeMocks.getBillingPlans).toHaveBeenCalledWith(null, 'usd', null);
 		expect(stripeMocks.getSubscriptionCurrency).not.toHaveBeenCalled();
+	});
+
+	it('allows resubscription while an expired placeholder is still projected as trialing', async () => {
+		testState.membership = membership({
+			billingStatus: 'trialing',
+			billingPlan: null,
+			billingAccessEndsAt: new Date('2020-10-05T00:00:00.000Z'),
+			stripeCustomerId: 'cus_cloud',
+			stripeSubscriptionId: 'sub_cloud_trial',
+			trialEndsAt: new Date('2020-10-05T00:00:00.000Z'),
+		});
+
+		await expect(caller().billing.getStatus()).resolves.toMatchObject({
+			needsPaidPlanSelection: false,
+			paidPlanSelected: false,
+			resubscribeAvailable: true,
+			status: 'trialing',
+		});
 	});
 
 	it("returns an existing subscription's Stripe Price when the local plan key is unknown", async () => {
@@ -356,23 +372,17 @@ describe('billing.createTrialCheckoutSession', () => {
 		stripeMocks.createCheckout.mockResolvedValue('https://checkout.stripe.com/trial');
 	});
 
-	it('opens a legacy trial Checkout with an absolute end in the selected currency', async () => {
-		vi.useFakeTimers();
-		vi.setSystemTime(new Date('2026-09-24T00:00:00.000Z'));
-		try {
-			await expect(
-				caller().billing.createTrialCheckoutSession({ billingInterval: 'monthly', currency: 'eur' }),
-			).resolves.toEqual({ url: 'https://checkout.stripe.com/trial' });
-			expect(stripeMocks.createCheckout).toHaveBeenCalledWith({
-				billingInterval: 'monthly',
-				currency: 'eur',
-				organizationId: 'org-id',
-				stripeCustomerId: 'cus_cloud',
-				trialEnd: new Date('2026-10-08T00:00:00.000Z'),
-			});
-		} finally {
-			vi.useRealTimers();
-		}
+	it('opens a legacy trial Checkout with a stable duration in the selected currency', async () => {
+		await expect(
+			caller().billing.createTrialCheckoutSession({ billingInterval: 'monthly', currency: 'eur' }),
+		).resolves.toEqual({ url: 'https://checkout.stripe.com/trial' });
+		expect(stripeMocks.createCheckout).toHaveBeenCalledWith({
+			billingInterval: 'monthly',
+			currency: 'eur',
+			organizationId: 'org-id',
+			stripeCustomerId: 'cus_cloud',
+			trialDays: 14,
+		});
 	});
 
 	it('uses the remaining local trial when an admin chooses a plan', async () => {

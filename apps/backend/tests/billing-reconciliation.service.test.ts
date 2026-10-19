@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
 	attachCustomer: vi.fn(),
 	cancelPlaceholder: vi.fn(),
 	claimSync: vi.fn(),
-	cloudSubscriptionKind: vi.fn(),
 	getBillingByCustomer: vi.fn(),
 	getOrganizationById: vi.fn(),
 	hasDefaultPaymentMethod: vi.fn(),
@@ -30,10 +29,18 @@ vi.mock('../src/queries/organization.queries', () => ({
 
 vi.mock('../src/services/stripe.service', () => ({
 	cancelCloudTrialPlaceholderSubscription: mocks.cancelPlaceholder,
-	cloudSubscriptionKind: mocks.cloudSubscriptionKind,
 	cloudSubscriptionProjection: mocks.subscriptionProjection,
 	hasCloudDefaultPaymentMethod: mocks.hasDefaultPaymentMethod,
-	listCloudSubscriptions: mocks.listSubscriptions,
+	listCloudSubscriptions: async (...args: unknown[]) => {
+		const subscriptions = await mocks.listSubscriptions(...args);
+		return subscriptions.map((subscription: { metadata?: Record<string, string> }) => ({
+			kind:
+				subscription.metadata?.nao_subscription_kind === 'trial-placeholder'
+					? 'trial-placeholder'
+					: 'paid-cloud',
+			subscription,
+		}));
+	},
 	updateCloudPaidSubscriptionTrialEnd: mocks.updatePaidTrialEnd,
 }));
 
@@ -50,9 +57,6 @@ describe('cloud billing reconciliation', () => {
 		mocks.getBillingByCustomer.mockResolvedValue(billing);
 		mocks.claimSync.mockResolvedValue({ billing, token: 'sync-token' });
 		mocks.hasDefaultPaymentMethod.mockResolvedValue(false);
-		mocks.cloudSubscriptionKind.mockImplementation((subscription: { metadata?: Record<string, string> }) =>
-			subscription.metadata?.nao_subscription_kind === 'trial-placeholder' ? 'trial-placeholder' : 'paid-cloud',
-		);
 		mocks.cancelPlaceholder.mockResolvedValue(undefined);
 		mocks.subscriptionProjection.mockResolvedValue({
 			billingStatus: 'active',

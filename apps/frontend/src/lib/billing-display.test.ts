@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBillingPrice } from './billing-display';
+import { formatBillingPrice, getBillingStatusView } from './billing-display';
 
 describe('formatBillingPrice', () => {
 	it.each([
@@ -15,5 +15,13 @@ describe('formatBillingPrice', () => {
 		}).format(majorAmount);
 
 		expect(formatBillingPrice(amount, currency)).toBe(expected);
+	});
+});
+
+it('describes a canceled placeholder as an ended free trial', () => {
+	expect(getBillingStatusView('canceled', false, false, false)).toEqual({
+		label: 'Free trial ended',
+		description: 'Your free trial has ended. Subscribe to restore access.',
+		variant: 'outline',
 	});
 });

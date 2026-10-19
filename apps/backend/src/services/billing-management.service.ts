@@ -58,17 +58,17 @@ export async function createCloudTrialCheckoutForAdmin(input: AdminBillingChecko
 	if (!isTrialAvailable(organization.billing) && !trialWithoutPaidPlanActive) {
 		throw new CloudBillingManagementInputError('This organization has already used its free trial');
 	}
-	const trialEnd =
+	const trial =
 		trialWithoutPaidPlanActive && organization.billing?.trialEndsAt
-			? organization.billing.trialEndsAt
-			: trialEndFromNow(CLOUD_BILLING_TRIAL_DAYS);
+			? { trialEnd: organization.billing.trialEndsAt }
+			: { trialDays: CLOUD_BILLING_TRIAL_DAYS };
 	const stripeCustomerId = await ensureCloudCustomer(organization, input.userId);
 	return createCloudCheckoutSession({
 		billingInterval: input.billingInterval,
 		currency: input.currency,
 		organizationId: organization.id,
 		stripeCustomerId,
-		trialEnd,
+		...trial,
 	});
 }
 
@@ -256,10 +256,4 @@ async function ensureCloudCustomer(organization: OrganizationWithBilling, userId
 		throw new Error('Unable to attach Stripe Customer');
 	}
 	return updated.stripeCustomerId;
-}
-
-function trialEndFromNow(days: number): Date {
-	const trialEnd = new Date();
-	trialEnd.setUTCDate(trialEnd.getUTCDate() + days);
-	return trialEnd;
 }

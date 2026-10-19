@@ -140,6 +140,8 @@ describe('billing consistency queries', () => {
 			CLOUD_BILLING_ENABLED: 'true',
 			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
 			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
+			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
+			STRIPE_CLOUD_TRIAL_PRODUCT_ID: 'prod_cloud_trial',
 			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
 			STRIPE_SECRET_KEY: 'sk_test_example',
 			STRIPE_WEBHOOK_SECRET: 'whsec_example',
@@ -152,13 +154,17 @@ describe('billing consistency queries', () => {
 		});
 
 		try {
-			await createProject({
-				id: 'automatic-trial-project-1',
-				orgId: 'automatic-trial-org',
-				name: 'First',
-				type: 'local',
-				path: '/tmp/automatic-trial-1',
-			});
+			await createProject(
+				{
+					id: 'automatic-trial-project-1',
+					orgId: 'automatic-trial-org',
+					name: 'First',
+					type: 'local',
+					path: '/tmp/automatic-trial-1',
+				},
+				undefined,
+				'acting-user',
+			);
 			const firstBilling = await getOrganizationBilling('automatic-trial-org');
 
 			expect(firstBilling).toMatchObject({
@@ -177,7 +183,7 @@ describe('billing consistency queries', () => {
 				.where(eq(s.scheduledJob.uniqueKey, 'billing-cloud-provision-trial:automatic-trial-org'));
 			expect(provisioningJob).toMatchObject({
 				name: 'billing.cloud.provision-trial',
-				payload: { organizationId: 'automatic-trial-org' },
+				payload: { organizationId: 'automatic-trial-org', actingUserId: 'acting-user' },
 				status: 'pending',
 			});
 
@@ -234,6 +240,8 @@ describe('billing consistency queries', () => {
 			CLOUD_BILLING_ENABLED: 'true',
 			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
 			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
+			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
+			STRIPE_CLOUD_TRIAL_PRODUCT_ID: 'prod_cloud_trial',
 			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
 			STRIPE_SECRET_KEY: 'sk_test_example',
 			STRIPE_WEBHOOK_SECRET: 'whsec_example',

@@ -21,6 +21,7 @@ import {
 	hasCloudBillingAccess,
 	isActiveLocalTrial,
 	isActiveTrialWithoutPaidPlan,
+	isExpiredTrialWithoutPaidPlan,
 } from '../services/cloud-billing-access.service';
 import {
 	CloudInitialCheckoutUnavailableError,
@@ -125,6 +126,7 @@ export const billingRoutes = {
 		const trialAvailable = isTrialAvailable(billing);
 		const localTrialActive = isActiveLocalTrial(billing);
 		const needsPaidPlanSelection = isActiveTrialWithoutPaidPlan(billing);
+		const expiredTrialWithoutPaidPlan = isExpiredTrialWithoutPaidPlan(billing);
 		const paidPlanSelected = Boolean(billing?.stripeSubscriptionId && billing.billingPlan);
 		const { availablePlans, subscriptionPlan } = await (async () => {
 			const subscriptionCurrency =
@@ -152,13 +154,13 @@ export const billingRoutes = {
 			billingAccessEndsAt: billing?.billingAccessEndsAt ?? null,
 			canManageBilling: true,
 			trialAvailable,
-			localTrialActive,
 			needsPaidPlanSelection,
 			paidPlanSelected,
 			portalAvailable: Boolean(billing?.stripeCustomerId && paidPlanSelected),
 			invoiceHistoryAvailable: Boolean(billing?.stripeCustomerId),
 			paymentMethodManagementAvailable: Boolean(billing?.stripeCustomerId && paidPlanSelected),
 			resubscribeAvailable:
+				expiredTrialWithoutPaidPlan ||
 				(!billing?.stripeSubscriptionId && !trialAvailable && !localTrialActive) ||
 				(Boolean(billing?.stripeCustomerId && billing.stripeSubscriptionId) &&
 					isTerminalBillingStatus(billing?.billingStatus)),

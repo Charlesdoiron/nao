@@ -96,6 +96,8 @@ const TRIAL_END = new Date('2099-01-15T00:00:00.000Z');
 const TRIAL_END_TIMESTAMP = Math.floor(TRIAL_END.getTime() / 1_000);
 const TRIAL_MESSAGE =
 	'Nothing is charged today. Your recurring price, including any promotion code discount, starts when your trial ends on January 15, 2099.';
+const TRIAL_DAYS_MESSAGE =
+	'Nothing is charged today. Your 14-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.';
 
 let originalEnv: typeof process.env;
 
@@ -604,7 +606,7 @@ describe('cloud Checkout', () => {
 				billingInterval: 'monthly',
 				organizationId: 'org-id',
 				stripeCustomerId: 'cus_cloud',
-				trialEnd: TRIAL_END,
+				trialDays: 14,
 			}),
 		).resolves.toBe('https://checkout.stripe.com/trial');
 
@@ -615,7 +617,7 @@ describe('cloud Checkout', () => {
 				allow_promotion_codes: true,
 				custom_text: {
 					submit: {
-						message: TRIAL_MESSAGE,
+						message: TRIAL_DAYS_MESSAGE,
 					},
 				},
 				payment_method_collection: 'always',
@@ -625,12 +627,12 @@ describe('cloud Checkout', () => {
 				billing_address_collection: 'required',
 				subscription_data: {
 					metadata: { nao_org_id: 'org-id', nao_plan_key: 'cloud_monthly_v2' },
-					trial_end: TRIAL_END_TIMESTAMP,
+					trial_period_days: 14,
 					trial_settings: { end_behavior: { missing_payment_method: 'pause' } },
 				},
 			}),
 			{
-				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${TRIAL_END_TIMESTAMP}`,
+				idempotencyKey: 'cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-14',
 			},
 		);
 	});
@@ -661,7 +663,7 @@ describe('cloud Checkout', () => {
 				}),
 			}),
 			{
-				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_yearly_v1:eur:trial-${TRIAL_END_TIMESTAMP}`,
+				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_yearly_v1:eur:trial-${TRIAL_END_TIMESTAMP}-${TRIAL_END_TIMESTAMP}`,
 			},
 		);
 	});
@@ -687,12 +689,20 @@ describe('cloud Checkout', () => {
 
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
 			expect.objectContaining({
+				custom_text: {
+					submit: {
+						message:
+							'Nothing is charged today. Your recurring price, including any promotion code discount, starts when your trial ends on October 3, 2026.',
+					},
+				},
 				metadata: expect.objectContaining({
 					nao_trial_end: String(Math.floor(localTrialEnd.getTime() / 1_000)),
 				}),
 				subscription_data: expect.objectContaining({ trial_end: minimumTrialEnd }),
 			}),
-			expect.anything(),
+			{
+				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${Math.floor(localTrialEnd.getTime() / 1_000)}-${minimumTrialEnd}`,
+			},
 		);
 	});
 
@@ -819,7 +829,7 @@ describe('cloud Checkout', () => {
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
 			expect.objectContaining({ allow_promotion_codes: true }),
 			{
-				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${TRIAL_END_TIMESTAMP}`,
+				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${TRIAL_END_TIMESTAMP}-${TRIAL_END_TIMESTAMP}`,
 			},
 		);
 	});
@@ -836,14 +846,13 @@ describe('cloud Checkout', () => {
 			allow_promotion_codes: true,
 			custom_text: {
 				submit: {
-					message: TRIAL_MESSAGE,
+					message: TRIAL_DAYS_MESSAGE,
 				},
 			},
 			metadata: {
 				nao_org_id: 'org-id',
 				nao_plan_key: 'cloud_monthly_v2',
 				nao_checkout_kind: 'initial',
-				nao_trial_end: String(TRIAL_END_TIMESTAMP),
 			},
 			url: 'https://checkout.stripe.com/existing',
 		};
@@ -864,7 +873,7 @@ describe('cloud Checkout', () => {
 				billingInterval: 'monthly',
 				organizationId: 'org-id',
 				stripeCustomerId: 'cus_cloud',
-				trialEnd: TRIAL_END,
+				trialDays: 14,
 			}),
 		).resolves.toBe('https://checkout.stripe.com/existing');
 
@@ -913,7 +922,7 @@ describe('cloud Checkout', () => {
 		).resolves.toBe('https://checkout.stripe.com/replacement');
 
 		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(expect.anything(), {
-			idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${TRIAL_END_TIMESTAMP}:cs_expired`,
+			idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${TRIAL_END_TIMESTAMP}-${TRIAL_END_TIMESTAMP}:cs_expired`,
 		});
 	});
 
@@ -954,7 +963,7 @@ describe('cloud Checkout', () => {
 		stripeMocks.listPrices.mockRejectedValue(new Error('Current Price is unavailable'));
 		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([subscription]));
 
-		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
+		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([{ kind: 'paid-cloud', subscription }]);
 		expect(stripeMocks.listPrices).not.toHaveBeenCalled();
 	});
 
@@ -963,7 +972,7 @@ describe('cloud Checkout', () => {
 		subscription.items.data[0].quantity = 2;
 		stripeMocks.listSubscriptions.mockReturnValue(paginatedList([subscription]));
 
-		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([subscription]);
+		await expect(listCloudSubscriptions('cus_cloud')).resolves.toEqual([{ kind: 'paid-cloud', subscription }]);
 	});
 
 	it('finds only subscriptions on the configured cloud Product', async () => {
@@ -1212,6 +1221,17 @@ describe('cloud subscription projection', () => {
 			cancellationScheduled: true,
 			hasDefaultPaymentMethod: true,
 			billingAccessEndsAt: new Date(cancellationEndsAt * 1_000),
+		});
+	});
+
+	it('projects a canceled trial placeholder without billing access', async () => {
+		await expect(
+			cloudSubscriptionProjection(cloudTrialSubscription({ status: 'canceled', cancel_at: 1_800_000_000 })),
+		).resolves.toMatchObject({
+			billingPlan: null,
+			billingStatus: 'canceled',
+			cancellationScheduled: false,
+			billingAccessEndsAt: null,
 		});
 	});
 });

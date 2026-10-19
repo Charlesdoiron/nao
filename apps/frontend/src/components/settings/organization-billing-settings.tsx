@@ -76,9 +76,19 @@ function BillingFeedback({ billingState }: { billingState: BillingState }) {
 }
 
 function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
-	const { billing, hasStripeSubscription, isHistoricalSubscription, needsPaidPlanSelection, statusView } =
-		billingState;
+	const {
+		billing,
+		hasStripeSubscription,
+		isHistoricalSubscription,
+		needsPaidPlanSelection,
+		paidPlanSelected,
+		statusView,
+	} = billingState;
 	const currentPlan = billing.data?.plan;
+	const trialEndedWithoutPaidPlan =
+		billing.data?.resubscribeAvailable === true &&
+		!paidPlanSelected &&
+		Boolean(billing.data.trialStartedAt || billing.data.trialEndsAt);
 
 	return (
 		<SettingsCard title='Current plan'>
@@ -136,11 +146,13 @@ function CurrentPlanCard({ billingState }: { billingState: BillingState }) {
 							{isHistoricalSubscription && <Badge variant={statusView.variant}>{statusView.label}</Badge>}
 						</div>
 						<p className='text-sm text-muted-foreground'>
-							{hasStripeSubscription
-								? statusView.description
-								: billing.data.trialAvailable
-									? 'Start your free trial to unlock nao Cloud for this organization.'
-									: 'Subscribe to nao Cloud to restore access.'}
+							{trialEndedWithoutPaidPlan
+								? 'Your free trial has ended. Subscribe to restore access.'
+								: hasStripeSubscription
+									? statusView.description
+									: billing.data.trialAvailable
+										? 'Start your free trial to unlock nao Cloud for this organization.'
+										: 'Subscribe to nao Cloud to restore access.'}
 						</p>
 					</div>
 				))}
@@ -238,8 +250,21 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 						{needsPaidPlanSelection
 							? `Your trial is already active through ${formatBillingDate(billing.data.trialEndsAt)}. Choose monthly or yearly billing in Stripe, where you can enter a promotion code. Nothing is charged before the trial ends.`
 							: isTrialAvailable
-								? `Continue to Stripe to add a card and confirm this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
+								? `Continue to Stripe to choose monthly or yearly billing, add a card, and start this organization's ${plan.trialDays}-day free trial. Nothing is charged today. Stripe applies promotion codes to the recurring price, which starts after the trial.`
 								: 'Continue to Stripe to restore billing for this organization. Billing starts immediately.'}
+					</p>
+					<p className='text-xs text-muted-foreground'>
+						To create your organization&apos;s Stripe billing profile, nao shares an organization
+						admin&apos;s email address with Stripe.{' '}
+						<a
+							href='https://getnao.io/privacy'
+							target='_blank'
+							rel='noreferrer'
+							className='underline underline-offset-2'
+						>
+							Privacy policy
+						</a>
+						.
 					</p>
 					{billing.data.canManageBilling ? (
 						<Button
@@ -251,7 +276,11 @@ function BillingSetupCard({ billingState }: { billingState: BillingState }) {
 							}
 							disabled={billingState.isCheckoutPolling}
 						>
-							{trialCheckoutAvailable ? 'Choose plan in Stripe' : 'Subscribe in Stripe'}
+							{needsPaidPlanSelection
+								? 'Choose plan in Stripe'
+								: isTrialAvailable
+									? 'Start your free trial in Stripe'
+									: 'Subscribe in Stripe'}
 						</Button>
 					) : (
 						<p className='text-sm text-muted-foreground'>

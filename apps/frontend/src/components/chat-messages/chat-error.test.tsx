@@ -106,7 +106,7 @@ it('offers the free trial for an eligible billing access error', () => {
 
 	render(<ChatError />);
 
-	expect(screen.getByText('Activate the available free trial, then retry your message.')).toBeTruthy();
+	expect(screen.getByText('Start your free trial, then retry your message.')).toBeTruthy();
 });
 
 it('directs trial-eligible members to an organization admin without offering billing management', () => {
@@ -116,9 +116,9 @@ it('directs trial-eligible members to an organization admin without offering bil
 	render(<ChatError />);
 
 	expect(
-		screen.getByText('Ask an organization admin to activate the free trial, then retry your message.'),
+		screen.getByText('Ask an organization admin to start the free trial, then retry your message.'),
 	).toBeTruthy();
-	expect(screen.queryByText('Activate the available free trial, then retry your message.')).toBeNull();
+	expect(screen.queryByText('Start your free trial, then retry your message.')).toBeNull();
 	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
 	expect(screen.queryByRole('button', { name: 'Manage billing' })).toBeNull();
 });

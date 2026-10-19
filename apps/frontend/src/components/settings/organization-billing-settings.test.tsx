@@ -103,6 +103,18 @@ it('keeps plan selection visible for a Stripe-backed placeholder trial', () => {
 	expect(screen.queryByText('Subscription details')).toBeNull();
 });
 
+it('offers recovery when a placeholder trial has expired before its cancellation webhook arrives', () => {
+	mocks.hasStripeSubscription = true;
+	mocks.stripeTrialPlaceholder = true;
+	mocks.trialEndsAt = new Date('2020-10-08T00:00:00.000Z');
+
+	render(<OrganizationBillingSettings search={{}} />);
+
+	expect(screen.getByText('Your free trial has ended. Subscribe to restore access.')).toBeTruthy();
+	fireEvent.click(screen.getByRole('button', { name: 'Subscribe in Stripe' }));
+	expect(mocks.resubscribe).toHaveBeenCalledOnce();
+});
+
 it('offers monthly and yearly choices when restarting a canceled subscription', () => {
 	mocks.hasStripeSubscription = true;
 	mocks.status = 'canceled';
@@ -212,6 +224,9 @@ it('explains trial and recurring amounts before opening Stripe Checkout', () => 
 	expect(screen.getByText('Due today')).toBeTruthy();
 	expect(screen.getByText('No charge')).toBeTruthy();
 	expect(screen.getByText(/Stripe applies promotion codes to the recurring price/)).toBeTruthy();
+	expect(screen.getByRole('link', { name: 'Privacy policy' }).getAttribute('href')).toBe('https://getnao.io/privacy');
+	fireEvent.click(screen.getByRole('button', { name: 'Start your free trial in Stripe' }));
+	expect(mocks.openTrialCheckout).toHaveBeenCalledOnce();
 });
 
 it('defaults to monthly and shows the Stripe-derived yearly discount before Checkout', () => {
@@ -261,7 +276,9 @@ function billingState(): BillingState {
 		key: 'cloud_yearly_v1',
 	} as const;
 	const paidPlanSelected = mocks.hasStripeSubscription && !mocks.stripeTrialPlaceholder;
-	const needsPaidPlanSelection = mocks.localTrialActive || mocks.stripeTrialPlaceholder;
+	const placeholderTrialActive =
+		mocks.stripeTrialPlaceholder && mocks.trialEndsAt !== null && mocks.trialEndsAt.getTime() > Date.now();
+	const needsPaidPlanSelection = mocks.localTrialActive || placeholderTrialActive;
 	const data = {
 		availablePlans: { monthly: plan, yearly: yearlyPlan },
 		billingAccessEndsAt: null,
@@ -277,9 +294,9 @@ function billingState(): BillingState {
 		plan: paidPlanSelected ? plan : null,
 		planKey: paidPlanSelected ? plan.key : null,
 		portalAvailable: false,
-		localTrialActive: mocks.localTrialActive,
 		resubscribeAvailable:
 			(!mocks.hasStripeSubscription && !mocks.localTrialActive) ||
+			(mocks.stripeTrialPlaceholder && mocks.trialEndsAt !== null && mocks.trialEndsAt.getTime() <= Date.now()) ||
 			mocks.status === 'canceled' ||
 			mocks.status === 'incomplete_expired',
 		status: mocks.status,
@@ -350,7 +367,7 @@ function billingState(): BillingState {
 		resume: vi.fn(),
 		retryCheckoutConfirmation: vi.fn(),
 		status: mocks.status,
-		statusView: getBillingStatusView(mocks.status, false, false),
+		statusView: getBillingStatusView(mocks.status, false, false, paidPlanSelected),
 		syncBilling: vi.fn(),
 		trialCheckoutError: null,
 	} satisfies BillingState;

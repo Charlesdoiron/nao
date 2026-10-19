@@ -87,13 +87,17 @@ export const setProjectMemoryEnabled = async (projectId: string, memoryEnabled: 
 	await updateAgentSettings(projectId, { memoryEnabled });
 };
 
-export const createProject = async (project: NewProject, transaction?: DBTransaction): Promise<DBProject> => {
+export const createProject = async (
+	project: NewProject,
+	transaction?: DBTransaction,
+	actingUserId?: string,
+): Promise<DBProject> => {
 	if (isCloud && !project.orgId) {
 		throw new Error('Cloud projects must belong to an organization.');
 	}
 	return transaction
-		? createProjectWithDefaultGroup(project, transaction)
-		: db.transaction((tx) => createProjectWithDefaultGroup(project, tx));
+		? createProjectWithDefaultGroup(project, transaction, actingUserId)
+		: db.transaction((tx) => createProjectWithDefaultGroup(project, tx, actingUserId));
 };
 
 export const deleteProject = async (projectId: string): Promise<void> => {
@@ -459,22 +463,24 @@ type Lockable<Query> = { for(strength: 'update'): Query };
 const createProjectWithDefaultGroup = (
 	project: NewProject,
 	transaction: DBTransaction,
+	actingUserId?: string,
 ): DBProject | Promise<DBProject> =>
 	dbConfig.dialect === Dialect.Postgres
-		? createPostgresProjectWithDefaultGroup(project, transaction)
-		: createSqliteProjectWithDefaultGroup(project, transaction);
+		? createPostgresProjectWithDefaultGroup(project, transaction, actingUserId)
+		: createSqliteProjectWithDefaultGroup(project, transaction, actingUserId);
 
-function createSqliteProjectWithDefaultGroup(project: NewProject, transaction: DBTransaction): DBProject {
+function createSqliteProjectWithDefaultGroup(
+	project: NewProject,
+	transaction: DBTransaction,
+	actingUserId?: string,
+): DBProject {
 	const shouldStartTrial = shouldStartSqliteOrganizationTrial(project.orgId, transaction);
 	const [created] = transaction.insert(s.project).values(project).returning().all();
 	transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).run();
 	if (shouldStartTrial && created.orgId) {
-		const started = startOrganizationTrial(created.orgId, new Date(), transaction);
-		if (typeof started !== 'boolean') {
-			throw new Error('SQLite trial creation must complete synchronously');
-		}
+		const started = startOrganizationTrial(created.orgId, new Date(), transaction) as boolean;
 		if (started) {
-			enqueueOnceJob(cloudTrialProvisioningJob(created.orgId), transaction);
+			enqueueOnceJob(cloudTrialProvisioningJob(created.orgId, actingUserId), transaction);
 		}
 	}
 	return created;
@@ -530,21 +536,22 @@ async function shouldStartPostgresOrganizationTrial(
 const createPostgresProjectWithDefaultGroup = async (
 	project: NewProject,
 	transaction: DBTransaction,
+	actingUserId?: string,
 ): Promise<DBProject> => {
 	const shouldStartTrial = await shouldStartPostgresOrganizationTrial(project.orgId, transaction);
 	const [created] = await transaction.insert(s.project).values(project).returning().execute();
 	await transaction.insert(s.userGroup).values(defaultUserGroupValues(created.id)).execute();
 	if (shouldStartTrial && created.orgId) {
 		if (await startOrganizationTrial(created.orgId, new Date(), transaction)) {
-			await enqueueOnceJob(cloudTrialProvisioningJob(created.orgId), transaction);
+			await enqueueOnceJob(cloudTrialProvisioningJob(created.orgId, actingUserId), transaction);
 		}
 	}
 	return created;
 };
 
-const cloudTrialProvisioningJob = (organizationId: string) => ({
+const cloudTrialProvisioningJob = (organizationId: string, actingUserId?: string) => ({
 	name: CLOUD_TRIAL_PROVISIONING_JOB_NAME,
-	payload: { organizationId },
+	payload: { organizationId, ...(actingUserId ? { actingUserId } : {}) },
 	uniqueKey: `billing-cloud-provision-trial:${organizationId}`,
 });
 

@@ -6,8 +6,7 @@ import { isTerminalBillingStatus } from '../types/billing';
 import { logger } from '../utils/logger';
 import {
 	cancelCloudTrialPlaceholderSubscription,
-	type CloudSubscriptionKind,
-	cloudSubscriptionKind,
+	type ClassifiedCloudSubscription,
 	cloudSubscriptionProjection,
 	hasCloudDefaultPaymentMethod,
 	listCloudSubscriptions,
@@ -21,11 +20,6 @@ interface CloudBillingReconciliationResult {
 	ignored: boolean;
 }
 
-interface ClassifiedCloudSubscription {
-	kind: CloudSubscriptionKind;
-	subscription: Stripe.Subscription;
-}
-
 export async function reconcileCloudBillingCustomer(input: {
 	stripeCustomerId: string;
 	organizationIdHint?: string;
@@ -35,8 +29,7 @@ export async function reconcileCloudBillingCustomer(input: {
 		return { applied: false, ignored: true };
 	}
 	const claim = await billingQueries.claimBillingSync(billing.orgId, input.stripeCustomerId);
-	const subscriptions = await listCloudSubscriptions(input.stripeCustomerId);
-	const classified = await classifyCloudSubscriptions(subscriptions);
+	const classified = await listCloudSubscriptions(input.stripeCustomerId);
 	let selected = selectCloudSubscription(classified, claim.billing.stripeSubscriptionId);
 	logDuplicateCurrentSubscriptions(input.stripeCustomerId, classified, selected);
 
@@ -72,8 +65,7 @@ async function resolveOrganizationBilling(stripeCustomerId: string, organization
 		return attached;
 	}
 
-	const subscriptions = await listCloudSubscriptions(stripeCustomerId);
-	const classified = await classifyCloudSubscriptions(subscriptions);
+	const classified = await listCloudSubscriptions(stripeCustomerId);
 	const liveOrganizationId = selectCloudSubscription(classified)?.subscription.metadata.nao_org_id;
 	const organizationId = liveOrganizationId ?? organizationIdHint;
 	if (!organizationId) {
@@ -85,18 +77,6 @@ async function resolveOrganizationBilling(stripeCustomerId: string, organization
 		throw new Error(`Organization "${organizationId}" was not found`);
 	}
 	return billingQueries.attachStripeCustomer(organization.id, stripeCustomerId);
-}
-
-async function classifyCloudSubscriptions(
-	subscriptions: Stripe.Subscription[],
-): Promise<ClassifiedCloudSubscription[]> {
-	const classified = await Promise.all(
-		subscriptions.map(async (subscription) => ({
-			kind: await cloudSubscriptionKind(subscription),
-			subscription,
-		})),
-	);
-	return classified.filter((entry): entry is ClassifiedCloudSubscription => entry.kind !== null);
 }
 
 async function carryForwardLatestTrialEnd(
