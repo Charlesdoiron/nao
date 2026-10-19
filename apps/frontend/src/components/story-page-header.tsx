@@ -5,6 +5,7 @@ import {
 	Ellipsis,
 	Eye,
 	Info,
+	LayoutDashboard,
 	Loader2,
 	MessageSquare,
 	Pencil,
@@ -73,6 +74,12 @@ interface ClassicViewModeControls {
 
 type ViewModeControls = ClassicViewModeControls | CustomStoryViewModeControls;
 
+interface DashboardEditControls {
+	isEditing: boolean;
+	onStartEditing: () => void;
+	disabled?: boolean;
+}
+
 interface VersionControls {
 	currentVersion: number;
 	versionDates: (string | Date)[];
@@ -97,6 +104,7 @@ export interface StoryPageHeaderProps {
 	onOpenAnalytics?: () => void;
 	viewModeControls?: ViewModeControls;
 	versionControls?: VersionControls;
+	dashboardEditControls?: DashboardEditControls;
 }
 
 export function StoryPageHeader({
@@ -114,6 +122,7 @@ export function StoryPageHeader({
 	onOpenAnalytics,
 	viewModeControls,
 	versionControls,
+	dashboardEditControls,
 }: StoryPageHeaderProps) {
 	useKeyboardShortcuts({
 		'toggle-story-chat': onOpenChat && !isOpeningChat ? onOpenChat : undefined,
@@ -143,6 +152,18 @@ export function StoryPageHeader({
 							versionDates={versionControls.versionDates}
 							onSelectVersion={versionControls.onSelectVersion}
 						/>
+					)}
+					{dashboardEditControls && !dashboardEditControls.isEditing && (
+						<Button
+							variant='outline'
+							size='sm'
+							className='gap-1.5 rounded-full text-xs'
+							onClick={dashboardEditControls.onStartEditing}
+							disabled={dashboardEditControls.disabled}
+						>
+							<LayoutDashboard className='size-3.5' strokeWidth={2.25} />
+							<span>Edit dashboard</span>
+						</Button>
 					)}
 					{viewModeControls && <ViewModeToggle controls={viewModeControls} />}
 

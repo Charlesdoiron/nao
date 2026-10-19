@@ -26,6 +26,7 @@ interface StoryTabbedContentProps {
 	contentClassName?: string;
 	baselineQueryData?: QueryDataMap | null;
 	filterApi?: StoryFilterApi | null;
+	filterBarSlot?: React.ReactNode;
 }
 
 export function StoryTabbedContent({
@@ -36,6 +37,7 @@ export function StoryTabbedContent({
 	contentClassName = 'max-w-5xl mx-auto p-4 md:p-8 flex flex-col gap-4',
 	baselineQueryData,
 	filterApi,
+	filterBarSlot,
 }: StoryTabbedContentProps) {
 	const tabs = useMemo(() => parseStoryTabs(code), [code]);
 	const [activeIndex, setActiveIndex] = useState(0);
@@ -80,6 +82,7 @@ export function StoryTabbedContent({
 							onClear={storyFilters.clearSelections}
 							api={filterApi}
 						/>
+						{filterBarSlot}
 						<SegmentList
 							segments={segments}
 							renderChart={(chart, key) =>

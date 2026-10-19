@@ -6,7 +6,13 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/shared/story-segments';
 import type { LiveQueryConfig, QueryDataMap } from '@/components/story-embeds';
 import type { SelectionData } from '@/components/highlight-bubble';
+import type { StoryViewMode } from '@/components/side-panel/story-viewer.types';
 import { StoryChartEmbed, StoryMapEmbed, StoryTableEmbed } from '@/components/story-embeds';
+import { DashboardChartBlock, DashboardTableBlock } from '@/components/story-dashboard-block';
+import { StoryDashboardEditBar } from '@/components/story-dashboard-edit-bar';
+import { StoryDashboardFilterBar } from '@/components/story-dashboard-filter-bar';
+import { StoryDashboardFilterDialog } from '@/components/story-dashboard-filter-dialog';
+import { StoryDashboardInspector } from '@/components/story-dashboard-inspector';
 import { HighlightBubble } from '@/components/highlight-bubble';
 import { StoryTabbedContent } from '@/components/story-tabbed-content';
 import { AssetAnalyticsDialog } from '@/components/asset-analytics-dialog';
@@ -21,6 +27,9 @@ import { SelectionProvider } from '@/contexts/text-selection';
 import { StoryChartEditProvider } from '@/contexts/story-chart-edit';
 import { StoryMapEditProvider } from '@/contexts/story-map-edit';
 import { StoryTableEditProvider } from '@/contexts/story-table-edit';
+import { StoryDashboardEditProvider } from '@/contexts/story-dashboard-edit';
+import { useStoryDashboardEdit } from '@/hooks/use-story-dashboard-edit';
+import { cn } from '@/lib/utils';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
 import { useChatActivity } from '@/hooks/use-chat-activity';
 import { useRetryStaleStoryRefresh } from '@/hooks/use-retry-stale-story-refresh';
@@ -98,6 +107,19 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 	);
 
 	const canEditCharts = !story.archivedAt;
+	const dashboard = useStoryDashboardEdit({ code: editor.code, queryData });
+	const canEditDashboard =
+		canEditCharts && editor.viewMode === 'preview' && editor.versionNav.isViewingLatest && !isChatRunning;
+
+	const { stopEditing: stopDashboardEditing } = dashboard;
+	const { setViewMode } = editor;
+	const handleViewModeChange = useCallback(
+		(mode: StoryViewMode) => {
+			stopDashboardEditing();
+			setViewMode(mode);
+		},
+		[stopDashboardEditing, setViewMode],
+	);
 
 	return (
 		<div className='flex flex-col flex-1 h-full overflow-hidden bg-background min-w-0'>
@@ -121,7 +143,7 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 				onOpenAnalytics={() => setIsAnalyticsOpen(true)}
 				viewModeControls={{
 					viewMode: editor.viewMode,
-					onViewModeChange: editor.setViewMode,
+					onViewModeChange: handleViewModeChange,
 					canEdit: canEditCharts,
 					isAgentRunning: isChatRunning,
 					isCodeDirty: editor.isCodeDirty,
@@ -138,7 +160,14 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 					onSelectVersion: editor.versionNav.goToVersion,
 					onRestore: editor.handleRestore,
 				}}
+				dashboardEditControls={
+					canEditDashboard
+						? { isEditing: dashboard.isEditing, onStartEditing: dashboard.startEditing }
+						: undefined
+				}
 			/>
+
+			<StoryDashboardEditBar dashboard={dashboard} />
 
 			{story.archivedAt && (
 				<div className='flex items-center justify-between gap-3 border-b bg-muted/50 px-4 py-2 md:px-6'>
@@ -160,25 +189,46 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 				editor={editor}
 				queryData={queryData}
 				preview={
-					<SelectionProvider key={storySlug}>
-						<HighlightBubble onAsk={handleSelectionAsk} disabled={isChatRunning} />
-						{renderWithChartEditProvider(
-							canEditCharts && editor.versionNav.isViewingLatest && !isChatRunning,
-							{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
-							<PreviewContent
-								code={editor.code}
-								queryData={queryData}
-								chatId={chatId}
-								storySlug={storySlug}
-								cacheSchedule={story.cacheSchedule}
-								filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
-								isDataPending={isQueryDataPending}
-								isViewingLatest={editor.versionNav.isViewingLatest}
-							/>,
-						)}
-					</SelectionProvider>
+					<StoryDashboardEditProvider value={dashboard}>
+						<div className='flex min-h-0 flex-1'>
+							<div
+								className={cn(
+									'flex min-w-0 flex-1 flex-col transition-colors',
+									dashboard.isEditing &&
+										'bg-muted/40 bg-[radial-gradient(circle,var(--color-border)_1px,transparent_1px)] [background-size:16px_16px]',
+								)}
+							>
+								<SelectionProvider key={storySlug}>
+									<HighlightBubble
+										onAsk={handleSelectionAsk}
+										disabled={isChatRunning || dashboard.isEditing}
+									/>
+									{renderWithChartEditProvider(
+										canEditCharts &&
+											editor.versionNav.isViewingLatest &&
+											!isChatRunning &&
+											!dashboard.isEditing,
+										{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
+										<PreviewContent
+											code={editor.code}
+											queryData={queryData}
+											chatId={chatId}
+											storySlug={storySlug}
+											cacheSchedule={story.cacheSchedule}
+											filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
+											isDataPending={isQueryDataPending}
+											isViewingLatest={editor.versionNav.isViewingLatest}
+										/>,
+									)}
+								</SelectionProvider>
+							</div>
+							<StoryDashboardInspector dashboard={dashboard} />
+						</div>
+					</StoryDashboardEditProvider>
 				}
 			/>
+
+			<StoryDashboardFilterDialog dashboard={dashboard} onAskAgent={handleOpenChat} />
 
 			<LiveStorySettingsDialog
 				open={isLiveSettingsOpen}
@@ -293,13 +343,20 @@ function PreviewContent({
 				isRefreshing: boolean;
 			},
 		) => (
-			<StoryChartEmbed
+			<DashboardChartBlock
 				chart={chart}
-				queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
-				liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
+				queryData={data}
 				hasActiveFilters={hasActiveFilters}
-				isRefreshing={isRefreshing}
-				isDataPending={isDataPending}
+				render={(effectiveChart, options) => (
+					<StoryChartEmbed
+						chart={effectiveChart}
+						queryData={useLiveUnfiltered && !options.hasActiveFilters ? undefined : options.queryData}
+						liveQuery={useLiveUnfiltered && !options.hasActiveFilters ? noCacheQuery : undefined}
+						hasActiveFilters={options.hasActiveFilters}
+						isRefreshing={isRefreshing}
+						isDataPending={isDataPending}
+					/>
+				)}
 			/>
 		),
 		[isDataPending, noCacheQuery, useLiveUnfiltered],
@@ -314,13 +371,20 @@ function PreviewContent({
 				isRefreshing,
 			}: { queryData: QueryDataMap | null; hasActiveFilters: boolean; isRefreshing: boolean },
 		) => (
-			<StoryTableEmbed
+			<DashboardTableBlock
 				table={table}
-				queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
-				liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
+				queryData={data}
 				hasActiveFilters={hasActiveFilters}
-				isRefreshing={isRefreshing}
-				isDataPending={isDataPending}
+				render={(resolvedTable, options) => (
+					<StoryTableEmbed
+						table={resolvedTable}
+						queryData={useLiveUnfiltered && !options.hasActiveFilters ? undefined : options.queryData}
+						liveQuery={useLiveUnfiltered && !options.hasActiveFilters ? noCacheQuery : undefined}
+						hasActiveFilters={options.hasActiveFilters}
+						isRefreshing={isRefreshing}
+						isDataPending={isDataPending}
+					/>
+				)}
 			/>
 		),
 		[isDataPending, noCacheQuery, useLiveUnfiltered],
@@ -356,6 +420,7 @@ function PreviewContent({
 			renderChart={renderChart}
 			renderTable={renderTable}
 			renderMap={renderMap}
+			filterBarSlot={<StoryDashboardFilterBar />}
 		/>
 	);
 }
