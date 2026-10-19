@@ -9,6 +9,7 @@ import { CommandMenuCallbackProvider, useCommandMenuCallback } from '@/contexts/
 import { SidebarProvider, useSidebar } from '@/contexts/sidebar';
 import { useTheme } from '@/contexts/theme.provider';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useTrackLastAppHref } from '@/hooks/use-last-app-href';
 import { usePermissions } from '@/hooks/use-permissions';
 
 export const Route = createFileRoute('/_sidebar-layout')({
@@ -27,6 +28,7 @@ function RouteComponent() {
 
 function SidebarLayoutContent() {
 	const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false);
+	useTrackLastAppHref();
 
 	return (
 		<>

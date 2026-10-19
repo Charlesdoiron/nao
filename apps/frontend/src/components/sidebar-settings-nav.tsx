@@ -31,7 +31,7 @@ interface NavGroup {
 	items: NavItem[];
 }
 
-const settingsNavGroups: NavGroup[] = [
+export const settingsNavGroups: NavGroup[] = [
 	{
 		label: 'User',
 		items: [
