@@ -1419,4 +1419,14 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		keywords: ['files', 'context', 'documents', 'knowledge base'],
 		adminOrContextAdmin: true,
 	},
+
+	// ── Tests ────────────────────────────────────────────────
+	{
+		page: '/settings/tests',
+		pageLabel: 'Tests',
+		title: 'Tests',
+		description: 'Run test questions against production or a branch and review their reliability.',
+		keywords: ['evals', 'evaluation', 'test questions', 'reliability', 'branch', 'tag', 'regression', 'accuracy'],
+		adminOrContextAdmin: true,
+	},
 ];
