@@ -210,10 +210,8 @@ export async function runSqlOverQueryResults(
 }
 
 /**
- * Reads the rows out, turning the numbers DuckDB renders as text back into numbers. BIGINT and
- * DECIMAL arrive as strings so that no precision is lost in JSON, but a count or a sum reaching a
- * chart as `"3"` is worse than the rounding: a value only stays a string when it genuinely cannot
- * survive the trip through a JavaScript number.
+ * Reads the rows out, turning exactly representable integers DuckDB renders as text back into
+ * numbers. DECIMAL values stay strings because JavaScript numbers cannot preserve their precision.
  */
 function toQueryResult(reader: DuckDBResultReader, { DuckDBTypeId }: DuckDBModule): QueryResult {
 	const numericColumns = findNumericColumns(reader, DuckDBTypeId);
@@ -257,7 +255,7 @@ function toNumber(value: unknown, kind: NumericKind | undefined): unknown {
 	}
 
 	const parsed = Number(value);
-	const exactEnough = kind === 'integer' ? Number.isSafeInteger(parsed) : Number.isFinite(parsed);
+	const exactEnough = kind === 'integer' && Number.isSafeInteger(parsed);
 
 	return exactEnough ? parsed : value;
 }

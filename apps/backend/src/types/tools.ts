@@ -13,6 +13,7 @@ import { AgentSettings } from './agent-settings';
 export interface QueryResult {
 	columns: string[];
 	data: Record<string, unknown>[];
+	appliedLimit?: number;
 	compiledBySemanticLayer?: boolean;
 }
 

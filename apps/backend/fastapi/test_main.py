@@ -1,5 +1,6 @@
 import json
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -31,6 +32,12 @@ class TestClient(FastApiTestClient):
                 "row_security": UNENFORCED_ROW_SECURITY,
             }
         return super().request(method, url, **kwargs)
+
+
+def test_convert_value_preserves_decimal_precision():
+    value = Decimal("12345678901234567890.123456789")
+
+    assert main._convert_value(value) == "12345678901234567890.123456789"
 
 
 @pytest.fixture(autouse=True)

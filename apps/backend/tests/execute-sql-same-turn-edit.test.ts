@@ -23,6 +23,7 @@ import type { ToolCallOptions } from 'ai';
 
 import executeSqlTool, { executeQuery } from '../src/agents/tools/execute-sql';
 import { getExecuteSqlPartByQueryIdInChat, updateExecuteSqlPart } from '../src/queries/execute-sql.queries';
+import { runQueryOnLocalFiles } from '../src/services/local-query.service';
 import type { ToolContext } from '../src/types/tools';
 
 describe('execute_sql in-place edit of a query created in the current turn', () => {
@@ -50,6 +51,24 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 		expect(updateExecuteSqlPart).not.toHaveBeenCalled();
 	});
 
+	it('retains an applied SQL limit in the cached query result', async () => {
+		const context = createContext();
+		vi.mocked(runQueryOnLocalFiles).mockResolvedValueOnce({
+			result: { columns: ['user_id'], data: [{ user_id: 'a' }] },
+		});
+
+		const output = await executeQuery(
+			{ sql_query: "SELECT user_id FROM read_csv('/home/users.csv') LIMIT 1", database_id: 'duckdb_local' },
+			context,
+		);
+
+		expect(context.queryResults.get(output.id)).toEqual({
+			columns: ['user_id'],
+			data: [{ user_id: 'a' }],
+			appliedLimit: 1,
+		});
+	});
+
 	it('binds a complete earlier result as a BigQuery array parameter', async () => {
 		const context = createContext();
 		context.queryResults.set('query_ab12cd34', {
@@ -69,6 +88,80 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 		const request = vi.mocked(fetch).mock.calls[0]?.[1];
 		const body = JSON.parse(String(request?.body)) as { query_parameters: unknown };
 		expect(body.query_parameters).toEqual([{ name: 'users', type: 'STRING', values: ['a', 'b'] }]);
+	});
+
+	it('rejects a same-turn parameter source that reached its SQL limit', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: ['user_id'],
+			data: [{ user_id: 'a' }, { user_id: 'b' }],
+			appliedLimit: 2,
+		});
+
+		await expect(
+			executeQuery(
+				{
+					sql_query: 'SELECT * FROM users WHERE user_id IN UNNEST(@users)',
+					database_id: 'bigquery-prod',
+					array_parameters: [
+						{ name: 'users', query_id: 'query_ab12cd34', column: 'user_id', type: 'STRING' },
+					],
+				},
+				context,
+			),
+		).rejects.toThrow('Query query_ab12cd34 may be truncated by LIMIT 2');
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('rejects a persisted parameter source that reached its SQL limit', async () => {
+		vi.mocked(getExecuteSqlPartByQueryIdInChat).mockResolvedValueOnce({
+			toolCallId: 'call-source',
+			toolName: 'execute_sql',
+			toolInput: { sql_query: "SELECT user_id FROM read_csv('/home/users.csv') LIMIT 2" },
+			toolOutput: {
+				_version: '1',
+				id: 'query_ab12cd34',
+				columns: ['user_id'],
+				data: [{ user_id: 'a' }, { user_id: 'b' }],
+				row_count: 2,
+				applied_limit: 2,
+			},
+			adminMode: false,
+		});
+
+		await expect(
+			executeQuery(
+				{
+					sql_query: 'SELECT * FROM users WHERE user_id IN UNNEST(@users)',
+					database_id: 'bigquery-prod',
+					array_parameters: [
+						{ name: 'users', query_id: 'query_ab12cd34', column: 'user_id', type: 'STRING' },
+					],
+				},
+				createContext(),
+			),
+		).rejects.toThrow('Query query_ab12cd34 may be truncated by LIMIT 2');
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('accepts a parameter source that returned fewer rows than its SQL limit', async () => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: ['user_id'],
+			data: [{ user_id: 'a' }],
+			appliedLimit: 2,
+		});
+
+		await executeQuery(
+			{
+				sql_query: 'SELECT * FROM users WHERE user_id IN UNNEST(@users)',
+				database_id: 'bigquery-prod',
+				array_parameters: [{ name: 'users', query_id: 'query_ab12cd34', column: 'user_id', type: 'STRING' }],
+			},
+			context,
+		);
+
+		expect(fetch).toHaveBeenCalledOnce();
 	});
 
 	it('accepts BigQuery scalar array parameter types', async () => {
@@ -138,6 +231,27 @@ describe('execute_sql in-place edit of a query created in the current turn', () 
 				type,
 				values: [context.queryResults.get('query_ab12cd34')!.data[0]![name]],
 			})),
+		);
+	});
+
+	it.each(['NUMERIC', 'BIGNUMERIC'] as const)('rejects an inexact JavaScript number for %s', async (type) => {
+		const context = createContext();
+		context.queryResults.set('query_ab12cd34', {
+			columns: ['amount'],
+			data: [{ amount: 123456789012345.67 }],
+		});
+
+		await expect(
+			executeQuery(
+				{
+					sql_query: 'SELECT 1',
+					database_id: 'bigquery-prod',
+					array_parameters: [{ name: 'amounts', query_id: 'query_ab12cd34', column: 'amount', type }],
+				},
+				context,
+			),
+		).rejects.toThrow(
+			`BigQuery array parameter "amounts" received a JavaScript number for ${type}, which may have already lost precision.`,
 		);
 	});
 

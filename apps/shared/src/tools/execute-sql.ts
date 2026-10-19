@@ -51,7 +51,7 @@ export const ArrayParameterSchema = z.object({
 	type: z
 		.enum(ARRAY_PARAMETER_TYPES)
 		.describe(
-			'The BigQuery array element type. Temporal values must use ISO format, INTERVAL must use BigQuery canonical format, NUMERIC values may be decimal strings, BYTES must be base64, and JSON strings must contain valid JSON.',
+			'The BigQuery array element type. Temporal values must use ISO format, INTERVAL must use BigQuery canonical format, NUMERIC and BIGNUMERIC values must be exact decimal strings, BYTES must be base64, and JSON strings must contain valid JSON.',
 		),
 });
 

@@ -93,14 +93,14 @@ export async function executeQuery(
 		rowSecurity: context.warehouseRowSecurity ?? { enforced: false },
 	});
 	const id = query_id ?? (`query_${crypto.randomUUID().slice(0, 8)}` as const);
+	const appliedLimit = detectQueryRowLimit(effectiveSql);
 
 	context.queryResults.set(id, {
 		columns: data.columns,
 		data: data.data,
+		...(appliedLimit !== null && { appliedLimit }),
 		...(options.compiledBySemanticLayer && { compiledBySemanticLayer: true }),
 	});
-
-	const appliedLimit = detectQueryRowLimit(effectiveSql);
 
 	return withTemplateWarnings(
 		{
@@ -125,8 +125,8 @@ async function executeLocalQuery(
 		savedFile,
 	} = await runQueryOnLocalFiles(sqlQuery, context, saveTo);
 	const id = queryId ?? (`query_${crypto.randomUUID().slice(0, 8)}` as const);
-	context.queryResults.set(id, { columns, data });
 	const appliedLimit = detectQueryRowLimit(sqlQuery);
+	context.queryResults.set(id, { columns, data, ...(appliedLimit !== null && { appliedLimit }) });
 
 	return {
 		_version: '1',
@@ -147,8 +147,8 @@ async function executeAppDbQuery(
 ): Promise<executeSql.Output> {
 	const { columns, rows } = await queryAppDb(context.projectId, sqlQuery);
 	const id = queryId ?? (`query_${crypto.randomUUID().slice(0, 8)}` as const);
-	context.queryResults.set(id, { columns, data: rows });
 	const appliedLimit = detectQueryRowLimit(sqlQuery);
+	context.queryResults.set(id, { columns, data: rows, ...(appliedLimit !== null && { appliedLimit }) });
 	return {
 		_version: '1',
 		data: rows,
@@ -243,6 +243,11 @@ async function resolveArrayParameters(
 			if (!result) {
 				throw new Error(`Query ${parameter.query_id} not found in this chat.`);
 			}
+			if (result.appliedLimit !== undefined && result.data.length >= result.appliedLimit) {
+				throw new Error(
+					`Query ${parameter.query_id} may be truncated by LIMIT ${result.appliedLimit}. Rerun the source query without LIMIT before using it as a BigQuery array parameter.`,
+				);
+			}
 			if (!result.columns.includes(parameter.column)) {
 				throw new Error(
 					`Column "${parameter.column}" not found in query ${parameter.query_id}. Available columns: ${result.columns.join(', ')}`,
@@ -319,10 +324,15 @@ function normalizeParameterValue(
 	}
 	if (
 		(type === 'NUMERIC' || type === 'BIGNUMERIC') &&
-		((typeof value === 'number' && Number.isFinite(value)) ||
-			(typeof value === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)))
+		typeof value === 'string' &&
+		/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)
 	) {
-		return String(value);
+		return value;
+	}
+	if ((type === 'NUMERIC' || type === 'BIGNUMERIC') && typeof value === 'number') {
+		throw new Error(
+			`BigQuery array parameter "${name}" received a JavaScript number for ${type}, which may have already lost precision. Cast the source column to VARCHAR in DuckDB or STRING in BigQuery.`,
+		);
 	}
 	if (type === 'DATE' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
 		return value;

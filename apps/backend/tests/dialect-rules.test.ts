@@ -75,8 +75,11 @@ describe('dialect-aware system prompt', () => {
 
 		expect(toolCalls).toContain('first query the file with `execute_sql` using `database_id: duckdb_local`');
 		expect(toolCalls).toContain('Do not copy the file values into a warehouse `IN (...)` clause');
-		expect(toolCalls).toContain('Bind the complete result column with `array_parameters`');
+		expect(toolCalls).toContain('Query the complete file column without `LIMIT`');
+		expect(toolCalls).toContain('bind the result with `array_parameters`');
 		expect(toolCalls).toContain('filter with `IN UNNEST(@name)`');
+		expect(toolCalls).toContain("`types = {'user_id': 'VARCHAR'}`");
+		expect(toolCalls).toContain('numeric-looking IDs and leading zeroes are preserved');
 	});
 });
 

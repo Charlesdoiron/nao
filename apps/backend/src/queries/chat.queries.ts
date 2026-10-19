@@ -26,6 +26,7 @@ import {
 	UIMessage,
 	UIMessagePart,
 } from '../types/chat';
+import type { QueryResult } from '../types/tools';
 import { applyChatFilters, buildChatGroups, type EnrichedChat, type SourcePlatform } from '../utils/chat-list';
 import { convertDBPartToUIPart, mapUIPartsToDBParts } from '../utils/chat-message-part-mappings';
 import { getErrorMessage } from '../utils/utils';
@@ -1030,10 +1031,7 @@ export const getProjectIdByQueryId = async (queryId: string): Promise<string | u
  * and returns just the columns/data, or `null` if no matching query exists.
  * Used to rehydrate query results across agent runs in the same chat.
  */
-export const getQueryResultByQueryId = async (
-	chatId: string,
-	queryId: string,
-): Promise<{ columns: string[]; data: Record<string, unknown>[] } | null> => {
+export const getQueryResultByQueryId = async (chatId: string, queryId: string): Promise<QueryResult | null> => {
 	const part = await executeSqlQueries.getExecuteSqlPartByQueryIdInChat(chatId, queryId);
 	return part ? extractQueryResultFromToolOutput(part.toolOutput) : null;
 };
@@ -1042,7 +1040,7 @@ export const getQueryResultByQueryIdInProject = async (
 	projectId: string,
 	userId: string,
 	queryId: string,
-): Promise<{ columns: string[]; data: Record<string, unknown>[]; chatId: string } | null> => {
+): Promise<(QueryResult & { chatId: string }) | null> => {
 	const [result] = await db
 		.select({ toolOutput: s.messagePart.toolOutput, chatId: s.chat.id })
 		.from(s.messagePart)
@@ -1068,10 +1066,8 @@ export const getQueryResultByQueryIdInProject = async (
 	return { ...extracted, chatId: result.chatId };
 };
 
-function extractQueryResultFromToolOutput(
-	toolOutput: unknown,
-): { columns: string[]; data: Record<string, unknown>[] } | null {
-	const output = toolOutput as { columns?: unknown; data?: unknown } | null | undefined;
+function extractQueryResultFromToolOutput(toolOutput: unknown): QueryResult | null {
+	const output = toolOutput as { columns?: unknown; data?: unknown; applied_limit?: unknown } | null | undefined;
 	if (!output || !Array.isArray(output.columns) || !Array.isArray(output.data)) {
 		return null;
 	}
@@ -1079,6 +1075,9 @@ function extractQueryResultFromToolOutput(
 	return {
 		columns: output.columns as string[],
 		data: output.data as Record<string, unknown>[],
+		...(typeof output.applied_limit === 'number' &&
+			Number.isInteger(output.applied_limit) &&
+			output.applied_limit >= 0 && { appliedLimit: output.applied_limit }),
 	};
 }
 

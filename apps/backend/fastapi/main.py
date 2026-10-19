@@ -235,7 +235,7 @@ def _convert_value(v: object):
     if isinstance(v, Decimal):
         if v.is_nan() or v.is_infinite():
             return None
-        return float(v)
+        return str(v)
     if isinstance(v, (datetime, date)):
         return v.isoformat()
     if isinstance(v, bytes):
