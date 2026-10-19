@@ -2,10 +2,12 @@ import { Fragment } from 'react';
 import { FolderPlus } from 'lucide-react';
 import type { StoryPanelDisplayMode } from '@nao/shared/types';
 import type { ExplorerEntry, FolderItem, StoriesScope, StoryItem } from '@/lib/stories-page';
+import type { StoryFeedbackSentiment } from '@/lib/story-feedback';
 import { isSystemFolder } from '@/lib/stories-page';
 import { FolderCard } from '@/components/stories-folder-card';
 import {
 	CertifiedStoriesEmptyState,
+	FeedbackStoriesEmptyState,
 	StoryCard,
 	StoriesEmptyState,
 	StoriesNoResults,
@@ -35,6 +37,7 @@ export function StoriesExplorer({
 	onToggleStory,
 	onToggleFolder,
 	selectionMode = false,
+	feedback,
 }: {
 	entries: ExplorerEntry[];
 	displayMode: StoryPanelDisplayMode;
@@ -55,11 +58,16 @@ export function StoriesExplorer({
 	onToggleStory: (storyId: string) => void;
 	onToggleFolder: (folderId: string) => void;
 	selectionMode?: boolean;
+	feedback: {
+		expandedStoryIds: Set<string>;
+		onToggle: (storyId: string) => void;
+		sentiment: StoryFeedbackSentiment;
+	};
 }) {
 	const { isViewer } = usePermissions();
 	const isInSharedWithMe = currentFolderId === '__shared_with_me__';
 	const isCertifiedScope = scope === 'certified';
-	const canCreateFolder = !showArchived && !isViewer && !isInSharedWithMe && !isCertifiedScope;
+	const canCreateFolder = !showArchived && !isViewer && !isInSharedWithMe && scope === 'all';
 	const moveToFolderHandler = isViewer || isInSharedWithMe ? undefined : onMoveToFolder;
 	const selectionActive = selectionMode || selectedStoryIds.size + selectedFolderIds.size > 0;
 
@@ -69,6 +77,9 @@ export function StoriesExplorer({
 		}
 		if (isCertifiedScope) {
 			return <CertifiedStoriesEmptyState />;
+		}
+		if (scope === 'feedback') {
+			return <FeedbackStoriesEmptyState />;
 		}
 		if (!showArchived) {
 			return (
@@ -128,6 +139,11 @@ export function StoriesExplorer({
 								selected={selectedStoryIds.has(entry.story.storyId)}
 								selectionActive={selectionActive}
 								onToggleSelect={onToggleStory}
+								feedbackColumn={{
+									expanded: feedback.expandedStoryIds.has(entry.story.storyId),
+									onToggle: feedback.onToggle,
+									sentiment: feedback.sentiment,
+								}}
 							/>
 							{newFolderRow}
 						</Fragment>

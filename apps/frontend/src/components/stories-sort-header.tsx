@@ -24,6 +24,9 @@ export function SortHeader({
 				<div className='hidden sm:flex w-24 shrink-0 items-center'>
 					<SortPill label='Updated' field='updated' value={value} onChange={onChange} />
 				</div>
+				<div className='hidden sm:flex w-28 shrink-0 items-center'>
+					<SortPill label='Feedback' field='feedback' value={value} onChange={onChange} />
+				</div>
 				<div className='w-26 shrink-0' />
 			</div>
 		);
@@ -34,6 +37,7 @@ export function SortHeader({
 			<SortPill label='Name' field='name' value={value} onChange={onChange} />
 			<SortPill label='Owner' field='owner' value={value} onChange={onChange} />
 			<SortPill label='Updated' field='updated' value={value} onChange={onChange} />
+			<SortPill label='Feedback' field='feedback' value={value} onChange={onChange} />
 		</div>
 	);
 }

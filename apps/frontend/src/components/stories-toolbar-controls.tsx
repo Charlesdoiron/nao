@@ -1,4 +1,4 @@
-import { ArchiveIcon, LayoutGrid, List, ListChecks, ShieldCheck, X } from 'lucide-react';
+import { ArchiveIcon, LayoutGrid, List, ListChecks, ShieldCheck, ThumbsUp, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { StoryPanelDisplayMode } from '@nao/shared/types';
 import type { StoriesScope } from '@/lib/stories-page';
@@ -15,6 +15,7 @@ export function StoriesToolbarControls({
 	onShowArchivedChange,
 	selectionActive,
 	onToggleSelection,
+	newFeedbackCount,
 }: {
 	scope: StoriesScope;
 	onScopeChange: (value: StoriesScope) => void;
@@ -24,11 +25,14 @@ export function StoriesToolbarControls({
 	onShowArchivedChange: (value: boolean) => void;
 	selectionActive: boolean;
 	onToggleSelection: () => void;
+	newFeedbackCount: number;
 }) {
 	const { isViewer } = usePermissions();
 	return (
 		<div className='flex items-center gap-3'>
-			{!showArchived && <ScopeToggle value={scope} onChange={onScopeChange} />}
+			{!showArchived && (
+				<ScopeToggle value={scope} onChange={onScopeChange} newFeedbackCount={newFeedbackCount} />
+			)}
 			{!isViewer && <SelectionToggle active={selectionActive} onToggle={onToggleSelection} />}
 			<Button
 				variant='ghost'
@@ -44,7 +48,15 @@ export function StoriesToolbarControls({
 	);
 }
 
-function ScopeToggle({ value, onChange }: { value: StoriesScope; onChange: (value: StoriesScope) => void }) {
+function ScopeToggle({
+	value,
+	onChange,
+	newFeedbackCount,
+}: {
+	value: StoriesScope;
+	onChange: (value: StoriesScope) => void;
+	newFeedbackCount: number;
+}) {
 	return (
 		<div className='flex items-center gap-0.5 rounded-full border p-0.5' role='group' aria-label='Filter stories'>
 			<ScopeButton active={value === 'all'} onClick={() => onChange('all')}>
@@ -53,6 +65,15 @@ function ScopeToggle({ value, onChange }: { value: StoriesScope; onChange: (valu
 			<ScopeButton active={value === 'certified'} onClick={() => onChange('certified')}>
 				<ShieldCheck className='size-3.5' />
 				Certified
+			</ScopeButton>
+			<ScopeButton active={value === 'feedback'} onClick={() => onChange('feedback')}>
+				<ThumbsUp className='size-3.5' />
+				Feedback
+				{newFeedbackCount > 0 && (
+					<span className='rounded-full bg-primary px-1.5 text-[10px] font-medium leading-4 text-primary-foreground tabular-nums'>
+						{newFeedbackCount}
+					</span>
+				)}
 			</ScopeButton>
 		</div>
 	);

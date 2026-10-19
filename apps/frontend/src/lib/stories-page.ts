@@ -3,13 +3,15 @@ import type { inferRouterOutputs } from '@trpc/server';
 
 import type { TrpcRouter } from '@nao/backend/trpc';
 import type { StoryFormat, StorySharingInfo, StorySummary, SummarySegment } from '@nao/shared/types';
+import type { StoryFeedbackSummary } from '@/lib/story-feedback';
+import { getFeedbackSortValue } from '@/lib/story-feedback';
 
 type RouterOutputs = inferRouterOutputs<TrpcRouter>;
 
-export type SortField = 'name' | 'owner' | 'updated';
+export type SortField = 'name' | 'owner' | 'updated' | 'feedback';
 export type SortDirection = 'asc' | 'desc';
 export type SortState = { field: SortField; direction: SortDirection };
-export type StoriesScope = 'all' | 'certified';
+export type StoriesScope = 'all' | 'certified' | 'feedback';
 
 export const STORIES_DISPLAY_KEY = 'stories-display-mode';
 export const STORIES_SORT_KEY = 'stories-sort';
@@ -22,7 +24,7 @@ export function readStoredSort(): SortState {
 	}
 	const [field, direction] = raw.split('-') as [SortField, SortDirection];
 	if (
-		(field === 'name' || field === 'owner' || field === 'updated') &&
+		(field === 'name' || field === 'owner' || field === 'updated' || field === 'feedback') &&
 		(direction === 'asc' || direction === 'desc')
 	) {
 		return { field, direction };
@@ -55,6 +57,7 @@ export type StoryItem = {
 	folderId: string | null;
 	isInPrivateContext: boolean;
 	link: { to: '/stories/$storyId'; params: { storyId: string } };
+	feedback?: StoryFeedbackSummary | null;
 };
 
 export type FolderItem = RouterOutputs['storyFolder']['listTree'][number];
@@ -212,7 +215,7 @@ export function buildStoryItems({
 }
 
 export function filterStories(items: StoryItem[], query: string, scope: StoriesScope = 'all'): StoryItem[] {
-	const scopedItems = scope === 'certified' ? items.filter((item) => item.isCertified) : items;
+	const scopedItems = items.filter((item) => isInScope(item, scope));
 	if (!query.trim()) {
 		return scopedItems;
 	}
@@ -225,6 +228,16 @@ export function filterStories(items: StoryItem[], query: string, scope: StoriesS
 			item.author.toLowerCase().includes(lowerQuery) ||
 			extractSummaryText(item.summary).toLowerCase().includes(lowerQuery),
 	);
+}
+
+function isInScope(item: StoryItem, scope: StoriesScope): boolean {
+	if (scope === 'certified') {
+		return item.isCertified;
+	}
+	if (scope === 'feedback') {
+		return (item.feedback?.total ?? 0) > 0;
+	}
+	return true;
 }
 
 export function matchesStoryId(item: StoryItem, query: string): boolean {
@@ -254,8 +267,8 @@ export function buildCurrentLevelEntries({
 	searchQuery?: string;
 	scope?: StoriesScope;
 }): { pinned: StoryItem[]; favorites: FavoriteEntry[]; entries: ExplorerEntry[] } {
-	if (scope === 'certified') {
-		return buildCertifiedEntries(items, sort, currentUserName);
+	if (scope === 'certified' || scope === 'feedback') {
+		return buildFlatEntries(items, scope, sort, currentUserName);
 	}
 
 	const favoriteFolderSet = new Set<string>(favoriteFolderIds ?? []);
@@ -299,15 +312,16 @@ export function buildCurrentLevelEntries({
 }
 
 /**
- * The certified scope is a flat view: every certified story, regardless of folder.
+ * The certified and feedback scopes are flat views: every matching story, regardless of folder.
  */
-function buildCertifiedEntries(
+function buildFlatEntries(
 	items: StoryItem[],
+	scope: StoriesScope,
 	sort: SortState,
 	currentUserName: string,
 ): { pinned: StoryItem[]; favorites: FavoriteEntry[]; entries: ExplorerEntry[] } {
 	const entries: ExplorerEntry[] = items
-		.filter((item) => item.isCertified)
+		.filter((item) => isInScope(item, scope))
 		.map((story): ExplorerEntry => ({ kind: 'story', story }));
 	entries.sort(compareEntries(sort, currentUserName));
 	return { pinned: [], favorites: [], entries };
@@ -363,16 +377,27 @@ function compareEntries(sort: SortState, currentUserName: string): (a: ExplorerE
 			return getNameFallback(a).localeCompare(getNameFallback(b));
 		}
 
+		if (typeof aVal === 'number' && typeof bVal === 'number') {
+			const cmp = aVal - bVal;
+			if (cmp !== 0) {
+				return cmp * mul;
+			}
+			return getNameFallback(a).localeCompare(getNameFallback(b));
+		}
+
 		return 0;
 	};
 }
 
-function getSortValue(entry: ExplorerEntry, field: SortField, currentUserName: string): string | Date {
+function getSortValue(entry: ExplorerEntry, field: SortField, currentUserName: string): string | Date | number {
 	if (field === 'name') {
 		return getNameFallback(entry);
 	}
 	if (field === 'owner') {
 		return entry.kind === 'folder' ? currentUserName : entry.story.author;
+	}
+	if (field === 'feedback') {
+		return entry.kind === 'folder' ? -1 : getFeedbackSortValue(entry.story.feedback);
 	}
 	return entry.kind === 'folder' ? entry.folder.updatedAt : entry.story.updatedAt;
 }

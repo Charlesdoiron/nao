@@ -5,18 +5,21 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import {
 	ArchiveIcon,
 	ArchiveRestoreIcon,
+	ChevronRight,
 	Circle,
 	CircleCheck,
 	FolderInput,
 	Pin,
 	ShieldCheck,
 	Star,
+	ThumbsUp,
 } from 'lucide-react';
 import { useState } from 'react';
 import type { MouseEvent, ReactNode } from 'react';
 import type { StoryPanelDisplayMode } from '@nao/shared/types';
 
 import type { StoryItem } from '@/lib/stories-page';
+import type { StoryFeedbackSentiment } from '@/lib/story-feedback';
 import {
 	AuthorDateLabel,
 	CertifiedBadge,
@@ -31,6 +34,8 @@ import {
 import { ShareStoryDialog } from '@/components/share-dialog.story';
 import { CustomStoryThumbnail } from '@/components/custom-story-thumbnail';
 import { StoryThumbnail } from '@/components/story-thumbnail';
+import { StoryFeedbackCounts } from '@/components/story-feedback-counts';
+import { StoryFeedbackDetails } from '@/components/story-feedback-details';
 import StoryIcon from '@/components/ui/story-icon';
 import { SimpleTooltip } from '@/components/ui/tooltip';
 import { useToggleFavorite } from '@/hooks/use-toggle-favorite';
@@ -63,6 +68,18 @@ export function CertifiedStoriesEmptyState() {
 	);
 }
 
+export function FeedbackStoriesEmptyState() {
+	return (
+		<div className='flex flex-col items-center justify-center py-24 text-center'>
+			<ThumbsUp className='size-10 text-muted-foreground/40 mb-4' />
+			<p className='text-muted-foreground text-sm'>No feedback matches these filters.</p>
+			<p className='text-muted-foreground/60 text-sm mt-1'>
+				Readers can rate stories with a thumbs up or down from the story header.
+			</p>
+		</div>
+	);
+}
+
 export function StoriesEmptyState() {
 	const { isViewer } = usePermissions();
 	return (
@@ -87,6 +104,7 @@ export function StoryCard({
 	selected = false,
 	selectionActive = false,
 	onToggleSelect,
+	feedbackColumn,
 }: {
 	item: StoryItem;
 	displayMode: StoryPanelDisplayMode;
@@ -96,6 +114,7 @@ export function StoryCard({
 	selected?: boolean;
 	selectionActive?: boolean;
 	onToggleSelect?: (storyId: string) => void;
+	feedbackColumn?: StoryFeedbackColumnProps;
 }) {
 	const { isAdmin, isViewer } = usePermissions();
 	const [pinShareDialogOpen, setPinShareDialogOpen] = useState(false);
@@ -150,9 +169,17 @@ export function StoryCard({
 	}
 
 	if (displayMode === 'grid') {
-		const certifiedBadge = item.isCertified && (
-			<div className='absolute top-2 right-2'>
-				<CertifiedBadge certifiedByName={item.certifiedByName} />
+		const feedback = item.feedback && item.feedback.total > 0 ? item.feedback : null;
+		const certifiedBadge = (item.isCertified || feedback) && (
+			<div className='absolute top-2 right-2 flex items-center gap-1.5'>
+				{feedback && (
+					<SimpleTooltip content={`${feedback.up} positive · ${feedback.down} negative`}>
+						<span className='rounded-full border bg-background/90 px-1.5 py-0.5 text-muted-foreground'>
+							<StoryFeedbackCounts summary={feedback} size='xs' showNew={false} />
+						</span>
+					</SimpleTooltip>
+				)}
+				{item.isCertified && <CertifiedBadge certifiedByName={item.certifiedByName} />}
 			</div>
 		);
 
@@ -280,6 +307,7 @@ export function StoryCard({
 						</div>
 					</Link>
 				</div>
+				{feedbackColumn && <StoryFeedbackCell item={item} {...feedbackColumn} />}
 				<div
 					className='w-26 shrink-0 flex items-center justify-end overflow-hidden'
 					onPointerDown={(e) => e.stopPropagation()}
@@ -294,6 +322,13 @@ export function StoryCard({
 					)}
 				</div>
 			</div>
+			{feedbackColumn?.expanded && (
+				<StoryFeedbackDetails
+					storyId={item.storyId}
+					canReview={isOwnedByUser || isAdmin}
+					sentiment={feedbackColumn.sentiment}
+				/>
+			)}
 			{canOpenPinShareDialog && item.chatId && item.storySlug && (
 				<ShareStoryDialog
 					open={pinShareDialogOpen}
@@ -304,6 +339,55 @@ export function StoryCard({
 				/>
 			)}
 		</>
+	);
+}
+
+type StoryFeedbackColumnProps = {
+	expanded: boolean;
+	onToggle: (storyId: string) => void;
+	sentiment?: StoryFeedbackSentiment;
+};
+
+function StoryFeedbackCell({ item, expanded, onToggle }: { item: StoryItem } & StoryFeedbackColumnProps) {
+	const feedback = item.feedback;
+
+	if (!feedback) {
+		return (
+			<div className='hidden sm:block w-28 shrink-0 pl-1.5'>
+				<SimpleTooltip content='Only the owner and admins can see feedback on this story'>
+					<span className='text-xs text-muted-foreground/40'>—</span>
+				</SimpleTooltip>
+			</div>
+		);
+	}
+
+	if (feedback.total === 0) {
+		return <div className='hidden sm:block w-28 shrink-0 pl-1.5 text-xs text-muted-foreground/40'>No ratings</div>;
+	}
+
+	function handleClick(e: MouseEvent<HTMLButtonElement>) {
+		e.preventDefault();
+		e.stopPropagation();
+		onToggle(item.storyId);
+	}
+
+	return (
+		<div className='hidden sm:flex w-28 shrink-0 items-center' onPointerDown={(e) => e.stopPropagation()}>
+			<button
+				type='button'
+				onClick={handleClick}
+				aria-expanded={expanded}
+				aria-label={expanded ? 'Hide feedback' : 'Show feedback'}
+				className={cn(
+					'flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-background cursor-pointer',
+					expanded && 'bg-background',
+				)}
+			>
+				<StoryFeedbackCounts summary={feedback} showNew={false} />
+				{feedback.newCount > 0 && <span className='size-1.5 rounded-full bg-primary' />}
+				<ChevronRight className={cn('size-3 transition-transform', expanded && 'rotate-90')} />
+			</button>
+		</div>
 	);
 }
 

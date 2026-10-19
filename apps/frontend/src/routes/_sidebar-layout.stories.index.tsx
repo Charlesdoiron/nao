@@ -19,6 +19,7 @@ import type { BulkStoryItem, StoryPanelDisplayMode } from '@nao/shared/types';
 import type { CollisionDetection, DragEndEvent, DragStartEvent, Modifier } from '@dnd-kit/core';
 
 import type { FolderItem, SortState, StoriesScope, StoryItem } from '@/lib/stories-page';
+import type { StoryFeedbackFilters } from '@/lib/story-feedback';
 import type { BreadcrumbNode } from '@/components/stories-folder-breadcrumb';
 import { FolderBreadcrumb } from '@/components/stories-folder-breadcrumb';
 import { StoriesSelectionBar } from '@/components/stories-selection-bar';
@@ -32,8 +33,18 @@ import { StoriesExplorer } from '@/components/stories-explorer';
 import { PromotedSections } from '@/components/stories-pinned-favorites';
 import { SearchBar } from '@/components/search-bar';
 import { StoriesToolbarControls } from '@/components/stories-toolbar-controls';
+import { StoriesFeedbackBar } from '@/components/stories-feedback-bar';
+import { usePermissions } from '@/hooks/use-permissions';
 import { useProjectSwitch } from '@/hooks/use-project-switch';
+import { useStoryItemsWithFeedback } from '@/hooks/use-story-feedback';
 import { useSession } from '@/lib/auth-client';
+import {
+	computeStoryFeedbackStats,
+	DEFAULT_STORY_FEEDBACK_FILTERS,
+	hasFeedback,
+	matchesFeedbackFilters,
+	matchesFeedbackOwner,
+} from '@/lib/story-feedback';
 import {
 	buildCurrentLevelEntries,
 	buildStoryItems,
@@ -47,12 +58,20 @@ import {
 import { cn } from '@/lib/utils';
 import { trpc } from '@/main';
 
+type StoriesSearch = {
+	folderId: string | null;
+	feedbackStoryId?: string;
+};
+
 export const Route = createFileRoute('/_sidebar-layout/stories/')({
-	validateSearch: (search: Record<string, unknown>) => ({
+	validateSearch: (search: Record<string, unknown>): StoriesSearch => ({
 		folderId: typeof search.folderId === 'string' ? search.folderId : null,
+		feedbackStoryId: typeof search.feedbackStoryId === 'string' ? search.feedbackStoryId : undefined,
 	}),
 	component: StoriesPage,
 });
+
+const FEEDBACK_SORT: SortState = { field: 'feedback', direction: 'desc' };
 
 const snapCenterToCursor: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
 	if (!draggingNodeRect || !activatorEvent) {
@@ -103,7 +122,8 @@ function StoriesPage() {
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 
-	const { folderId: currentFolderId } = Route.useSearch();
+	const { folderId: currentFolderId, feedbackStoryId } = Route.useSearch();
+	const { isAdmin } = usePermissions();
 
 	const [displayMode, setDisplayMode] = useState<StoryPanelDisplayMode>(() =>
 		getStoredSetting(STORIES_DISPLAY_KEY, ['grid', 'lines'], 'grid'),
@@ -118,6 +138,8 @@ function StoriesPage() {
 	const [selectedStoryIds, setSelectedStoryIds] = useState<Set<string>>(new Set());
 	const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
 	const [selectionMode, setSelectionMode] = useState(false);
+	const [feedbackFilters, setFeedbackFilters] = useState<StoryFeedbackFilters>(DEFAULT_STORY_FEEDBACK_FILTERS);
+	const [expandedFeedbackStoryIds, setExpandedFeedbackStoryIds] = useState<Set<string>>(new Set());
 	const selectionActive = selectionMode || selectedStoryIds.size + selectedFolderIds.size > 0;
 
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
@@ -197,7 +219,35 @@ function StoriesPage() {
 		folderTree.data,
 	]);
 
-	const filteredItems = useMemo(() => filterStories(allItems, searchQuery, scope), [allItems, searchQuery, scope]);
+	const itemsWithFeedback = useStoryItemsWithFeedback(allItems);
+	const isFeedbackScope = scope === 'feedback';
+
+	const filteredItems = useMemo(() => {
+		const scopedItems = filterStories(itemsWithFeedback, searchQuery, scope);
+		return isFeedbackScope
+			? scopedItems.filter((item) => matchesFeedbackFilters(item, feedbackFilters))
+			: scopedItems;
+	}, [itemsWithFeedback, searchQuery, scope, isFeedbackScope, feedbackFilters]);
+
+	const feedbackStats = useMemo(
+		() =>
+			computeStoryFeedbackStats(
+				itemsWithFeedback.filter(
+					(item) => hasFeedback(item) && matchesFeedbackOwner(item, feedbackFilters.owner),
+				),
+			),
+		[itemsWithFeedback, feedbackFilters.owner],
+	);
+	const newFeedbackCount = useMemo(() => computeStoryFeedbackStats(itemsWithFeedback).newCount, [itemsWithFeedback]);
+
+	useEffect(() => {
+		if (!feedbackStoryId) {
+			return;
+		}
+		setScope('feedback');
+		setSort(FEEDBACK_SORT);
+		setExpandedFeedbackStoryIds(new Set([feedbackStoryId]));
+	}, [feedbackStoryId]);
 
 	const folders = useMemo(
 		() => (showArchived ? archivedFolderTree.data : folderTree.data) ?? [],
@@ -285,8 +335,28 @@ function StoriesPage() {
 
 	function handleSortChange(next: SortState) {
 		setSort(next);
+		if (isFeedbackScope) {
+			return;
+		}
 		writeStoredSort(next);
 		localStorage.setItem(STORIES_SORT_KEY, `${next.field}-${next.direction}`);
+	}
+
+	function handleScopeChange(next: StoriesScope) {
+		setScope(next);
+		setSort(next === 'feedback' ? FEEDBACK_SORT : readStoredSort());
+	}
+
+	function toggleFeedbackExpanded(storyId: string) {
+		setExpandedFeedbackStoryIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(storyId)) {
+				next.delete(storyId);
+			} else {
+				next.add(storyId);
+			}
+			return next;
+		});
 	}
 
 	function handleShowArchivedChange(value: boolean) {
@@ -558,7 +628,7 @@ function StoriesPage() {
 	}, [activeId, allItems, folders]);
 
 	const showExplorerControls = !showArchived;
-	const isCertifiedScope = scope === 'certified';
+	const explorerDisplayMode: StoryPanelDisplayMode = isFeedbackScope ? 'lines' : displayMode;
 
 	return (
 		<div className='flex flex-col flex-1 h-full overflow-auto'>
@@ -590,13 +660,14 @@ function StoriesPage() {
 							{(!isEmpty || showArchived) && (
 								<StoriesToolbarControls
 									scope={scope}
-									onScopeChange={setScope}
-									displayMode={displayMode}
+									onScopeChange={handleScopeChange}
+									displayMode={explorerDisplayMode}
 									onDisplayModeChange={handleDisplayChange}
 									showArchived={showArchived}
 									onShowArchivedChange={handleShowArchivedChange}
 									selectionActive={selectionActive}
 									onToggleSelection={toggleSelectionMode}
+									newFeedbackCount={newFeedbackCount}
 								/>
 							)}
 						</div>
@@ -612,7 +683,17 @@ function StoriesPage() {
 						/>
 					)}
 
-					{!showArchived && !isCertifiedScope && (
+					{!showArchived && isFeedbackScope && (
+						<StoriesFeedbackBar
+							stats={feedbackStats}
+							filters={feedbackFilters}
+							onFiltersChange={setFeedbackFilters}
+							showOwnerFilter={isAdmin}
+							className='mb-6'
+						/>
+					)}
+
+					{!showArchived && scope === 'all' && (
 						<PromotedSections
 							pinned={pinned}
 							favorites={promotedFavorites}
@@ -633,13 +714,13 @@ function StoriesPage() {
 
 					{!isEmpty && showExplorerControls && (
 						<div className='mb-2'>
-							<SortHeader value={sort} onChange={handleSortChange} displayMode={displayMode} />
+							<SortHeader value={sort} onChange={handleSortChange} displayMode={explorerDisplayMode} />
 						</div>
 					)}
 
 					<StoriesExplorer
 						entries={entries}
-						displayMode={displayMode}
+						displayMode={explorerDisplayMode}
 						showArchived={showArchived}
 						scope={scope}
 						searchQuery={searchQuery}
@@ -657,6 +738,11 @@ function StoriesPage() {
 						onToggleStory={toggleStorySelection}
 						onToggleFolder={toggleFolderSelection}
 						selectionMode={selectionMode}
+						feedback={{
+							expandedStoryIds: expandedFeedbackStoryIds,
+							onToggle: toggleFeedbackExpanded,
+							sentiment: feedbackFilters.sentiment,
+						}}
 					/>
 
 					<DragOverlay>{activeDragItem && <DragOverlayCard item={activeDragItem} />}</DragOverlay>
