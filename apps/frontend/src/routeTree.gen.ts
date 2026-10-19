@@ -28,6 +28,7 @@ import { Route as SidebarLayoutChatLayoutIndexRouteImport } from './routes/_side
 import { Route as EmbedStoryStoryIdRouteImport } from './routes/embed.story.$storyId'
 import { Route as EmbedMapMapEmbedIdRouteImport } from './routes/embed.map.$mapEmbedId'
 import { Route as EmbedChartChartEmbedIdRouteImport } from './routes/embed.chart.$chartEmbedId'
+import { Route as SidebarLayoutStoriesFeedbackRouteImport } from './routes/_sidebar-layout.stories.feedback'
 import { Route as SidebarLayoutStoriesStoryIdRouteImport } from './routes/_sidebar-layout.stories.$storyId'
 import { Route as SidebarLayoutSharedChatShareIdRouteImport } from './routes/_sidebar-layout.shared-chat.$shareId'
 import { Route as SidebarLayoutSettingsWhiteLabelRouteImport } from './routes/_sidebar-layout.settings.white-label'
@@ -173,6 +174,12 @@ const EmbedChartChartEmbedIdRoute = EmbedChartChartEmbedIdRouteImport.update({
   path: '/chart/$chartEmbedId',
   getParentRoute: () => EmbedRoute,
 } as any)
+const SidebarLayoutStoriesFeedbackRoute =
+  SidebarLayoutStoriesFeedbackRouteImport.update({
+    id: '/stories/feedback',
+    path: '/stories/feedback',
+    getParentRoute: () => SidebarLayoutRoute,
+  } as any)
 const SidebarLayoutStoriesStoryIdRoute =
   SidebarLayoutStoriesStoryIdRouteImport.update({
     id: '/stories/$storyId',
@@ -492,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/settings/white-label': typeof SidebarLayoutSettingsWhiteLabelRoute
   '/shared-chat/$shareId': typeof SidebarLayoutSharedChatShareIdRoute
   '/stories/$storyId': typeof SidebarLayoutStoriesStoryIdRoute
+  '/stories/feedback': typeof SidebarLayoutStoriesFeedbackRoute
   '/embed/chart/$chartEmbedId': typeof EmbedChartChartEmbedIdRoute
   '/embed/map/$mapEmbedId': typeof EmbedMapMapEmbedIdRoute
   '/embed/story/$storyId': typeof EmbedStoryStoryIdRoute
@@ -556,6 +564,7 @@ export interface FileRoutesByTo {
   '/settings/white-label': typeof SidebarLayoutSettingsWhiteLabelRoute
   '/shared-chat/$shareId': typeof SidebarLayoutSharedChatShareIdRoute
   '/stories/$storyId': typeof SidebarLayoutStoriesStoryIdRoute
+  '/stories/feedback': typeof SidebarLayoutStoriesFeedbackRoute
   '/embed/chart/$chartEmbedId': typeof EmbedChartChartEmbedIdRoute
   '/embed/map/$mapEmbedId': typeof EmbedMapMapEmbedIdRoute
   '/embed/story/$storyId': typeof EmbedStoryStoryIdRoute
@@ -623,6 +632,7 @@ export interface FileRoutesById {
   '/_sidebar-layout/settings/white-label': typeof SidebarLayoutSettingsWhiteLabelRoute
   '/_sidebar-layout/shared-chat/$shareId': typeof SidebarLayoutSharedChatShareIdRoute
   '/_sidebar-layout/stories/$storyId': typeof SidebarLayoutStoriesStoryIdRoute
+  '/_sidebar-layout/stories/feedback': typeof SidebarLayoutStoriesFeedbackRoute
   '/embed/chart/$chartEmbedId': typeof EmbedChartChartEmbedIdRoute
   '/embed/map/$mapEmbedId': typeof EmbedMapMapEmbedIdRoute
   '/embed/story/$storyId': typeof EmbedStoryStoryIdRoute
@@ -693,6 +703,7 @@ export interface FileRouteTypes {
     | '/settings/white-label'
     | '/shared-chat/$shareId'
     | '/stories/$storyId'
+    | '/stories/feedback'
     | '/embed/chart/$chartEmbedId'
     | '/embed/map/$mapEmbedId'
     | '/embed/story/$storyId'
@@ -757,6 +768,7 @@ export interface FileRouteTypes {
     | '/settings/white-label'
     | '/shared-chat/$shareId'
     | '/stories/$storyId'
+    | '/stories/feedback'
     | '/embed/chart/$chartEmbedId'
     | '/embed/map/$mapEmbedId'
     | '/embed/story/$storyId'
@@ -823,6 +835,7 @@ export interface FileRouteTypes {
     | '/_sidebar-layout/settings/white-label'
     | '/_sidebar-layout/shared-chat/$shareId'
     | '/_sidebar-layout/stories/$storyId'
+    | '/_sidebar-layout/stories/feedback'
     | '/embed/chart/$chartEmbedId'
     | '/embed/map/$mapEmbedId'
     | '/embed/story/$storyId'
@@ -1008,6 +1021,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/embed/chart/$chartEmbedId'
       preLoaderRoute: typeof EmbedChartChartEmbedIdRouteImport
       parentRoute: typeof EmbedRoute
+    }
+    '/_sidebar-layout/stories/feedback': {
+      id: '/_sidebar-layout/stories/feedback'
+      path: '/stories/feedback'
+      fullPath: '/stories/feedback'
+      preLoaderRoute: typeof SidebarLayoutStoriesFeedbackRouteImport
+      parentRoute: typeof SidebarLayoutRoute
     }
     '/_sidebar-layout/stories/$storyId': {
       id: '/_sidebar-layout/stories/$storyId'
@@ -1556,6 +1576,7 @@ interface SidebarLayoutRouteChildren {
   SidebarLayoutAutomationsAutomationIdRoute: typeof SidebarLayoutAutomationsAutomationIdRoute
   SidebarLayoutSharedChatShareIdRoute: typeof SidebarLayoutSharedChatShareIdRoute
   SidebarLayoutStoriesStoryIdRoute: typeof SidebarLayoutStoriesStoryIdRoute
+  SidebarLayoutStoriesFeedbackRoute: typeof SidebarLayoutStoriesFeedbackRoute
   SidebarLayoutFeedIndexRoute: typeof SidebarLayoutFeedIndexRoute
   SidebarLayoutStoriesIndexRoute: typeof SidebarLayoutStoriesIndexRoute
   SidebarLayoutStoriesSharedShareIdRoute: typeof SidebarLayoutStoriesSharedShareIdRoute
@@ -1571,6 +1592,7 @@ const SidebarLayoutRouteChildren: SidebarLayoutRouteChildren = {
     SidebarLayoutAutomationsAutomationIdRoute,
   SidebarLayoutSharedChatShareIdRoute: SidebarLayoutSharedChatShareIdRoute,
   SidebarLayoutStoriesStoryIdRoute: SidebarLayoutStoriesStoryIdRoute,
+  SidebarLayoutStoriesFeedbackRoute: SidebarLayoutStoriesFeedbackRoute,
   SidebarLayoutFeedIndexRoute: SidebarLayoutFeedIndexRoute,
   SidebarLayoutStoriesIndexRoute: SidebarLayoutStoriesIndexRoute,
   SidebarLayoutStoriesSharedShareIdRoute:
