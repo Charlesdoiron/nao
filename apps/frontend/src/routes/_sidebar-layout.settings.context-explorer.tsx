@@ -7,6 +7,7 @@ import type { FileSelectionOptions } from '@/components/settings/file-tree';
 
 import { ContextFileDiff } from '@/components/settings/context-file-diff';
 import { ContextGitPanel } from '@/components/settings/context-git-panel';
+import { ContextTestsPanel, ContextTestsToggle } from '@/components/settings/context-tests-panel';
 import { FileTree } from '@/components/settings/file-tree';
 import { FileViewer } from '@/components/settings/file-viewer';
 import {
@@ -34,6 +35,7 @@ import { requireContextAdminOrAdmin } from '@/lib/route-guards';
 import { trpc } from '@/main';
 
 const contentSearchStorage = createLocalStorage<boolean>('nao-file-explorer-content-search', true);
+const testsPanelStorage = createLocalStorage<boolean>('nao-file-explorer-tests-panel-open', true);
 
 type ViewerTarget = { type: 'file'; path: string; openSource: boolean } | { type: 'diff'; path: string };
 type SourceAutoOpenRequest = { path: string; id: number };
@@ -62,6 +64,7 @@ function ContextExplorerPage() {
 	const [isViewerDirty, setIsViewerDirty] = useState(false);
 	const [search, setSearch] = useState('');
 	const [isContentSearchEnabled, setIsContentSearchEnabled] = useLocalStorage(contentSearchStorage);
+	const [isTestsPanelOpen, setIsTestsPanelOpen] = useLocalStorage(testsPanelStorage);
 	const trimmedSearch = search.trim();
 	const contentSearchQuery = trimmedSearch.slice(0, 200);
 	const debouncedSearch = useDebouncedValue(contentSearchQuery, 250);
@@ -296,44 +299,63 @@ function ContextExplorerPage() {
 				<ResizableSeparator />
 
 				<ResizablePanel id='viewer' minSize={300}>
-					<div className='h-full bg-background'>
-						{historicalDiff ? (
-							<ContextFileDiff
-								path={historicalDiff.path}
-								range={{ from: historicalDiff.from, to: historicalDiff.to }}
-							/>
-						) : selectedDiffPath ? (
-							<ContextFileDiff path={selectedDiffPath} />
-						) : (
-							<FileViewer
-								key={`${selectedPath ?? 'empty'}:${viewerRevision}`}
+					<div className='flex h-full bg-background'>
+						<div className='h-full min-w-0 flex-1'>
+							{historicalDiff ? (
+								<ContextFileDiff
+									path={historicalDiff.path}
+									range={{ from: historicalDiff.from, to: historicalDiff.to }}
+								/>
+							) : selectedDiffPath ? (
+								<ContextFileDiff path={selectedDiffPath} />
+							) : (
+								<FileViewer
+									key={`${selectedPath ?? 'empty'}:${viewerRevision}`}
+									filePath={selectedPath}
+									content={fileContent.data?.content}
+									hash={fileContent.data?.hash}
+									isLoading={fileContent.isLoading && fileContent.fetchStatus !== 'idle'}
+									isError={fileContent.isError && !fileContent.data}
+									isEditable={fileContent.data?.isEditable === true}
+									editabilityGuidance={fileContent.data?.guidance ?? null}
+									searchQuery={shouldSearchContent ? debouncedSearch : ''}
+									sourceAutoOpenRequestId={
+										sourceAutoOpenRequest?.path === selectedPath ? sourceAutoOpenRequest.id : null
+									}
+									onDirtyChange={setIsViewerDirty}
+									onOpenGuidancePath={(path, kind) => {
+										if (kind === 'route') {
+											void navigate({ to: path });
+											return;
+										}
+										requestViewerTarget({ type: 'file', path, openSource: false });
+									}}
+									onReload={async () => {
+										const result = await fileContent.refetch();
+										if (result.error) {
+											throw result.error;
+										}
+										return result.data;
+									}}
+									rulesPreviewGroups={rulesPreviewGroupsState}
+									headerActions={
+										selectedPath && (
+											<ContextTestsToggle
+												filePath={selectedPath}
+												isOpen={isTestsPanelOpen}
+												onToggle={() => setIsTestsPanelOpen(!isTestsPanelOpen)}
+											/>
+										)
+									}
+								/>
+							)}
+						</div>
+						{isTestsPanelOpen && selectedPath && !selectedDiffPath && !historicalDiff && (
+							<ContextTestsPanel
+								key={selectedPath}
 								filePath={selectedPath}
-								content={fileContent.data?.content}
-								hash={fileContent.data?.hash}
-								isLoading={fileContent.isLoading && fileContent.fetchStatus !== 'idle'}
-								isError={fileContent.isError && !fileContent.data}
-								isEditable={fileContent.data?.isEditable === true}
-								editabilityGuidance={fileContent.data?.guidance ?? null}
-								searchQuery={shouldSearchContent ? debouncedSearch : ''}
-								sourceAutoOpenRequestId={
-									sourceAutoOpenRequest?.path === selectedPath ? sourceAutoOpenRequest.id : null
-								}
-								onDirtyChange={setIsViewerDirty}
-								onOpenGuidancePath={(path, kind) => {
-									if (kind === 'route') {
-										void navigate({ to: path });
-										return;
-									}
-									requestViewerTarget({ type: 'file', path, openSource: false });
-								}}
-								onReload={async () => {
-									const result = await fileContent.refetch();
-									if (result.error) {
-										throw result.error;
-									}
-									return result.data;
-								}}
-								rulesPreviewGroups={rulesPreviewGroupsState}
+								hasUnsavedEdits={isViewerDirty}
+								onClose={() => setIsTestsPanelOpen(false)}
 							/>
 						)}
 					</div>

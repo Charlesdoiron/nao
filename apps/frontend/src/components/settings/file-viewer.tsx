@@ -4,6 +4,7 @@ import { Code, File, Loader2, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDefaultLayout } from 'react-resizable-panels';
 import { Streamdown } from 'streamdown';
+import type { ReactNode } from 'react';
 import type { UserRulesGroupAccess } from '@nao/shared/rules-template';
 import type { FileEditabilityGuidance } from '@nao/shared/types';
 
@@ -66,6 +67,7 @@ interface FileViewerProps {
 	onOpenGuidancePath: (path: string, kind: 'file' | 'route') => void;
 	onReload: () => Promise<FileContents | undefined>;
 	rulesPreviewGroups: RulesPreviewGroupsState;
+	headerActions?: ReactNode;
 }
 
 interface FileSaveError {
@@ -89,6 +91,7 @@ export function FileViewer({
 	onOpenGuidancePath,
 	onReload,
 	rulesPreviewGroups,
+	headerActions,
 }: FileViewerProps) {
 	if (!filePath) {
 		return (
@@ -129,6 +132,7 @@ export function FileViewer({
 			onOpenGuidancePath={onOpenGuidancePath}
 			onReload={onReload}
 			rulesPreviewGroups={rulesPreviewGroups}
+			headerActions={headerActions}
 		/>
 	);
 }
@@ -145,6 +149,7 @@ function EditableFileViewer({
 	onOpenGuidancePath,
 	onReload,
 	rulesPreviewGroups,
+	headerActions,
 }: Pick<
 	FileViewerProps,
 	| 'filePath'
@@ -158,6 +163,7 @@ function EditableFileViewer({
 	| 'onOpenGuidancePath'
 	| 'onReload'
 	| 'rulesPreviewGroups'
+	| 'headerActions'
 > & {
 	filePath: string;
 	content: string;
@@ -333,7 +339,7 @@ function EditableFileViewer({
 						<span className='block truncate text-xs leading-4 opacity-60'>{filePath}</span>
 					</div>
 				</div>
-				{(isEditable || isMarkdown) && (
+				{(isEditable || isMarkdown || headerActions) && (
 					<div className='flex shrink-0 items-center gap-2'>
 						{isEditable && isDirty && (
 							<span className='flex shrink-0 items-center gap-1 text-xs text-amber-600 dark:text-amber-400'>
@@ -344,6 +350,7 @@ function EditableFileViewer({
 						{isMarkdown && parsedMarkdownDraft.label !== null && (
 							<span className='shrink-0 text-xs text-muted-foreground'>{parsedMarkdownDraft.label}</span>
 						)}
+						{headerActions}
 						{isMarkdown && <SourceToggle isOpen={isSourceOpen} onChange={handleSourceToggle} />}
 						{isEditable && (
 							<Button
