@@ -551,8 +551,15 @@
     {
       "idx": 78,
       "version": "7",
-      "when": 1791882441600,
-      "tag": "0078_managed_ai_usage_wallet",
+      "when": 1792154736384,
+      "tag": "0078_add_discord",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1792415002848,
+      "tag": "0079_managed_ai_usage_wallet",
       "breakpoints": true
     }
   ]

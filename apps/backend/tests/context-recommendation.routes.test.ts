@@ -91,6 +91,19 @@ describe('context recommendation routes', () => {
 		expect(mocks.getProjectAvailableModels).toHaveBeenCalledWith('project-id');
 	});
 
+	it('attributes manual runs to the user who triggered them', async () => {
+		mocks.assertOrganizationCloudBillingAccess.mockResolvedValue(undefined);
+		mocks.runContextRecommendations.mockResolvedValue({ runId: 'run-id' });
+
+		await expect(caller().contextRecommendation.run()).resolves.toEqual({ started: true });
+
+		expect(mocks.runContextRecommendations).toHaveBeenCalledWith('project-id', {
+			billingAccessVerifiedProjectId: 'project-id',
+			trigger: 'manual',
+			triggeredByUserId: 'user-id',
+		});
+	});
+
 	it('keeps reads available when billing access is restricted', async () => {
 		const latestRun = { id: 'run-id', status: 'completed' };
 		mocks.getLatestRun.mockResolvedValue(latestRun);

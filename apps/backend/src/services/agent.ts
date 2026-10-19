@@ -1,4 +1,4 @@
-import type { CustomBoundarySet } from '@nao/shared';
+import { type CustomBoundarySet, normalizeCitationMarkers } from '@nao/shared';
 import { fileExtension } from '@nao/shared/attachments';
 import { markSupersededExecuteSqlParts } from '@nao/shared/execute-sql-parts';
 import { story } from '@nao/shared/tools';
@@ -8,7 +8,6 @@ import {
 	createUIMessageStream,
 	FinishReason,
 	generateText,
-	hasToolCall,
 	InferUIMessageChunk,
 	ModelMessage,
 	pruneMessages,
@@ -21,6 +20,7 @@ import {
 
 import type { ManagedAiUsageContext } from '../agents/managed-ai';
 import { disableModelReasoning, fitThinkingBudget, getProviderMeta, ProviderModelResult } from '../agents/providers';
+import { interactiveStopConditions } from '../agents/stop-conditions';
 import { getSystemPromptOverride, hasNaoPromptPlaceholder, injectNaoPrompt } from '../agents/system-prompts';
 import { llmTelemetry } from '../agents/telemetry';
 import { getTools } from '../agents/tools';
@@ -57,6 +57,7 @@ import {
 	settleToolParts,
 } from '../utils/ai';
 import { assertBudgetNotExceeded } from '../utils/budget';
+import { normalizeCitationMarkersStream } from '../utils/citation-markers-stream';
 import { HandlerError } from '../utils/error';
 import {
 	getProjectDeclaredModels,
@@ -373,7 +374,7 @@ export class AgentService {
 		const agentTools = resolvedTools;
 		const stopWhen: StopCondition<AgentTools>[] = options.excludeFollowUps
 			? [stepCountIs(options.maxSteps ?? 20)]
-			: [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')];
+			: interactiveStopConditions;
 		const agent = new AgentManager(
 			chat,
 			modelConfig,
@@ -477,7 +478,7 @@ export class AgentManager {
 		private readonly _toolContext: ToolContext,
 		private readonly _userGroupAccess: AgentUserGroupAccess,
 		private readonly _usageContext: ManagedAiUsageContext,
-		stopWhen: StopCondition<AgentTools>[] = [hasToolCall('suggest_follow_ups'), hasToolCall('clarification')],
+		stopWhen: StopCondition<AgentTools>[] = interactiveStopConditions,
 		private readonly _systemPromptOverride?: string,
 	) {
 		this._finished = new Promise((resolve) => {
@@ -631,6 +632,7 @@ export class AgentManager {
 				result = await this._agent.stream({
 					messages,
 					abortSignal: this._abortController.signal,
+					experimental_transform: normalizeCitationMarkersStream(),
 				});
 
 				// Extract memory immediately after the request to the agent is sent
@@ -941,7 +943,7 @@ export class AgentManager {
 			const finishReason = result.finishReason ?? 'stop';
 
 			return {
-				text: result.text,
+				text: normalizeCitationMarkers(result.text),
 				usage,
 				cost,
 				finishReason,

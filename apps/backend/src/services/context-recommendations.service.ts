@@ -40,6 +40,7 @@ export async function runContextRecommendations(
 	options?: {
 		billingAccessVerifiedProjectId?: string;
 		trigger?: 'schedule' | 'manual';
+		triggeredByUserId?: string;
 		period?: { start?: Date; end?: Date };
 	},
 ): Promise<{ runId: string }> {
@@ -48,7 +49,7 @@ export async function runContextRecommendations(
 	const periodEnd = period?.end ?? now;
 	const periodStart = period?.start ?? (await resolvePeriodStart(projectId, periodEnd));
 
-	const userId = await crQueries.getFirstProjectAdminUserId(projectId);
+	const userId = options?.triggeredByUserId ?? (await crQueries.getFirstProjectAdminUserId(projectId));
 	const config = await crQueries.getConfig(projectId);
 	const configuredModel = await resolveDefaultModelSelection(projectId, 'context_recommendation');
 	const model = await agentService.resolveModelSelection(projectId, configuredModel ?? undefined);
