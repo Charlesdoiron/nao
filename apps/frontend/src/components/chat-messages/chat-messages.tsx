@@ -14,6 +14,7 @@ import {
 	checkIsLastMessageStreaming,
 	getLastFollowUpSuggestionsToolCall,
 	checkIsSomeToolsExecuting,
+	isOnboardingContextRequestMessage,
 } from '@/lib/ai';
 import {
 	Conversation,
@@ -67,7 +68,11 @@ export const ChatMessagesContent = memo(function ChatMessagesContent() {
 		skipDebounce: (value) => !value, // Skip debounce if the value equals `false` to immediately remove the loader
 	});
 	const followUpSuggestionsToolCall = useMemo(() => getLastFollowUpSuggestionsToolCall(messages), [messages]);
-	const visibleMessages = useVisibleMessages(messages);
+	const displayableMessages = useMemo(
+		() => messages.filter((message) => !isOnboardingContextRequestMessage(message)),
+		[messages],
+	);
+	const visibleMessages = useVisibleMessages(displayableMessages);
 	const messageGroups = useMemo(() => groupMessages(visibleMessages), [visibleMessages]);
 	const lastMessageId = visibleMessages.at(-1)?.id;
 
