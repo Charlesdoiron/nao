@@ -9,6 +9,7 @@ import type { UIMessage } from '@nao/backend/chat';
 import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
 import { ExampleProjectPromptCard } from '@/components/example-project-info-card';
+import { HeaderAnnouncement } from '@/components/header-announcement';
 import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestions';
 import { MobileHeader } from '@/components/mobile-header';
 import { ProjectSwitcher } from '@/components/project-selector';
@@ -138,6 +139,9 @@ function HomePage() {
 	return (
 		<div className='relative flex flex-col h-full flex-1 min-w-72 overflow-hidden justify-center'>
 			<MobileHeader showExampleProjectInfo={showExampleProject} />
+			<div className='pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-4 max-md:hidden'>
+				<HeaderAnnouncement className='pointer-events-auto' />
+			</div>
 			{isEmptyState &&
 				!showExampleProject &&
 				multiProjectMode === 'switch' &&

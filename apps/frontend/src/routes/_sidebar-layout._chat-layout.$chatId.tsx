@@ -13,6 +13,7 @@ import { DEFAULT_USAGE_SEARCH } from '@/components/settings/usage-route-search';
 import { ChatAccessError } from '@/components/chat-access-error';
 import { ChatArtifactsMenu } from '@/components/chat-artifacts-menu';
 import { ExampleProjectInfoCard } from '@/components/example-project-info-card';
+import { HeaderAnnouncement } from '@/components/header-announcement';
 import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
 import { HighlightBubble } from '@/components/highlight-bubble';
@@ -248,6 +249,9 @@ function ChatPage() {
 										)}
 									</Badge>
 								)}
+							</div>
+							<div className='flex min-w-0 flex-1 justify-center px-4'>
+								<HeaderAnnouncement />
 							</div>
 							<div className='flex items-center justify-end gap-2'>
 								{isExampleChat && !chat.data?.isOnboarding && <ExampleProjectInfoCard compact />}
