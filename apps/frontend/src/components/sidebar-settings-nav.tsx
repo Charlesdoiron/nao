@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, Search, X } from 'lucide-react';
+import { ArrowUpRight, Lock, Search, X } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,7 @@ interface NavItem {
 interface NavGroup {
 	label: string;
 	items: NavItem[];
+	requiresAdvancedSettings?: boolean;
 }
 
 const settingsNavGroups: NavGroup[] = [
@@ -46,6 +47,7 @@ const settingsNavGroups: NavGroup[] = [
 	},
 	{
 		label: 'Project',
+		requiresAdvancedSettings: true,
 		items: [
 			{
 				label: 'Project Settings',
@@ -86,6 +88,7 @@ const settingsNavGroups: NavGroup[] = [
 	},
 	{
 		label: 'Context',
+		requiresAdvancedSettings: true,
 		items: [
 			{
 				label: 'Git',
@@ -106,6 +109,7 @@ const settingsNavGroups: NavGroup[] = [
 	},
 	{
 		label: 'Observability',
+		requiresAdvancedSettings: true,
 		items: [
 			{
 				label: 'Chat with nao data',
@@ -134,6 +138,7 @@ const settingsNavGroups: NavGroup[] = [
 	},
 	{
 		label: 'Organization',
+		requiresAdvancedSettings: true,
 		items: [
 			{
 				label: 'Organization Settings',
@@ -179,6 +184,7 @@ interface SidebarSettingsNavProps {
 	isCloudBillingEnabled: boolean;
 	isOrgAdmin: boolean;
 	isTrial: boolean;
+	hasAdvancedSettings: boolean;
 }
 
 export function SidebarSettingsNav({
@@ -190,6 +196,7 @@ export function SidebarSettingsNav({
 	isCloudBillingEnabled,
 	isOrgAdmin,
 	isTrial,
+	hasAdvancedSettings,
 }: SidebarSettingsNavProps) {
 	const navigate = useNavigate();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +212,7 @@ export function SidebarSettingsNav({
 		isViewer,
 	};
 	const navGroups = settingsNavGroups
+		.filter((group) => !group.requiresAdvancedSettings || hasAdvancedSettings)
 		.map((group) => ({
 			...group,
 			items: group.items.filter(
@@ -395,9 +403,19 @@ export function SidebarSettingsNav({
 								})}
 							</Fragment>
 						))}
+						{!hasAdvancedSettings && !isViewer && <AdvancedSettingsHint />}
 					</nav>
 				)}
 			</div>
+		</div>
+	);
+}
+
+function AdvancedSettingsHint() {
+	return (
+		<div className='mx-2 mt-4 flex gap-2 rounded-md border border-dashed px-2.5 py-2 text-[11px] leading-4 text-muted-foreground'>
+			<Lock aria-hidden='true' className='mt-px size-3 shrink-0' />
+			<span>Project and organization settings are managed by your admins.</span>
 		</div>
 	);
 }

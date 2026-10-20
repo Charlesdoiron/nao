@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCommandMenuCallback } from '@/contexts/command-menu-callback';
 import { useSidebar } from '@/contexts/sidebar';
+import { useAdvancedSettingsAccess } from '@/hooks/use-advanced-settings-access';
 import { brandingAssetUrl, useBranding } from '@/hooks/use-branding';
 import { useChatViewPreferences } from '@/hooks/use-chat-view-preferences';
 import { useIsCloud } from '@/hooks/use-nao-mode';
@@ -56,6 +57,7 @@ export function Sidebar() {
 	const branding = useBranding();
 	const customColor = branding.enabled ? branding.brandColor : null;
 	const { isAdmin, isContextAdmin, isOrgAdmin, isViewer } = usePermissions();
+	const hasAdvancedSettings = useAdvancedSettingsAccess();
 	const isCloud = useIsCloud();
 	const betaAutomationsEnabled = config.data?.betaAutomationsEnabled === true;
 	const showAutomations = !isViewer && betaAutomationsEnabled;
@@ -269,6 +271,7 @@ export function Sidebar() {
 					isCloudBillingEnabled={config.data?.cloudBillingEnabled === true}
 					isOrgAdmin={isOrgAdmin}
 					isTrial={project.data === null}
+					hasAdvancedSettings={hasAdvancedSettings}
 				/>
 			) : (
 				<>

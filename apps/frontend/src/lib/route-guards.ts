@@ -1,5 +1,6 @@
 import { redirect } from '@tanstack/react-router';
 
+import { hasAdvancedSettingsAccess, isUserSettingsPage } from '@/lib/advanced-settings-access';
 import { queryClient, trpc } from '@/main';
 
 export async function requireAdmin() {
@@ -52,6 +53,23 @@ export async function requireNonViewer() {
 	const project = await queryClient.ensureQueryData(trpc.project.getCurrent.queryOptions());
 	if (!project || project.userRole === 'viewer') {
 		throw redirect({ to: '/settings/account' });
+	}
+}
+
+export async function requireAdvancedSettingsForPage({ location }: { location: { pathname: string } }) {
+	if (isUserSettingsPage(location.pathname)) {
+		return;
+	}
+	const project = await queryClient.ensureQueryData(trpc.project.getCurrent.queryOptions());
+	if (!project) {
+		return;
+	}
+	const access =
+		project.userRole === 'user'
+			? await queryClient.ensureQueryData(trpc.userGroup.effectiveAccess.queryOptions())
+			: undefined;
+	if (!hasAdvancedSettingsAccess(project.userRole ?? undefined, access?.features)) {
+		throw redirect({ to: '/settings/account', search: { restricted: true } });
 	}
 }
 

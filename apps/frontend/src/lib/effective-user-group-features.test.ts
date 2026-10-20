@@ -7,6 +7,7 @@ const effectiveAccess = {
 		storyCreation: true,
 		customStoryCreation: false,
 		automationCreation: false,
+		advancedSettings: false,
 	},
 	toolCallDensityPolicy: {
 		defaultDensity: 'compact' as const,
@@ -25,6 +26,7 @@ describe('getRenderableUserGroupAccess', () => {
 				storyCreation: false,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'detailed',
@@ -39,6 +41,7 @@ describe('getRenderableUserGroupAccess', () => {
 				storyCreation: false,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'detailed',
@@ -53,6 +56,7 @@ describe('getRenderableUserGroupAccess', () => {
 				storyCreation: true,
 				customStoryCreation: true,
 				automationCreation: false,
+				advancedSettings: true,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'detailed',

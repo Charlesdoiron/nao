@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Lock } from 'lucide-react';
 import { useState } from 'react';
 import type { UserRole } from '@nao/shared/types';
 
 import type { TeamMember } from '@/components/settings/team';
 import { EditMemberDialog } from '@/components/settings/team';
+import { Callout } from '@/components/ui/callout';
 import { NewsletterSubscribeInlineForm } from '@/components/newsletter-subscribe';
 import { signOut, useSession } from '@/lib/auth-client';
 import { SettingsVersionInfo } from '@/components/settings/version-info';
@@ -23,10 +25,14 @@ import { SettingsControlRow, SettingsToggleRow } from '@/components/ui/settings-
 import { trpc } from '@/main';
 
 export const Route = createFileRoute('/_sidebar-layout/settings/account')({
+	validateSearch: (search: Record<string, unknown>): { restricted?: boolean } => ({
+		restricted: search.restricted === true || search.restricted === 'true' ? true : undefined,
+	}),
 	component: GeneralPage,
 });
 
 function GeneralPage() {
+	const { restricted } = Route.useSearch();
 	const navigate = useNavigate();
 	const { data: session, refetch } = useSession();
 	const user = session?.user;
@@ -79,6 +85,13 @@ function GeneralPage() {
 					<h1 className='text-lg font-semibold text-foreground'>Account</h1>
 					<p className='text-sm text-muted-foreground'>Manage your account and session.</p>
 				</div>
+				{restricted && (
+					<Callout icon={Lock} className='text-xs' role='status'>
+						<span className='font-medium text-foreground'>That page is part of the advanced settings.</span>{' '}
+						Your user group only gives access to your own settings. Ask a project admin if you need more
+						access.
+					</Callout>
+				)}
 				<div className='flex flex-col gap-12'>
 					<UserProfileCard
 						name={user?.name}

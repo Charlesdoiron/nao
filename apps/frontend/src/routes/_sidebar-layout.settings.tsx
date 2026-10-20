@@ -1,7 +1,9 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { MobileHeader } from '@/components/mobile-header';
+import { requireAdvancedSettingsForPage } from '@/lib/route-guards';
 
 export const Route = createFileRoute('/_sidebar-layout/settings')({
+	beforeLoad: requireAdvancedSettingsForPage,
 	component: SettingsLayout,
 });
 
