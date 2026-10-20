@@ -96,7 +96,7 @@ describe('buildChart horizontal bars', () => {
 
 		expect(yAxis?.props.tickFormatter?.(label)).toBe(label);
 		expect(yAxis?.props.width).toBeLessThanOrEqual(180);
-		expect(ticks[0].lines).toEqual(['Enterprise Customer', 'Success Management', 'Program']);
+		expect(ticks[0].lines).toEqual(['Enterprise', 'Customer Success', 'Management Program']);
 		expect(ticks[1].lines).toEqual(['Short']);
 		expect(html).not.toContain('…');
 	});
@@ -481,6 +481,10 @@ describe('wrapCategoryLabel', () => {
 			'Enterprise Customer',
 			'Success Management',
 		]);
+	});
+
+	it('balances line lengths instead of leaving a lone word on the last line', () => {
+		expect(wrapCategoryLabel('Dashboard Export To PDF Fails', 24, 3)).toEqual(['Dashboard Export', 'To PDF Fails']);
 	});
 
 	it('splits words longer than a line', () => {

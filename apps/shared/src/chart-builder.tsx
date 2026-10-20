@@ -119,7 +119,7 @@ const HORIZONTAL_BAR_CATEGORY_AXIS_MAX_WIDTH = 180;
 const HORIZONTAL_BAR_CATEGORY_LINE_CHARS = 24;
 const HORIZONTAL_BAR_CATEGORY_MAX_LINES = 3;
 const HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT = 14;
-const HORIZONTAL_BAR_ROW_GAP = 10;
+const HORIZONTAL_BAR_ROW_GAP = 16;
 const HORIZONTAL_BAR_MAX_PLOT_HEIGHT = 720;
 const HORIZONTAL_BAR_SIZE = 10;
 const HORIZONTAL_BAR_MAX_SIZE = 28;
@@ -832,8 +832,9 @@ export function computeHorizontalBarMinPlotHeight(
 }
 
 /**
- * Greedily word-wraps a label into at most `maxLines` lines of `maxLineChars` characters.
- * Words longer than a line are split; when the label still overflows, the last line ends with `…`.
+ * Word-wraps a label into at most `maxLines` lines of `maxLineChars` characters, balancing
+ * line lengths so a lone word is not left on the last line. Words longer than a line are
+ * split; when the label still overflows, the last line ends with `…`.
  */
 export function wrapCategoryLabel(label: string, maxLineChars: number, maxLines: number): string[] {
 	const words = label
@@ -841,6 +842,17 @@ export function wrapCategoryLabel(label: string, maxLineChars: number, maxLines:
 		.split(/\s+/)
 		.filter(Boolean)
 		.flatMap((word) => splitLongWord(word, maxLineChars));
+	if (words.length === 0) {
+		return [''];
+	}
+	const lines = fillLines(words, maxLineChars);
+	if (lines.length > maxLines) {
+		return truncateLines(lines, maxLineChars, maxLines);
+	}
+	return balanceLines(words, lines, maxLineChars);
+}
+
+function fillLines(words: string[], maxLineChars: number): string[] {
 	const lines: string[] = [];
 	for (const word of words) {
 		const currentLine = lines.at(-1);
@@ -850,9 +862,21 @@ export function wrapCategoryLabel(label: string, maxLineChars: number, maxLines:
 			lines.push(word);
 		}
 	}
-	if (lines.length <= maxLines) {
-		return lines.length > 0 ? lines : [''];
+	return lines;
+}
+
+function balanceLines(words: string[], lines: string[], maxLineChars: number): string[] {
+	const longestWordLength = Math.max(...words.map((word) => word.length));
+	for (let lineChars = longestWordLength; lineChars < maxLineChars; lineChars++) {
+		const candidate = fillLines(words, lineChars);
+		if (candidate.length === lines.length) {
+			return candidate;
+		}
 	}
+	return lines;
+}
+
+function truncateLines(lines: string[], maxLineChars: number, maxLines: number): string[] {
 	const visibleLines = lines.slice(0, maxLines);
 	const lastLine = visibleLines[maxLines - 1];
 	visibleLines[maxLines - 1] = `${lastLine.slice(0, Math.max(1, maxLineChars - 1)).trimEnd()}…`;

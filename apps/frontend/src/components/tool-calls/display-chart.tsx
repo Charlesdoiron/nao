@@ -73,7 +73,8 @@ const ANGLE_SIN = Math.sin((35 * Math.PI) / 180);
 const MIN_TICK_FONT = 9;
 const MAX_TICK_FONT = 12;
 const MAX_TICK_LABEL_HEIGHT = 44;
-const HORIZONTAL_BAR_LEGEND_AND_AXIS_HEIGHT = 56;
+const HORIZONTAL_BAR_LEGEND_HEIGHT = 36;
+const HORIZONTAL_BAR_VALUE_AXIS_HEIGHT = 30;
 
 type ViewMode = 'chart' | 'data' | 'query';
 
@@ -839,7 +840,7 @@ function computeHorizontalBarContentMinHeight(
 	if (minPlotHeight === 0) {
 		return 0;
 	}
-	return minPlotHeight + (seriesCount > 1 ? HORIZONTAL_BAR_LEGEND_AND_AXIS_HEIGHT : 0);
+	return minPlotHeight + HORIZONTAL_BAR_LEGEND_HEIGHT + (seriesCount > 1 ? HORIZONTAL_BAR_VALUE_AXIS_HEIGHT : 0);
 }
 
 interface ChartPlotWidthObserverProps {
