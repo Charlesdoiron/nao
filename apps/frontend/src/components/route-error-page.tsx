@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,7 @@ export function RouteErrorPage({ fullScreen = false }: { fullScreen?: boolean })
 						<Button onClick={() => window.location.reload()}>Reload app</Button>
 					) : (
 						<Button asChild>
-							<a href='/'>Return to home</a>
+							{fullScreen ? <a href='/'>Return to home</a> : <Link to='/'>Return to home</Link>}
 						</Button>
 					)}
 				</div>
