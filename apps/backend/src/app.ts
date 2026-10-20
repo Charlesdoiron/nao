@@ -73,6 +73,7 @@ import { testRoutes } from './routes/test';
 import { whatsappRoutes } from './routes/whatsapp';
 import { reconcileOrganizationSetupGrants } from './services/credit-grant.service';
 import { discordService } from './services/discord';
+import { ensureSystemExampleProject } from './services/example-project';
 import { startLicenseHeartbeat } from './services/license.service';
 import { logLicenseStatus } from './services/license-startup';
 import { mattermostService } from './services/mattermost';
@@ -82,6 +83,7 @@ import { ensureRecurring, registerJob, startScheduler, stopScheduler } from './s
 import { slackService } from './services/slack';
 import { seedSlackConfigFromEnv } from './services/slack-env-seed';
 import { validateCloudBillingConfiguration } from './services/stripe.service';
+import { startWarehouseProvisioningReconciler } from './services/warehouse-provisioning';
 import { TrpcRouter, trpcRouter } from './trpc/router';
 import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError, ManagedCreditsExhaustedError } from './utils/error';
@@ -426,10 +428,21 @@ app.setNotFoundHandler((request, reply) => {
 });
 
 export const startServer = async (opts: { port: number; host: string }) => {
-	if (isCloudBillingEnabled()) {
-		await validateCloudBillingConfiguration();
-	}
-	if (!isCloud) {
+	if (isCloud) {
+		if (isCloudBillingEnabled()) {
+			await validateCloudBillingConfiguration();
+		}
+		try {
+			await ensureSystemExampleProject();
+		} catch (err) {
+			logger.error(
+				`Failed to ensure system example project: ${err instanceof Error ? err.message : String(err)}`,
+				{
+					source: 'system',
+				},
+			);
+		}
+	} else {
 		await ensureOrganizationSetup();
 	}
 	await logLicenseStatus();
@@ -508,6 +521,7 @@ export const startServer = async (opts: { port: number; host: string }) => {
 
 	const address = await app.listen({ host: opts.host, port: opts.port });
 	app.log.info(`Server is running on ${address}`);
+	startWarehouseProvisioningReconciler();
 
 	void pingLicensesServer();
 	void seedSlackConfigFromEnv().then(() => slackService.startSocketModeForAllProjects());

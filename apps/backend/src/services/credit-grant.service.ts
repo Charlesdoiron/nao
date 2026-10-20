@@ -1,5 +1,6 @@
 import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 
+import type { DBProject } from '../db/abstractSchema';
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
 import { isCloud } from '../env';
@@ -9,6 +10,7 @@ import * as userQueries from '../queries/user.queries';
 import { logger, serializeError } from '../utils/logger';
 import { assessProjectReadiness } from '../utils/project-readiness';
 import { issueCreditGrant } from './credit-wallet.service';
+import { getProjectRuntimeEnvVars } from './project-runtime-env';
 
 export async function recordOrganizationSetupCandidate(projectId: string): Promise<void> {
 	await runBestEffort('record organization setup candidate', { projectId }, () =>
@@ -111,7 +113,7 @@ async function reconcileOrganizationSetupGrantUnsafe(projectId: string): Promise
 		getSetupCandidate(projectId),
 		projectQueries.getProjectById(projectId),
 	]);
-	if (!candidate?.orgId || !project || !assessProjectReadiness(project).ready) {
+	if (!candidate?.orgId || !project || !(await isProjectReady(project))) {
 		return;
 	}
 	await issueOrganizationSetupCredits(candidate.orgId, projectId);
@@ -122,7 +124,7 @@ async function reconcileOrganizationSetupCandidatesUnsafe(orgId: string, project
 		let reconciled = false;
 		await runBestEffort('reconcile organization setup grant', { orgId, projectId }, async () => {
 			const project = await projectQueries.getProjectById(projectId);
-			if (project && assessProjectReadiness(project).ready) {
+			if (project && (await isProjectReady(project))) {
 				await issueOrganizationSetupCredits(orgId, projectId);
 				reconciled = true;
 			}
@@ -288,11 +290,16 @@ async function hasEligibleProjectAccess(orgId: string, userId: string): Promise<
 			projectQueries.getProjectById(projectId),
 			projectQueries.getUserRoleInProject(projectId, userId),
 		]);
-		if (project && role && assessProjectReadiness(project).ready) {
+		if (project && role && (await isProjectReady(project))) {
 			return true;
 		}
 	}
 	return false;
+}
+
+async function isProjectReady(project: Pick<DBProject, 'id' | 'path' | 'envVars'>): Promise<boolean> {
+	const envVars = await getProjectRuntimeEnvVars(project.id);
+	return assessProjectReadiness({ ...project, envVars }).ready;
 }
 
 async function getSetupCandidate(projectId: string) {

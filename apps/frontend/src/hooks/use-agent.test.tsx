@@ -1,199 +1,69 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useState } from 'react';
-import { useAgent } from './use-agent';
-import type { LlmSelectedModel } from '@nao/shared/types';
+import { cleanup, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-interface TestAgentConfig {
-	onFinish: (event: { isAbort: boolean; isError: boolean; isDisconnect: boolean }) => void;
-}
-
-interface TestTransportConfig {
-	prepareSendMessagesRequest: (request: {
-		body: Record<string, unknown>;
-		messages: Array<{ role: string }>;
-	}) => unknown;
-}
+import { useSyncMessages } from './use-agent';
+import type { AgentState } from './use-agent';
 
 const mocks = vi.hoisted(() => {
-	const invalidateQueries = vi.fn();
+	Object.defineProperty(URL, 'createObjectURL', {
+		configurable: true,
+		value: vi.fn(() => 'blob:test'),
+	});
+
 	return {
-		agentConfig: null as TestAgentConfig | null,
-		initialModel: { provider: 'nao', modelId: 'managed-model' } as LlmSelectedModel,
-		invalidateQueries,
-		navigate: vi.fn(),
-		queryClient: { invalidateQueries },
+		contextChatId: undefined as string | undefined,
 		setChat: vi.fn(),
-		transportConfig: null as TestTransportConfig | null,
+		useChatQuery: vi.fn(() => ({ data: undefined })),
 	};
 });
-
-vi.mock('@ai-sdk/react', () => ({
-	Chat: class {
-		messages: unknown[] = [];
-		sendMessage = vi.fn();
-		stop = vi.fn();
-
-		constructor(config: TestAgentConfig) {
-			mocks.agentConfig = config;
-		}
-	},
-	useChat: () => ({
-		status: 'ready',
-		error: undefined,
-		clearError: vi.fn(),
-		sendMessage: vi.fn(),
-		setMessages: vi.fn(),
-		messages: [],
-	}),
-}));
-
-vi.mock('@tanstack/react-query', () => ({
-	useMutation: () => ({ mutateAsync: vi.fn() }),
-	useQuery: () => ({ data: mocks.initialModel }),
-	useQueryClient: () => mocks.queryClient,
-}));
-
-vi.mock('@tanstack/react-router', () => ({
-	useNavigate: () => mocks.navigate,
-	useParams: () => ({}),
-}));
-
-vi.mock('ai', () => ({
-	DefaultChatTransport: class {
-		constructor(config: TestTransportConfig) {
-			mocks.transportConfig = config;
-		}
-	},
-}));
 
 vi.mock('./use-chat-id', () => ({
-	useChatId: () => undefined,
-}));
-
-vi.mock('./use-local-storage', () => {
-	return {
-		useLocalStorage: () => useState(mocks.initialModel),
-	};
-});
-
-vi.mock('./use-prev', () => ({
-	usePrevRef: () => ({ current: undefined }),
-}));
-
-vi.mock('./useMemoObject', () => ({
-	useMemoObject: <T,>(value: T) => value,
-}));
-
-vi.mock('@/lib/active-project', () => ({
-	getActiveProjectId: () => undefined,
-}));
-
-vi.mock('@/lib/ai', () => ({
-	checkIsAgentRunning: () => false,
-	extractDocumentPathsFromMessage: () => [],
-	extractImagesFromMessage: () => [],
-	getLastUserMessageIdx: () => undefined,
-	getMessageDocuments: () => [],
-	getMessageImages: () => [],
-	getMessageText: () => '',
-	getTextFromUserMessageOrThrow: () => 'question',
-	NEW_CHAT_ID: 'new',
-	parseBudgetError: () => false,
-	parseManagedCreditsError: () => false,
-	resolveImagesFromMessage: async () => [],
-}));
-
-vi.mock('@/lib/local-storage', () => ({
-	createLocalStorage: () => ({}),
-}));
-
-vi.mock('@/main', () => ({
-	trpc: {
-		account: {
-			getManagedCreditStatus: { queryKey: () => ['managed-status'] },
-			getCreditSummary: { queryKey: () => ['credit-summary'] },
-			listCreditLedger: { queryKey: () => ['credit-ledger'] },
-			listManagedAiUsage: { queryKey: () => ['managed-usage'] },
-		},
-		chat: {
-			stop: { mutationOptions: () => ({}) },
-			cancel: { mutationOptions: () => ({}) },
-			switchMessageVersion: { mutationOptions: () => ({}) },
-			get: { queryKey: () => ['chat'] },
-		},
-		project: {
-			getDefaultChatModel: { queryOptions: () => ({}) },
-			listAvailableTranscribeModels: { queryKey: () => ['transcribe-models'] },
-		},
-	},
+	useChatId: () => mocks.contextChatId,
 }));
 
 vi.mock('@/queries/use-chat-query', () => ({
-	useChatQuery: () => ({ isLoading: false, data: undefined }),
+	useChatQuery: mocks.useChatQuery,
 	useSetChat: () => mocks.setChat,
 }));
 
-vi.mock('@/services/agents', () => ({
-	agentService: {
-		getAgent: () => undefined,
-		registerAgent: (_id: string, agent: unknown) => agent,
-		moveAgent: vi.fn(),
-		disposeAgent: vi.fn(),
-	},
-}));
+vi.mock('@/main', () => ({ trpc: {} }));
 
-vi.mock('@/stores/chat-activity', () => ({
-	chatActivityStore: { setRunning: vi.fn(), setUnread: vi.fn() },
-}));
+afterEach(() => {
+	cleanup();
+	mocks.contextChatId = undefined;
+	vi.clearAllMocks();
+});
 
-vi.mock('@/stores/chat-cancelling-message', () => ({
-	cancellingMessageIdStore: { setCancelling: vi.fn() },
-}));
+describe('useSyncMessages', () => {
+	it('uses the agent chat ID for onboarding message snapshots', () => {
+		const agent = {
+			chatId: 'onboarding-chat',
+			mode: 'onboarding',
+			messages: [{ id: 'message-1', role: 'user', parts: [{ type: 'text', text: 'Hello' }] }],
+			isRunning: true,
+			setMessages: vi.fn(),
+		} as unknown as AgentState;
 
-vi.mock('@/stores/chat-edited-message', () => ({
-	editedMessageIdStore: { setEditingId: vi.fn() },
-}));
+		renderHook(() => useSyncMessages({ agent }));
 
-vi.mock('@/stores/chat-input-restore', () => ({
-	chatInputRestoreStore: { set: vi.fn() },
-}));
-
-vi.mock('@/stores/chat-message-queue', () => ({
-	messageQueueStore: {
-		clear: vi.fn(),
-		dequeue: vi.fn(),
-		enqueue: vi.fn(),
-		moveQueue: vi.fn(),
-		promoteToFront: vi.fn(),
-	},
-}));
-
-describe('useAgent managed credit refresh', () => {
-	beforeEach(() => {
-		mocks.agentConfig = null;
-		mocks.transportConfig = null;
-		mocks.invalidateQueries.mockReset();
+		expect(mocks.useChatQuery).toHaveBeenCalledWith({ chatId: 'onboarding-chat' });
+		expect(mocks.setChat).toHaveBeenCalledWith({ chatId: 'onboarding-chat' }, expect.any(Function));
 	});
 
-	afterEach(cleanup);
+	it('keeps using the route chat ID for regular chat navigation', () => {
+		mocks.contextChatId = 'route-chat';
+		const agent = {
+			chatId: 'previous-chat',
+			mode: 'default',
+			messages: [],
+			isRunning: false,
+			setMessages: vi.fn(),
+		} as unknown as AgentState;
 
-	it('refreshes managed credit queries when the model selector changes during generation', () => {
-		const { result } = renderHook(() => useAgent());
-		mocks.transportConfig!.prepareSendMessagesRequest({
-			body: {},
-			messages: [{ role: 'user' }],
-		});
+		renderHook(() => useSyncMessages({ agent }));
 
-		act(() => {
-			result.current.setSelectedModel({ provider: 'openai', modelId: 'gpt-model' });
-		});
-		act(() => {
-			mocks.agentConfig!.onFinish({ isAbort: false, isError: false, isDisconnect: false });
-		});
-
-		expect(mocks.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['credit-summary'] });
+		expect(mocks.useChatQuery).toHaveBeenCalledWith({ chatId: 'route-chat' });
 	});
 });

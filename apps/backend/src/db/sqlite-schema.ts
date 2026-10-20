@@ -32,6 +32,7 @@ import {
 	FOLDER_VISIBILITY,
 	MEMBER_BUDGET_PERIODS,
 	NOTIFICATION_CATEGORIES,
+	RECIPIENT_MODES,
 	SHARE_VISIBILITY,
 	STORY_ACTIONS,
 	STORY_FORMATS,
@@ -97,6 +98,12 @@ import {
 import { ORG_ROLES } from '../types/organization';
 import type { StoryQuerySources } from '../types/story-cache';
 import type { StoredUserPreferences } from '../types/usage';
+import {
+	WAREHOUSE_PROVISIONING_STATUSES,
+	type WarehouseProvider,
+	type WarehouseProvisioningBusinessContext,
+	type WarehouseProvisioningModelSelection,
+} from '../types/warehouse';
 
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
@@ -360,6 +367,67 @@ export const projectDiscordLink = sqliteTable(
 	(t) => [
 		primaryKey({ columns: [t.projectId, t.discordUserId] }),
 		index('project_discord_link_userId_idx').on(t.userId),
+	],
+);
+
+export const projectWarehouseCredentials = sqliteTable('project_warehouse_credentials', {
+	projectId: text('project_id')
+		.notNull()
+		.primaryKey()
+		.references(() => project.id, { onDelete: 'cascade' }),
+	provider: text('provider').$type<WarehouseProvider>().notNull(),
+	encryptedCredentials: text('encrypted_credentials').notNull(),
+	createdAt: integer('created_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+	updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.$onUpdate(() => new Date())
+		.notNull(),
+});
+
+export const warehouseProvisioningJob = sqliteTable(
+	'warehouse_provisioning_job',
+	{
+		id: text('id')
+			.$defaultFn(() => crypto.randomUUID())
+			.primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		orgId: text('org_id')
+			.notNull()
+			.references(() => organization.id, { onDelete: 'cascade' }),
+		onboardingChatId: text('onboarding_chat_id'),
+		projectId: text('project_id').references(() => project.id, { onDelete: 'set null' }),
+		projectName: text('project_name').notNull(),
+		provider: text('provider').$type<WarehouseProvider>().notNull(),
+		encryptedCredentials: text('encrypted_credentials'),
+		businessContext: text('business_context', { mode: 'json' }).$type<WarehouseProvisioningBusinessContext>(),
+		modelSelection: text('model_selection', { mode: 'json' }).$type<WarehouseProvisioningModelSelection>(),
+		modelProjectId: text('model_project_id'),
+		status: text('status', { enum: WAREHOUSE_PROVISIONING_STATUSES }).notNull().default('queued'),
+		logs: text('logs'),
+		error: text('error'),
+		temporaryDirectory: text('temporary_directory'),
+		lockedBy: text('locked_by'),
+		lockedAt: integer('locked_at', { mode: 'timestamp_ms' }),
+		attempts: integer('attempts').notNull().default(0),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+			.$onUpdate(() => new Date())
+			.notNull(),
+		finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+	},
+	(t) => [
+		index('warehouse_provisioning_job_userId_idx').on(t.userId),
+		index('warehouse_provisioning_job_status_idx').on(t.status),
+		uniqueIndex('warehouse_provisioning_job_active_user_idx')
+			.on(t.userId)
+			.where(sql`${t.status} NOT IN ('ready', 'failed', 'cancelled')`),
 	],
 );
 
@@ -1458,10 +1526,11 @@ export const storyDelivery = sqliteTable('story_delivery', {
 	cron: text('cron'),
 	scheduleDescription: text('schedule_description'),
 	channels: text('channels', { mode: 'json' }).$type<NotificationChannel[]>().notNull(),
-	recipientMode: text('recipient_mode', { enum: ['all', 'specific'] })
+	recipientMode: text('recipient_mode', { enum: [...RECIPIENT_MODES] })
 		.notNull()
 		.default('specific'),
 	recipientUserIds: text('recipient_user_ids', { mode: 'json' }).$type<string[]>().notNull(),
+	recipientGroupIds: text('recipient_group_ids', { mode: 'json' }).$type<string[]>().notNull().default([]),
 	scheduledJobId: text('scheduled_job_id').references(() => scheduledJob.id, { onDelete: 'set null' }),
 	createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })

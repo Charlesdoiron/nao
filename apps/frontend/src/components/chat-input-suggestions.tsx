@@ -505,7 +505,7 @@ interface ConversationFeedback {
 }
 
 function useConversationFeedback(): ConversationFeedback {
-	const { isRunning } = useAgentContext();
+	const { isRunning, mode } = useAgentContext();
 	const lastAssistantMessageId = useAgentMessagesSelector(findLastAssistantWithContentId);
 	const hasFeedback = useAgentMessagesSelector(checkLastAssistantWithContentHasFeedback);
 	const messageCount = useAgentMessagesSelector(countMessages);
@@ -546,7 +546,13 @@ function useConversationFeedback(): ConversationFeedback {
 
 	const isPersistedChat = !!chatId && chatId !== NEW_CHAT_ID;
 	const isDismissed = !!chatId && dismissedChats.has(chatId);
-	const isEligible = isPersistedChat && !isRunning && !!lastAssistantMessageId && !hasFeedback && !isDismissed;
+	const isEligible =
+		mode !== 'onboarding' &&
+		isPersistedChat &&
+		!isRunning &&
+		!!lastAssistantMessageId &&
+		!hasFeedback &&
+		!isDismissed;
 
 	const isTriggered = useInactivityTrigger({
 		enabled: isEligible,

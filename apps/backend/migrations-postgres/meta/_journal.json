@@ -558,8 +558,29 @@
     {
       "idx": 79,
       "version": "7",
-      "when": 1792415002848,
-      "tag": "0079_managed_ai_usage_wallet",
+      "when": 1792400347933,
+      "tag": "0079_warehouse_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1792400359891,
+      "tag": "0080_warehouse_sync_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1792426293707,
+      "tag": "0081_story_delivery_recipient_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1792483728672,
+      "tag": "0082_managed_ai_usage_wallet",
       "breakpoints": true
     }
   ]

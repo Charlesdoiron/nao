@@ -43,6 +43,7 @@ import {
 	recordProjectJoinCandidate,
 } from '../src/services/credit-grant.service';
 import * as creditWalletService from '../src/services/credit-wallet.service';
+import { saveProjectWarehouseEnvVars } from '../src/services/warehouse-credentials';
 import { logger } from '../src/utils/logger';
 
 const tempDirectories: string[] = [];
@@ -86,6 +87,20 @@ describe('automatic credit grants', () => {
 			lifetimeDebitedMicroUsd: 0,
 		});
 		expect(await getCreditGrant('organization_setup', 'setup-org')).toEqual({ orgId: 'setup-org' });
+	});
+
+	it('recognizes warehouse credentials when reconciling an organization grant', async () => {
+		const projectPath = createProjectDirectory('warehouse-setup', true);
+		await insertOrganizationAndProject('warehouse-setup-org', 'warehouse-setup-project', projectPath, {});
+		await saveProjectWarehouseEnvVars('warehouse-setup-project', 'postgres', {
+			DATABASE_URL: 'postgres://warehouse',
+		});
+
+		await recordOrganizationSetupCandidate('warehouse-setup-project');
+
+		expect(await getCreditGrant('organization_setup', 'warehouse-setup-org')).toEqual({
+			orgId: 'warehouse-setup-org',
+		});
 	});
 
 	it('reconciles setup candidates backfilled for existing ready projects', async () => {

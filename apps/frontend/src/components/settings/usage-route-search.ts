@@ -26,6 +26,7 @@ export type UsageRouteSearch = {
 	search: string | undefined;
 	splitByUser: boolean;
 	tokenView: TokenChartDisplayMode;
+	expandReplay: boolean;
 	highlight: ReplayHighlight | undefined;
 	targetId: string | undefined;
 	origin: ReplayOrigin | undefined;
@@ -45,6 +46,7 @@ export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
 	search: undefined,
 	splitByUser: false,
 	tokenView: 'tokens',
+	expandReplay: false,
 	highlight: undefined,
 	targetId: undefined,
 	origin: undefined,
@@ -153,6 +155,7 @@ export function validateUsageSearch(search: Record<string, unknown>): UsageRoute
 		search: parseSearchTerm(search.search),
 		splitByUser: parseBoolean(search.splitByUser),
 		tokenView: parseOneOf(search.tokenView, tokenViews) ?? 'tokens',
+		expandReplay: parseBoolean(search.expandReplay),
 		highlight: parseOneOf(search.highlight, replayHighlights),
 		targetId: typeof search.targetId === 'string' && search.targetId.length > 0 ? search.targetId : undefined,
 		origin: parseOneOf(search.origin, replayOrigins),

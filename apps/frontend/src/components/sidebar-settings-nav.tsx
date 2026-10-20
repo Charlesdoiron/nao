@@ -24,6 +24,7 @@ interface NavItem {
 	badge?: string;
 	badgeVariant?: 'new' | 'enterprise';
 	leavesSettings?: boolean;
+	requiresProject?: boolean;
 }
 
 interface NavGroup {
@@ -61,21 +62,25 @@ const settingsNavGroups: NavGroup[] = [
 				label: 'Users & Groups',
 				to: '/settings/project/user-groups',
 				visible: ({ isViewer }) => !isViewer,
+				requiresProject: true,
 			},
 			{
 				label: 'Agent',
 				to: '/settings/project/agent',
 				visible: ({ isViewer }) => !isViewer,
+				requiresProject: true,
 			},
 			{
 				label: 'Integrations & MCP',
 				to: '/settings/project/integrations',
 				visible: ({ isViewer }) => !isViewer,
+				requiresProject: true,
 			},
 			{
 				label: 'Appearance',
 				to: '/settings/appearance',
 				visible: ({ isViewer }) => !isViewer,
+				requiresProject: true,
 			},
 		],
 	},
@@ -169,6 +174,7 @@ interface SidebarSettingsNavProps {
 	isCloud: boolean;
 	isCloudBillingEnabled: boolean;
 	isOrgAdmin: boolean;
+	isTrial: boolean;
 }
 
 export function SidebarSettingsNav({
@@ -179,6 +185,7 @@ export function SidebarSettingsNav({
 	isCloud,
 	isCloudBillingEnabled,
 	isOrgAdmin,
+	isTrial,
 }: SidebarSettingsNavProps) {
 	const navigate = useNavigate();
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -196,7 +203,9 @@ export function SidebarSettingsNav({
 	const navGroups = settingsNavGroups
 		.map((group) => ({
 			...group,
-			items: group.items.filter((item) => item.visible?.(navContext) ?? true),
+			items: group.items.filter(
+				(item) => (!item.requiresProject || !isTrial) && (item.visible?.(navContext) ?? true),
+			),
 		}))
 		.filter((group) => group.items.length > 0);
 
