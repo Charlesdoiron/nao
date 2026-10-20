@@ -86,7 +86,7 @@ describe('context recommendation routes', () => {
 		mocks.assertOrganizationCloudBillingAccess.mockResolvedValue(undefined);
 		mocks.runContextRecommendations.mockResolvedValue({ runId: 'run-id' });
 
-		await expect(caller().contextRecommendation.run()).resolves.toEqual({ started: true });
+		await expect(caller.contextRecommendation.run()).resolves.toEqual({ started: true });
 
 		expect(mocks.runContextRecommendations).toHaveBeenCalledWith('project-id', {
 			billingAccessVerifiedProjectId: 'project-id',

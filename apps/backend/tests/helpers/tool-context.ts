@@ -28,7 +28,7 @@ export function createToolContext(overrides: Partial<ToolContext> = {}): ToolCon
 
 export async function executeTool<TInput, TOutput>(
 	tool: Tool<TInput, TOutput>,
-	input: TInput,
+	input: NoInfer<TInput>,
 	context: ToolContext,
 ): Promise<TOutput> {
 	const options: ToolCallOptions = { toolCallId: 'tool-call-id', messages: [], experimental_context: context };

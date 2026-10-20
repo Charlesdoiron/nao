@@ -105,8 +105,8 @@ const ORDERS_POLICY_TABLE = { databaseType: 'duckdb', database: 'sales', schema:
 const ORDERS_TABLE = { ...ORDERS_POLICY_TABLE, constraintColumns: ['tenant_id'] };
 const RESTRICTED_DATABASE_ACCESS = { mode: 'restricted', strict: false, grants: [], patterns: [] };
 const RESTRICTED_DOCS_ACCESS = { mode: 'restricted', grants: [] };
-const DETAILED_DENSITY_POLICY = { defaultDensity: 'detailed', canChange: true };
-const COMPACT_DENSITY_POLICY = { defaultDensity: 'compact', canChange: false };
+const DETAILED_DENSITY_POLICY = { defaultDensity: 'detailed', canChange: true } as const;
+const COMPACT_DENSITY_POLICY = { defaultDensity: 'compact', canChange: false } as const;
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -858,7 +858,7 @@ describe('user group routes', () => {
 	});
 
 	it('saves the project sharing permission and unshares project-wide content no longer allowed', async () => {
-		await createCaller().update({
+		await caller.update({
 			groupId: 'group-id',
 			featureGrants: [],
 			toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: true },
@@ -874,18 +874,18 @@ describe('user group routes', () => {
 	});
 
 	it('unshares project-wide content no longer allowed after membership changes and group deletion', async () => {
-		await createCaller().setMembership({ groupId: 'group-id', userId: 'target-user-id', isMember: false });
+		await caller.setMembership({ groupId: 'group-id', userId: 'target-user-id', isMember: false });
 		expect(mocks.setUserGroupMembership).toHaveBeenCalled();
 		expect(mocks.revokeUnauthorizedProjectWideShares).toHaveBeenCalledWith('project-id');
 
 		mocks.revokeUnauthorizedProjectWideShares.mockClear();
-		await createCaller().delete({ groupId: 'group-id' });
+		await caller.delete({ groupId: 'group-id' });
 		expect(mocks.deleteUserGroup).toHaveBeenCalledWith('project-id', 'group-id');
 		expect(mocks.revokeUnauthorizedProjectWideShares).toHaveBeenCalledWith('project-id');
 	});
 
 	it('creates groups with their project sharing permission', async () => {
-		await createCaller().create({ name: 'Client A', projectSharing: 'blocked' });
+		await caller.create({ name: 'Client A', projectSharing: 'blocked' });
 
 		expect(mocks.createUserGroup).toHaveBeenCalledWith(
 			'project-id',
@@ -907,13 +907,13 @@ describe('user group routes', () => {
 		mocks.previewProjectWideShareRevocation.mockResolvedValue({ chatCount: 2, storyCount: 1 });
 
 		await expect(
-			createCaller().previewProjectSharingRevocation({ groupId: 'group-id', projectSharing: 'blocked' }),
+			caller.previewProjectSharingRevocation({ groupId: 'group-id', projectSharing: 'blocked' }),
 		).resolves.toEqual({ chatCount: 2, storyCount: 1 });
 		expect(mocks.previewProjectWideShareRevocation).toHaveBeenCalledWith('project-id', 'group-id', 'blocked');
 
 		mocks.role = 'user';
 		await expect(
-			createCaller().previewProjectSharingRevocation({ groupId: 'group-id', projectSharing: 'blocked' }),
+			caller.previewProjectSharingRevocation({ groupId: 'group-id', projectSharing: 'blocked' }),
 		).rejects.toMatchObject({ code: 'FORBIDDEN' });
 	});
 
@@ -925,7 +925,7 @@ describe('user group routes', () => {
 			groupIds: new Set(['client-a']),
 		});
 
-		await expect(createCaller().projectSharingAccess()).resolves.toEqual({ canShareToProject: false });
+		await expect(caller.projectSharingAccess()).resolves.toEqual({ canShareToProject: false });
 		expect(mocks.getShareAudience).toHaveBeenCalledWith('project-id', 'user-id');
 	});
 
