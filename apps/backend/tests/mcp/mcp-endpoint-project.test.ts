@@ -69,6 +69,10 @@ const INITIALIZE_REQUEST = {
 
 async function createApp() {
 	const app = fastify();
+	/** The MCP transport force-closes undrained requests after a delay, and `inject()`'s fake socket cannot. */
+	app.addHook('onRequest', async (request) => {
+		Object.assign(request.raw.socket, { destroySoon: () => undefined });
+	});
 	await app.register(mcpServerRoutes as never, { prefix: '/mcp' });
 	await app.ready();
 	return app;

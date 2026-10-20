@@ -22,7 +22,10 @@ export default defineConfig({
 	},
 	test: {
 		include: ['tests/**/*.test.{ts,tsx}'],
+		isolate: false,
+		maxWorkers: 3,
 		globalSetup: ['./tests/setup/sqlite-schema.ts'],
+		setupFiles: ['./tests/setup/shared-worker.ts'],
 		server: {
 			deps: {
 				inline: [/drizzle-orm\/bun-sqlite/],
