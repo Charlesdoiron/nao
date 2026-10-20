@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WarehouseCredentialsFormValues } from '@/components/tool-calls/warehouse-credentials';
+import type { SqlProvider } from '@/components/tool-calls/warehouse-provider-config';
 import {
 	buildWarehouseCredentials,
 	getClickHouseDefaultPort,
 	getTrinoDefaultPort,
 	getWarehouseCredentialsDefaults,
 } from '@/components/tool-calls/warehouse-credentials';
-import type { WarehouseCredentialsFormValues } from '@/components/tool-calls/warehouse-credentials';
-import type { SqlProvider } from '@/components/tool-calls/warehouse-provider-config';
 
 const values: WarehouseCredentialsFormValues = {
 	host: 'warehouse.example.com',

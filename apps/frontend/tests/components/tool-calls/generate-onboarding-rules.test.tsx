@@ -3,8 +3,8 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { GenerateOnboardingRulesToolCall } from '@/components/tool-calls/generate-onboarding-rules';
 import type { ToolCallComponentProps } from '@/components/tool-calls';
+import { GenerateOnboardingRulesToolCall } from '@/components/tool-calls/generate-onboarding-rules';
 
 const mocks = vi.hoisted(() => ({
 	invalidateQueries: vi.fn(),

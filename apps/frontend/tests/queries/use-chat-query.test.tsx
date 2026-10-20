@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useChatQuery } from '@/queries/use-chat-query';
 import type { Chat } from '@/queries/use-chat-query';
+import { useChatQuery } from '@/queries/use-chat-query';
 
 vi.mock('@/main', () => ({
 	trpc: {

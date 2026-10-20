@@ -3,8 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RequestWarehouseCredentialsToolCall } from '@/components/tool-calls/request-warehouse-credentials';
 import type { ToolCallComponentProps } from '@/components/tool-calls';
+import { RequestWarehouseCredentialsToolCall } from '@/components/tool-calls/request-warehouse-credentials';
 
 const mocks = vi.hoisted(() => ({
 	isRunning: true,

@@ -2,8 +2,8 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatArtifactsMenu } from '@/components/chat-artifacts-menu';
 import type { UIMessage, UIMessagePart } from '@nao/backend/chat';
+import { ChatArtifactsMenu } from '@/components/chat-artifacts-menu';
 
 const mocks = vi.hoisted(() => ({
 	density: 'detailed' as 'detailed' | 'compact',

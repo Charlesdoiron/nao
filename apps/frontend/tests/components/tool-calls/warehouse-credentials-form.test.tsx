@@ -4,8 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WarehouseCredentialsForm } from '@/components/tool-calls/warehouse-credentials-form';
 import type { WarehouseCredentialsFormValues } from '@/components/tool-calls/warehouse-credentials';
+import { WarehouseCredentialsForm } from '@/components/tool-calls/warehouse-credentials-form';
 
 afterEach(cleanup);
 

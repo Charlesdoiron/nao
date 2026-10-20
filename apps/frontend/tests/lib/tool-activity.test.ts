@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { getLatestToolActivityLabel } from '@/lib/tool-activity';
 import type { GroupablePart } from '@/types/ai';
+import { getLatestToolActivityLabel } from '@/lib/tool-activity';
 
 const toolPart = (
 	toolName: string,

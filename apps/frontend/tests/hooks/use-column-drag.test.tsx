@@ -2,8 +2,8 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { acceptNumericKind, startColumnDrag, useColumnDropTarget } from '@/hooks/use-column-drag';
 import type { ColumnValueKind } from '@/lib/chart-selection-summary';
+import { acceptNumericKind, startColumnDrag, useColumnDropTarget } from '@/hooks/use-column-drag';
 
 describe('column drag and drop', () => {
 	afterEach(() => {

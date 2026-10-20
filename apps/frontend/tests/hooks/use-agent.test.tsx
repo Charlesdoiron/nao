@@ -3,8 +3,8 @@
 import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useSyncMessages } from '@/hooks/use-agent';
 import type { AgentState } from '@/hooks/use-agent';
+import { useSyncMessages } from '@/hooks/use-agent';
 
 const mocks = vi.hoisted(() => {
 	Object.defineProperty(URL, 'createObjectURL', {
