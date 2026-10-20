@@ -1,4 +1,4 @@
-import { EMPTY_FILES_CONTEXT_ACCESS } from '@nao/shared';
+import { EMPTY_FILES_CONTEXT_ACCESS, EMPTY_MCP_ACCESS } from '@nao/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	getShareAudience: vi.fn(),
 	getUserRoleInProject: vi.fn(),
 	hasFeature: vi.fn(),
+	listUserGroups: vi.fn(),
 	previewProjectWideShareRevocation: vi.fn(),
 	revokeUnauthorizedProjectWideShares: vi.fn(),
 	env: {} as Record<string, string | undefined>,
@@ -52,6 +53,7 @@ vi.mock('../src/queries/user-group.queries', () => ({
 	deleteUserGroup: mocks.deleteUserGroup,
 	getUserGroupOverview: mocks.getUserGroupOverview,
 	getProjectRowSecurity: mocks.getProjectRowSecurity,
+	listUserGroups: mocks.listUserGroups,
 	resolveUserGroupAccess: mocks.resolveUserGroupAccess,
 	setUserGroupMembership: mocks.setUserGroupMembership,
 	updateUserGroup: mocks.updateUserGroup,
@@ -264,6 +266,43 @@ describe('user group routes', () => {
 		expect(mocks.createUserGroup).not.toHaveBeenCalled();
 		expect(mocks.createUserGroupWithinLimit).not.toHaveBeenCalled();
 		expect(mocks.updateUserGroup).not.toHaveBeenCalled();
+	});
+
+	it('rejects unlicensed MCP restrictions but lets admins keep or lift them', async () => {
+		mocks.hasFeature.mockResolvedValue(false);
+		const githubOnly = { mode: 'restricted' as const, grants: [{ kind: 'server' as const, server: 'github' }] };
+		mocks.listUserGroups.mockResolvedValue([{ id: 'group-id', mcpAccess: githubOnly }]);
+		const update = (mcpAccess: typeof githubOnly | { mode: 'all' }) =>
+			createCaller().update({
+				groupId: 'group-id',
+				featureGrants: [],
+				toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: true },
+				mcpAccess,
+			});
+
+		await expect(createCaller().create({ name: 'Analysts', mcpAccess: githubOnly })).rejects.toMatchObject({
+			code: 'FORBIDDEN',
+		});
+		await expect(update(EMPTY_MCP_ACCESS as typeof githubOnly)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(mocks.createUserGroupWithinLimit).not.toHaveBeenCalled();
+		expect(mocks.updateUserGroup).not.toHaveBeenCalled();
+
+		await update(githubOnly);
+		await update({ mode: 'all' });
+		await createCaller().create({ name: 'Analysts' });
+		expect(mocks.updateUserGroup).toHaveBeenNthCalledWith(
+			1,
+			'project-id',
+			'group-id',
+			expect.objectContaining({ mcpAccess: githubOnly }),
+		);
+		expect(mocks.updateUserGroup).toHaveBeenNthCalledWith(
+			2,
+			'project-id',
+			'group-id',
+			expect.objectContaining({ mcpAccess: { mode: 'all' } }),
+		);
+		expect(mocks.createUserGroupWithinLimit).toHaveBeenCalledTimes(1);
 	});
 
 	it('allows group edits after a registry update prunes removed-table policies', async () => {
@@ -676,6 +715,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
@@ -698,6 +738,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 		expect(mocks.createUserGroup).not.toHaveBeenCalled();
 	});
@@ -756,6 +797,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
@@ -805,6 +847,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
@@ -830,6 +873,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
@@ -911,6 +955,7 @@ describe('user group routes', () => {
 			undefined,
 			EMPTY_FILES_CONTEXT_ACCESS,
 			'inherit',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
@@ -1002,6 +1047,7 @@ describe('user group routes', () => {
 			undefined,
 			expect.anything(),
 			'blocked',
+			EMPTY_MCP_ACCESS,
 		);
 	});
 
