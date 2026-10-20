@@ -241,14 +241,14 @@ describe('user group routes', () => {
 		const githubOnly = { mode: 'restricted' as const, grants: [{ kind: 'server' as const, server: 'github' }] };
 		mocks.listUserGroups.mockResolvedValue([{ id: 'group-id', mcpAccess: githubOnly }]);
 		const update = (mcpAccess: typeof githubOnly | { mode: 'all' }) =>
-			createCaller().update({
+			caller.update({
 				groupId: 'group-id',
 				featureGrants: [],
 				toolCallDensityPolicy: { defaultDensity: 'detailed', canChange: true },
 				mcpAccess,
 			});
 
-		await expect(createCaller().create({ name: 'Analysts', mcpAccess: githubOnly })).rejects.toMatchObject({
+		await expect(caller.create({ name: 'Analysts', mcpAccess: githubOnly })).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 		});
 		await expect(update(EMPTY_MCP_ACCESS as typeof githubOnly)).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -257,7 +257,7 @@ describe('user group routes', () => {
 
 		await update(githubOnly);
 		await update({ mode: 'all' });
-		await createCaller().create({ name: 'Analysts' });
+		await caller.create({ name: 'Analysts' });
 		expect(mocks.updateUserGroup).toHaveBeenNthCalledWith(
 			1,
 			'project-id',

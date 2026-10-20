@@ -15,8 +15,10 @@ vi.mock('../../src/services/user-group-availability.service', () => ({
 }));
 
 import { advancedSettingsProtectedProcedure, router } from '../../src/trpc/trpc';
+import { createTestCaller } from '../helpers/trpc-caller';
 
 const testRouter = router({ settings: advancedSettingsProtectedProcedure.query(() => 'settings') });
+const caller = createTestCaller(testRouter);
 
 describe('advancedSettingsProtectedProcedure', () => {
 	beforeEach(() => {
@@ -26,7 +28,7 @@ describe('advancedSettingsProtectedProcedure', () => {
 	});
 
 	it('rejects users whose groups hide advanced settings', async () => {
-		await expect(createCaller().settings()).rejects.toMatchObject({
+		await expect(caller.settings()).rejects.toMatchObject({
 			code: 'FORBIDDEN',
 			message: 'Advanced settings are not enabled for your user group.',
 		});
@@ -36,25 +38,18 @@ describe('advancedSettingsProtectedProcedure', () => {
 	it('allows users granted all settings by one of their groups', async () => {
 		mocks.resolveUserGroupAccess.mockResolvedValue({ showAllSettings: true });
 
-		await expect(createCaller().settings()).resolves.toBe('settings');
+		await expect(caller.settings()).resolves.toBe('settings');
 	});
 
 	it('always allows admins and context admins and rejects viewers', async () => {
 		mocks.role = 'admin';
-		await expect(createCaller().settings()).resolves.toBe('settings');
+		await expect(caller.settings()).resolves.toBe('settings');
 
 		mocks.role = 'context_admin';
-		await expect(createCaller().settings()).resolves.toBe('settings');
+		await expect(caller.settings()).resolves.toBe('settings');
 
 		mocks.role = 'viewer';
 		mocks.resolveUserGroupAccess.mockResolvedValue({ showAllSettings: true });
-		await expect(createCaller().settings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		await expect(caller.settings()).rejects.toMatchObject({ code: 'FORBIDDEN' });
 	});
 });
-
-function createCaller() {
-	return testRouter.createCaller({
-		session: { user: { id: 'user-id', name: 'User', email: 'user@example.test' } },
-		selectedProjectId: 'project-id',
-	} as never);
-}

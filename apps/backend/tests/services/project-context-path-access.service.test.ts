@@ -146,12 +146,7 @@ describe('project file access', () => {
 	});
 
 	it('hides mcp.json from every user while keeping the tool specs reachable', () => {
-		const context = {
-			warehouseTableAccess: unrestrictedWarehouse,
-			docsContextAccess: unenforcedDocs,
-			filesContextAccess: unenforcedFiles,
-			mcpAccess: allMcpAccess,
-		};
+		const context = pathAccessContext();
 		const allowed = (requested: string, canonical = requested) =>
 			isProjectContextPathAllowed(context, requested, canonical, 'file');
 
@@ -160,24 +155,20 @@ describe('project file access', () => {
 		expect(allowed('/agent/./mcps/mcp.json', '/agent/mcps/mcp.json')).toBe(false);
 		expect(allowed('/notes/servers.json', '/agent/mcps/mcp.json')).toBe(false);
 		expect(allowed('/agent/mcps/github/search.json')).toBe(true);
-		expect(isProjectContextPathAllowed(context, '/agent/mcps', '/agent/mcps', 'directory')).toBe(true);
+		expect(isPathAllowed(context, '/agent/mcps', 'directory')).toBe(true);
 	});
 
 	it('hides the MCP tool specs that the user groups do not grant', () => {
-		const context = {
-			warehouseTableAccess: unrestrictedWarehouse,
-			docsContextAccess: unenforcedDocs,
-			filesContextAccess: unenforcedFiles,
+		const context = pathAccessContext({
 			mcpAccess: {
-				mode: 'restricted' as const,
+				mode: 'restricted',
 				grants: [
-					{ kind: 'server' as const, server: 'linear' },
-					{ kind: 'tool' as const, server: 'github', tool: 'list/issues' },
+					{ kind: 'server', server: 'linear' },
+					{ kind: 'tool', server: 'github', tool: 'list/issues' },
 				],
 			},
-		};
-		const allowed = (virtualPath: string, kind: 'file' | 'directory' = 'file') =>
-			isProjectContextPathAllowed(context, virtualPath, virtualPath, kind);
+		});
+		const allowed = (virtualPath: string, kind: PathKind = 'file') => isPathAllowed(context, virtualPath, kind);
 
 		expect(allowed('/agent/mcps', 'directory')).toBe(true);
 		expect(allowed('/agent/mcps/mcp.json')).toBe(false);

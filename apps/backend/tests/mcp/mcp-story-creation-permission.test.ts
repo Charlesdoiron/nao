@@ -57,7 +57,10 @@ describe('MCP Story creation permission', () => {
 			withCustomStories.asMcpServer(),
 			createMcpContext({ storyCreationEnabled: true, customStoryCreationEnabled: true }),
 		);
-		await registerSubAgentTools(withoutCustomStories.asMcpServer(), createMcpContext({ storyCreationEnabled: true }));
+		await registerSubAgentTools(
+			withoutCustomStories.asMcpServer(),
+			createMcpContext({ storyCreationEnabled: true }),
+		);
 
 		expect(withCustomStories.tools.get('ask_nao')?.description).toContain('CUSTOM STORIES');
 		expect(withoutCustomStories.tools.get('ask_nao')?.description).not.toContain('CUSTOM STORIES');
