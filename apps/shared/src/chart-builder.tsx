@@ -116,7 +116,11 @@ const VALUE_AXIS_CHARACTER_WIDTH = 7;
 const VALUE_AXIS_PADDING = 12;
 const HORIZONTAL_BAR_CATEGORY_AXIS_MIN_WIDTH = 60;
 const HORIZONTAL_BAR_CATEGORY_AXIS_MAX_WIDTH = 180;
-const HORIZONTAL_BAR_CATEGORY_MAX_LABEL_CHARS = 24;
+const HORIZONTAL_BAR_CATEGORY_LINE_CHARS = 24;
+const HORIZONTAL_BAR_CATEGORY_MAX_LINES = 3;
+const HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT = 14;
+const HORIZONTAL_BAR_ROW_GAP = 10;
+const HORIZONTAL_BAR_MAX_PLOT_HEIGHT = 720;
 const HORIZONTAL_BAR_SIZE = 10;
 const HORIZONTAL_BAR_MAX_SIZE = 28;
 const HORIZONTAL_BAR_CATEGORY_GAP = '20%';
@@ -679,9 +683,7 @@ function buildHorizontalBarChart(props: ResolvedProps) {
 		isPercent ? formatPercentAxisTick(value) : formatChartValue(value, valueFormat);
 	const labelValues = isPercent ? clampedRowTotals.map((value) => (value > 0 ? 1 : 0)) : signedRowTotals;
 	const showValueLabels = resolveShowDataLabels(props.chartType, props.showDataLabels);
-	const tickFormatter = (value: string) =>
-		formatCategoryTick(value, labelFormatter, HORIZONTAL_BAR_CATEGORY_MAX_LABEL_CHARS);
-	const categoryAxisWidth = computeHorizontalBarCategoryAxisWidth(data, xAxisKey, tickFormatter);
+	const categoryAxisWidth = computeHorizontalBarCategoryAxisWidth(data, xAxisKey, labelFormatter);
 	const valueLabelWidth = showValueLabels ? computeHorizontalBarValueLabelWidth(labelValues, valueFormatter) : 0;
 	const horizontalBarValueLabelsLayer = showValueLabels
 		? createHorizontalBarValueLabelsLayer(valueFormatter, valueLabelWidth)
@@ -732,13 +734,13 @@ function buildHorizontalBarChart(props: ResolvedProps) {
 			<YAxis
 				type='category'
 				dataKey={xAxisKey}
-				tick={AXIS_TICK}
 				tickLine={false}
 				axisLine={false}
 				minTickGap={12}
 				interval={xAxisInterval ?? 'preserveStartEnd'}
 				width={categoryAxisWidth}
-				tickFormatter={tickFormatter}
+				tickFormatter={labelFormatter}
+				tick={createHorizontalBarCategoryTick(labelFormatter, data.length)}
 			/>
 			{isDiverging && <ReferenceLine x={0} stroke={HORIZONTAL_BAR_BASELINE_COLOR} strokeWidth={1} />}
 			{children}
@@ -807,13 +809,144 @@ function resolveHorizontalBarValueAxisDomainProps(
 	return { domain: computeNiceDomain(lowest, highest) };
 }
 
+/**
+ * Minimum plot height that gives every row of a horizontal bar chart enough room for its
+ * wrapped category label. Returns 0 when every label fits on a single line, so short-label
+ * charts keep their default size.
+ */
+export function computeHorizontalBarMinPlotHeight(
+	data: Record<string, unknown>[],
+	xAxisKey: string,
+	labelFormatter: (value: string) => string = (value) => labelize(value),
+): number {
+	const lineCount = data.reduce(
+		(current, row) => Math.max(current, wrapHorizontalBarCategoryLabel(row[xAxisKey], labelFormatter).length),
+		1,
+	);
+	if (lineCount <= 1) {
+		return 0;
+	}
+	const rowHeight = lineCount * HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT + HORIZONTAL_BAR_ROW_GAP;
+	const verticalRoom = HORIZONTAL_BAR_LABEL_VERTICAL_ROOM * 2;
+	return Math.min(HORIZONTAL_BAR_MAX_PLOT_HEIGHT, data.length * rowHeight + verticalRoom);
+}
+
+/**
+ * Greedily word-wraps a label into at most `maxLines` lines of `maxLineChars` characters.
+ * Words longer than a line are split; when the label still overflows, the last line ends with `…`.
+ */
+export function wrapCategoryLabel(label: string, maxLineChars: number, maxLines: number): string[] {
+	const words = label
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean)
+		.flatMap((word) => splitLongWord(word, maxLineChars));
+	const lines: string[] = [];
+	for (const word of words) {
+		const currentLine = lines.at(-1);
+		if (currentLine !== undefined && currentLine.length + 1 + word.length <= maxLineChars) {
+			lines[lines.length - 1] = `${currentLine} ${word}`;
+		} else {
+			lines.push(word);
+		}
+	}
+	if (lines.length <= maxLines) {
+		return lines.length > 0 ? lines : [''];
+	}
+	const visibleLines = lines.slice(0, maxLines);
+	const lastLine = visibleLines[maxLines - 1];
+	visibleLines[maxLines - 1] = `${lastLine.slice(0, Math.max(1, maxLineChars - 1)).trimEnd()}…`;
+	return visibleLines;
+}
+
+function splitLongWord(word: string, maxLineChars: number): string[] {
+	const chunks: string[] = [];
+	for (let start = 0; start < word.length; start += maxLineChars) {
+		chunks.push(word.slice(start, start + maxLineChars));
+	}
+	return chunks;
+}
+
+function wrapHorizontalBarCategoryLabel(
+	value: unknown,
+	labelFormatter: (value: string) => string,
+	maxLines = HORIZONTAL_BAR_CATEGORY_MAX_LINES,
+): string[] {
+	return wrapCategoryLabel(labelFormatter(String(value ?? '')), HORIZONTAL_BAR_CATEGORY_LINE_CHARS, maxLines);
+}
+
+interface HorizontalBarCategoryTickProps {
+	x?: number;
+	y?: number;
+	fill?: string;
+	payload?: { value?: unknown; offset?: number };
+	visibleTicksCount?: number;
+}
+
+/**
+ * Category tick that renders its label on several lines, vertically centered on the bar.
+ * The line budget shrinks to the room each visible tick actually has, so labels never
+ * overlap when the chart is too short for fully wrapped rows.
+ */
+function createHorizontalBarCategoryTick(labelFormatter: (value: string) => string, rowCount: number) {
+	function HorizontalBarCategoryTick({ x, y, fill, payload, visibleTicksCount }: HorizontalBarCategoryTickProps) {
+		const tickX = toFiniteNumber(x) ?? 0;
+		const tickY = toFiniteNumber(y) ?? 0;
+		const maxLines = resolveCategoryTickLineBudget(payload?.offset, rowCount, visibleTicksCount);
+		const fullLabel = labelFormatter(String(payload?.value ?? ''));
+		const lines = wrapHorizontalBarCategoryLabel(payload?.value, labelFormatter, maxLines);
+		const firstLineY = tickY - ((lines.length - 1) * HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT) / 2;
+		const isTruncated = wrapHorizontalBarCategoryLabel(payload?.value, labelFormatter, Infinity).length > maxLines;
+		return (
+			<text
+				x={tickX}
+				y={firstLineY}
+				fill={fill ?? MUTED_FOREGROUND}
+				fontSize={AXIS_TICK.fontSize}
+				fontFamily={AXIS_TICK.fontFamily}
+				textAnchor='end'
+				dominantBaseline='central'
+				className='recharts-text recharts-cartesian-axis-tick-value'
+			>
+				{isTruncated && <title>{fullLabel}</title>}
+				{lines.map((line, index) => (
+					<tspan key={index} x={tickX} y={firstLineY + index * HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT}>
+						{line}
+					</tspan>
+				))}
+			</text>
+		);
+	}
+	HorizontalBarCategoryTick.displayName = 'HorizontalBarCategoryTick';
+	return HorizontalBarCategoryTick;
+}
+
+function resolveCategoryTickLineBudget(
+	bandOffset: number | undefined,
+	rowCount: number,
+	visibleTicksCount: number | undefined,
+): number {
+	const bandHeight = (toFiniteNumber(bandOffset) ?? 0) * 2;
+	if (bandHeight <= 0) {
+		return HORIZONTAL_BAR_CATEGORY_MAX_LINES;
+	}
+	const ticksPerVisibleTick = visibleTicksCount ? Math.max(1, rowCount / visibleTicksCount) : 1;
+	const roomPerTick = bandHeight * ticksPerVisibleTick - HORIZONTAL_BAR_ROW_GAP / 2;
+	const linesThatFit = Math.floor(roomPerTick / HORIZONTAL_BAR_CATEGORY_LINE_HEIGHT);
+	return Math.min(HORIZONTAL_BAR_CATEGORY_MAX_LINES, Math.max(1, linesThatFit));
+}
+
 function computeHorizontalBarCategoryAxisWidth(
 	data: Record<string, unknown>[],
 	xAxisKey: string,
-	tickFormatter: (value: string) => string,
+	labelFormatter: (value: string) => string,
 ): number {
 	const longestLabelLength = data.reduce(
-		(current, row) => Math.max(current, tickFormatter(String(row[xAxisKey] ?? '')).length),
+		(current, row) =>
+			Math.max(
+				current,
+				...wrapHorizontalBarCategoryLabel(row[xAxisKey], labelFormatter).map((line) => line.length),
+			),
 		0,
 	);
 	return Math.min(

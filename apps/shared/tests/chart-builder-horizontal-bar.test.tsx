@@ -2,7 +2,7 @@ import React, { type ReactElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { buildChart } from '../src/chart-builder';
+import { buildChart, computeHorizontalBarMinPlotHeight, wrapCategoryLabel } from '../src/chart-builder';
 import { boxesOverlap, labelBox } from '../src/chart-data-labels';
 
 describe('buildChart horizontal bars', () => {
@@ -77,9 +77,13 @@ describe('buildChart horizontal bars', () => {
 		expect(yAxis?.props.width).toBeLessThanOrEqual(180);
 	});
 
-	it('truncates category labels longer than 24 characters', () => {
+	it('wraps long category labels onto several lines within a bounded axis width', () => {
+		const label = 'Enterprise Customer Success Management Program';
 		const chart = buildChart({
-			data: [{ category: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', value: 20 }],
+			data: [
+				{ category: label, value: 20 },
+				{ category: 'Short', value: 10 },
+			],
 			chartType: 'horizontal_bar',
 			xAxisKey: 'category',
 			xAxisType: 'category',
@@ -87,10 +91,63 @@ describe('buildChart horizontal bars', () => {
 			labelFormatter: (value) => value,
 		});
 		const yAxis = flattenChildren(chart.props.children).find((child) => getDisplayName(child) === 'YAxis');
-		const formattedLabel = yAxis?.props.tickFormatter?.('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+		const html = renderToString(React.cloneElement(chart, { width: 600, height: 300 }));
+		const ticks = readCategoryTicks(html);
 
-		expect(formattedLabel).toBe('ABCDEFGHIJKLMNOPQRSTUVW…');
-		expect(formattedLabel).toHaveLength(24);
+		expect(yAxis?.props.tickFormatter?.(label)).toBe(label);
+		expect(yAxis?.props.width).toBeLessThanOrEqual(180);
+		expect(ticks[0].lines).toEqual(['Enterprise Customer', 'Success Management', 'Program']);
+		expect(ticks[1].lines).toEqual(['Short']);
+		expect(html).not.toContain('…');
+	});
+
+	it('centers each wrapped label on its bar without overlapping its neighbours', () => {
+		const chart = buildChart({
+			data: Array.from({ length: 6 }, (_, index) => ({
+				category: `Regional Account Manager Team Number ${index + 1}`,
+				value: index + 1,
+			})),
+			chartType: 'horizontal_bar',
+			xAxisKey: 'category',
+			xAxisType: 'category',
+			series: [{ data_key: 'value' }],
+			labelFormatter: (value) => value,
+		});
+		const html = renderToString(React.cloneElement(chart, { width: 600, height: 400 }));
+		const ticks = readCategoryTicks(html);
+		const barCenters = readHorizontalBarCenters(html);
+
+		expect(ticks).toHaveLength(6);
+		ticks.forEach((tick, index) => {
+			const middle = (tick.lineYs[0] + tick.lineYs.at(-1)!) / 2;
+			expect(middle).toBeCloseTo(barCenters[index], 5);
+		});
+		for (let index = 1; index < ticks.length; index++) {
+			const previousBottom = ticks[index - 1].lineYs.at(-1)! + 6;
+			const currentTop = ticks[index].lineYs[0] - 6;
+			expect(currentTop).toBeGreaterThan(previousBottom);
+		}
+	});
+
+	it('drops wrapped lines with an ellipsis when rows are too short for the full label', () => {
+		const chart = buildChart({
+			data: Array.from({ length: 12 }, (_, index) => ({
+				category: `Regional Account Manager Team Number ${index + 1}`,
+				value: index + 1,
+			})),
+			chartType: 'horizontal_bar',
+			xAxisKey: 'category',
+			xAxisType: 'category',
+			series: [{ data_key: 'value' }],
+			labelFormatter: (value) => value,
+		});
+		const html = renderToString(React.cloneElement(chart, { width: 600, height: 300 }));
+		const ticks = readCategoryTicks(html);
+
+		expect(ticks.length).toBeGreaterThan(0);
+		expect(ticks.every((tick) => tick.lines.length === 1)).toBe(true);
+		expect(ticks[0].lines[0].endsWith('…')).toBe(true);
+		expect(html).toContain('<title>Regional Account Manager Team Number 1</title>');
 	});
 
 	it('applies the series value format to the always-visible labels', () => {
@@ -413,6 +470,66 @@ describe('buildChart horizontal bars', () => {
 		expect(visibleChart.props.margin.right).toBeGreaterThan(hiddenChart.props.margin?.right ?? 0);
 	});
 });
+
+describe('wrapCategoryLabel', () => {
+	it('keeps labels that fit on one line', () => {
+		expect(wrapCategoryLabel('North America', 24, 3)).toEqual(['North America']);
+	});
+
+	it('wraps on word boundaries', () => {
+		expect(wrapCategoryLabel('Enterprise Customer Success Management', 24, 3)).toEqual([
+			'Enterprise Customer',
+			'Success Management',
+		]);
+	});
+
+	it('splits words longer than a line', () => {
+		expect(wrapCategoryLabel('ABCDEFGHIJKLMNOPQRSTUVWXYZ', 24, 3)).toEqual(['ABCDEFGHIJKLMNOPQRSTUVWX', 'YZ']);
+	});
+
+	it('ends the last line with an ellipsis when the label needs more lines', () => {
+		const lines = wrapCategoryLabel('one two three four five six seven eight nine ten', 10, 2);
+
+		expect(lines).toEqual(['one two', 'three fou…']);
+		expect(lines.every((line) => line.length <= 10)).toBe(true);
+	});
+});
+
+describe('computeHorizontalBarMinPlotHeight', () => {
+	it('keeps the default size when every label fits on one line', () => {
+		const data = [{ category: 'First' }, { category: 'Second' }];
+
+		expect(computeHorizontalBarMinPlotHeight(data, 'category')).toBe(0);
+	});
+
+	it('reserves room for every wrapped row up to a cap', () => {
+		const row = { category: 'Enterprise Customer Success Management Program' };
+		const fewRows = computeHorizontalBarMinPlotHeight(Array(4).fill(row), 'category');
+		const manyRows = computeHorizontalBarMinPlotHeight(Array(200).fill(row), 'category');
+
+		expect(fewRows).toBeGreaterThan(4 * 3 * 14);
+		expect(manyRows).toBe(720);
+	});
+});
+
+function readCategoryTicks(html: string): Array<{ lines: string[]; lineYs: number[] }> {
+	const ticks: Array<{ lines: string[]; lineYs: number[] }> = [];
+	const textPattern = /<text([^>]*)>([\s\S]*?)<\/text>/g;
+	for (let match = textPattern.exec(html); match !== null; match = textPattern.exec(html)) {
+		if (!match[1].includes('recharts-cartesian-axis-tick-value') || !match[2].includes('<tspan')) {
+			continue;
+		}
+		const tspanPattern = /<tspan[^>]*\sy="([^"]+)"[^>]*>([^<]*)<\/tspan>/g;
+		const lines: string[] = [];
+		const lineYs: number[] = [];
+		for (let tspan = tspanPattern.exec(match[2]); tspan !== null; tspan = tspanPattern.exec(match[2])) {
+			lineYs.push(Number(tspan[1]));
+			lines.push(tspan[2].replace(/&amp;/g, '&'));
+		}
+		ticks.push({ lines, lineYs });
+	}
+	return ticks;
+}
 
 function readHorizontalBarValueLabels(
 	html: string,

@@ -1,4 +1,12 @@
-import { bucketPieData, buildChart, buildStoryChartBlock, labelize, resolveDataKey, useChartStyle } from '@nao/shared';
+import {
+	bucketPieData,
+	buildChart,
+	buildStoryChartBlock,
+	computeHorizontalBarMinPlotHeight,
+	labelize,
+	resolveDataKey,
+	useChartStyle,
+} from '@nao/shared';
 import {
 	buildSeriesChartConfig,
 	buildSeriesLegendPayload,
@@ -65,6 +73,7 @@ const ANGLE_SIN = Math.sin((35 * Math.PI) / 180);
 const MIN_TICK_FONT = 9;
 const MAX_TICK_FONT = 12;
 const MAX_TICK_LABEL_HEIGHT = 44;
+const HORIZONTAL_BAR_LEGEND_AND_AXIS_HEIGHT = 56;
 
 type ViewMode = 'chart' | 'data' | 'query';
 
@@ -622,6 +631,10 @@ export const ChartDisplay = memo(function ChartDisplay({
 
 	const isDualAxis = isComboChart(chartType) && displayChart.hasRightAxisSeries(visibleSeries);
 	const chartStyle = useChartStyle();
+	const horizontalBarMinHeight = useMemo(
+		() => computeHorizontalBarContentMinHeight(chartType, data, xAxisKey, labelFormatter, visibleSeries.length),
+		[chartType, data, xAxisKey, labelFormatter, visibleSeries.length],
+	);
 
 	const chartElement = useMemo(
 		() =>
@@ -802,6 +815,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 					config={chartConfig}
 					className={cn(normalSize ? 'h-full w-full' : 'w-full', pieCenteringClass, chartContainerClassName)}
 					contentClassName={cn(normalSize ? 'aspect-auto flex-1 min-h-0' : undefined, chartContentClassName)}
+					contentStyle={horizontalBarMinHeight ? { minHeight: horizontalBarMinHeight } : undefined}
 					header={inlineHeader}
 				>
 					{chartElement}
@@ -810,6 +824,23 @@ export const ChartDisplay = memo(function ChartDisplay({
 		</div>
 	);
 });
+
+function computeHorizontalBarContentMinHeight(
+	chartType: ChartType,
+	data: Record<string, unknown>[],
+	xAxisKey: string,
+	labelFormatter: (value: string) => string,
+	seriesCount: number,
+): number {
+	if (chartType !== 'horizontal_bar' && chartType !== 'horizontal_bar_100') {
+		return 0;
+	}
+	const minPlotHeight = computeHorizontalBarMinPlotHeight(data, xAxisKey, labelFormatter);
+	if (minPlotHeight === 0) {
+		return 0;
+	}
+	return minPlotHeight + (seriesCount > 1 ? HORIZONTAL_BAR_LEGEND_AND_AXIS_HEIGHT : 0);
+}
 
 interface ChartPlotWidthObserverProps {
 	offset?: { width?: number };
