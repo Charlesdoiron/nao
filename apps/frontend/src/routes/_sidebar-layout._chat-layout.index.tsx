@@ -4,6 +4,7 @@ import { ArrowRight, PlusIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
+import { TrialOnboardingBanner } from './_sidebar-layout._chat-layout.$chatId';
 import type { UIMessage } from '@nao/backend/chat';
 import type { StoryItem } from '@/lib/stories-page';
 
@@ -192,18 +193,23 @@ function HomePage() {
 									<SavedPromptSuggestions />
 								</div>
 								{showProjectSetupCue && (
-									<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
-										{latestStoryItems[0] && (
-											<div className='w-full max-w-md'>
-												<StoryCard
-													item={latestStoryItems[0]}
-													displayMode='grid'
-													showArchived={false}
-												/>
-											</div>
-										)}
-										<ExampleProjectPromptCard />
-									</div>
+									<>
+										<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
+											{latestStoryItems[0] && (
+												<div className='w-full max-w-md'>
+													<StoryCard
+														item={latestStoryItems[0]}
+														displayMode='grid'
+														showArchived={false}
+													/>
+												</div>
+											)}
+											<ExampleProjectPromptCard />
+										</div>
+										<div className='absolute inset-x-0 bottom-35'>
+											<TrialOnboardingBanner />
+										</div>
+									</>
 								)}
 							</>
 						) : showProjectSetupCue ? (

@@ -365,7 +365,7 @@ function ChatPage() {
 	);
 }
 
-function TrialOnboardingBanner() {
+export function TrialOnboardingBanner() {
 	const logoSrc = useIsDarkMode() ? '/dark-card-logo.svg' : '/light-card-logo.svg';
 
 	return (
