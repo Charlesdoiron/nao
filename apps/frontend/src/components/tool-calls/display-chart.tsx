@@ -762,7 +762,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 	);
 
 	const inlineHeader = useInlineHeader ? (
-		<div className='mb-6 flex w-full min-w-0 items-center gap-3'>
+		<div className='sticky left-0 mb-6 flex w-full min-w-0 items-center gap-3'>
 			<div className={showInlineLegend ? 'min-h-11 shrink-0' : 'shrink-0'}>
 				<span className='block text-[15px] font-semibold'>{title}</span>
 				{titleAccessory}
@@ -811,7 +811,6 @@ export const ChartDisplay = memo(function ChartDisplay({
 			className={cn(
 				'flex flex-col items-stretch gap-2 w-full',
 				chartType !== 'kpi_card' && normalSize ? 'h-full' : '',
-				minChartWidth ? 'overflow-x-auto overflow-y-hidden' : '',
 				className,
 			)}
 		>
@@ -823,9 +822,22 @@ export const ChartDisplay = memo(function ChartDisplay({
 			) : (
 				<ChartContainer
 					config={chartConfig}
-					style={minChartWidth ? { minWidth: minChartWidth } : undefined}
-					className={cn(normalSize ? 'h-full w-full' : 'w-full', pieCenteringClass, chartContainerClassName)}
-					contentClassName={cn(normalSize ? 'aspect-auto flex-1 min-h-0' : undefined, chartContentClassName)}
+					style={
+						minChartWidth
+							? ({ '--chart-min-width': `${minChartWidth}px` } as React.CSSProperties)
+							: undefined
+					}
+					className={cn(
+						normalSize ? 'h-full w-full' : 'w-full',
+						minChartWidth ? 'overflow-x-auto overflow-y-hidden' : '',
+						pieCenteringClass,
+						chartContainerClassName,
+					)}
+					contentClassName={cn(
+						normalSize ? 'aspect-auto flex-1 min-h-0' : undefined,
+						minChartWidth ? 'min-w-(--chart-min-width)' : undefined,
+						chartContentClassName,
+					)}
 					header={inlineHeader}
 				>
 					{chartElement}
