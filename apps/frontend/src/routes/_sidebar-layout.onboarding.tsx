@@ -31,6 +31,7 @@ import { SetChatInputCallbackProvider } from '@/contexts/set-chat-input-callback
 import { StoryBeforeAgentSendProvider } from '@/contexts/story-before-agent-send';
 import { getOnboardingChatIdStorage } from '@/hooks/use-agent';
 import { ChatIdContext } from '@/hooks/use-chat-id';
+import { useCloudBillingAccess } from '@/hooks/use-cloud-billing-access';
 import { useHeight } from '@/hooks/use-height';
 import { usePermissions } from '@/hooks/use-permissions';
 import { setActiveProjectId } from '@/lib/active-project';
@@ -90,6 +91,11 @@ function OnboardingPage() {
 	const { data: session } = useSession();
 	const queryClient = useQueryClient();
 	const currentProject = useQuery(trpc.project.getCurrent.queryOptions());
+	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
+	const billingAccess = useCloudBillingAccess({
+		enabled: config.data?.cloudBillingEnabled === true,
+		pollWhileRestricted: true,
+	});
 	const search = Route.useSearch();
 	const inputAreaRef = useRef<HTMLDivElement>(null);
 	const actionAreaRef = useRef<HTMLDivElement>(null);
@@ -113,6 +119,7 @@ function OnboardingPage() {
 	const warehouseReady = warehouseJob.data?.status === 'ready';
 	const setupReportedComplete = isOnboardingComplete(true, progress, warehouseReady);
 	const onboardingComplete = isOnboardingComplete(currentProject.data != null, progress, warehouseReady);
+	const trialStarted = onboardingComplete && billingAccess.data?.status === 'trialing';
 	const [deployDialogStyle, setDeployDialogStyle] = useState<React.CSSProperties>();
 	const [importDialogStyle, setImportDialogStyle] = useState<React.CSSProperties>();
 	const [latestPlaintextDeployKey, setLatestPlaintextDeployKey] = useState<string | null>(null);
@@ -293,13 +300,15 @@ function OnboardingPage() {
 							{onboardingComplete ? (
 								<div className='flex flex-col items-center gap-2 pb-4'>
 									<p className='text-center text-sm font-medium text-violet'>
-										Project setup successful!
+										{trialStarted
+											? 'Project created! Your free trial has started.'
+											: 'Project setup successful!'}
 									</p>
 									<Button
 										asChild
 										className='rounded-full bg-violet text-white shadow-sm hover:bg-violet/90'
 									>
-										<Link to='/'>
+										<Link to='/' search={{ trialStarted: trialStarted || undefined }}>
 											Start chatting
 											<ArrowRight className='size-4' />
 										</Link>

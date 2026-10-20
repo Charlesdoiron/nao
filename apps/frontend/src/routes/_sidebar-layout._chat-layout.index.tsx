@@ -13,6 +13,7 @@ import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestio
 import { MobileHeader } from '@/components/mobile-header';
 import { ProjectSwitcher } from '@/components/project-selector';
 import { StoryCard } from '@/components/stories-groups';
+import { TrialStartedDialog } from '@/components/trial-started-dialog';
 import { ViewerHome } from '@/components/viewer-home';
 import { useAgentContext, useAgentMessagesSelector } from '@/contexts/agent.provider';
 import { useIsDarkMode } from '@/contexts/theme.provider';
@@ -27,9 +28,12 @@ import { capitalize, cn } from '@/lib/utils';
 import { trpc } from '@/main';
 
 export const Route = createFileRoute('/_sidebar-layout/_chat-layout/')({
-	validateSearch: (search: Record<string, unknown>): { admin?: boolean; example?: boolean } => ({
+	validateSearch: (
+		search: Record<string, unknown>,
+	): { admin?: boolean; example?: boolean; trialStarted?: boolean } => ({
 		admin: search.admin === true || search.admin === 'true' ? true : undefined,
 		example: search.example === true || search.example === 'true' ? true : undefined,
+		trialStarted: search.trialStarted === true || search.trialStarted === 'true' ? true : undefined,
 	}),
 	component: RouteComponent,
 });
@@ -48,8 +52,9 @@ function HomePage() {
 	const { setAdminMode } = useAgentContext();
 	const isEmptyState = useAgentMessagesSelector(checkHasNoMessages);
 	const { canChatWithNaoData } = usePermissions();
-	const { admin: adminSearch, example: exampleSearch } = Route.useSearch();
+	const { admin: adminSearch, example: exampleSearch, trialStarted: trialStartedSearch } = Route.useSearch();
 	const navigate = useNavigate();
+	const [trialDialogOpen, setTrialDialogOpen] = useState(trialStartedSearch === true);
 
 	useEffect(() => {
 		if (!canChatWithNaoData) {
@@ -57,6 +62,18 @@ function HomePage() {
 		}
 		setAdminMode(adminSearch === true);
 	}, [canChatWithNaoData, adminSearch, setAdminMode]);
+
+	useEffect(() => {
+		if (!trialStartedSearch) {
+			return;
+		}
+
+		void navigate({
+			to: '/',
+			search: (previous) => ({ ...previous, trialStarted: undefined }),
+			replace: true,
+		});
+	}, [navigate, trialStartedSearch]);
 
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projects = useQuery(trpc.project.listForCurrentUser.queryOptions());
@@ -138,6 +155,11 @@ function HomePage() {
 	return (
 		<div className='relative flex flex-col h-full flex-1 min-w-72 overflow-hidden justify-center'>
 			<MobileHeader showExampleProjectInfo={showExampleProject} />
+			<TrialStartedDialog
+				open={trialDialogOpen}
+				onOpenChange={setTrialDialogOpen}
+				userName={session?.user.name}
+			/>
 			{isEmptyState &&
 				!showExampleProject &&
 				multiProjectMode === 'switch' &&
