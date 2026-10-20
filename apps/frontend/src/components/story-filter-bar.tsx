@@ -9,22 +9,13 @@ import type { ParsedFilterBlock } from '@nao/shared/story-segments';
 
 import type { StoryFilterApi } from '@/hooks/use-story-filters';
 import { FixInChatButton } from '@/components/fix-in-chat-button';
+import { StoryFilterOptionPicker } from '@/components/story-filter-option-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/main';
-
-const CLEAR_SELECT_VALUE = '__nao_clear_filter__';
-const SELECT_VALUE_PREFIX = '__nao_filter_value__:';
 
 export function StoryFilterBar({
 	filters,
@@ -139,36 +130,23 @@ function StoryFilterControl({
 				isLoading ? (
 					<FilterOptionsLoading />
 				) : (
-					<Select
-						value={
-							typeof selection === 'string' && selection
-								? `${SELECT_VALUE_PREFIX}${selection}`
-								: CLEAR_SELECT_VALUE
-						}
-						onValueChange={(value) =>
-							onChange(value === CLEAR_SELECT_VALUE ? '' : value.slice(SELECT_VALUE_PREFIX.length))
-						}
-					>
-						<SelectTrigger className='h-8 min-w-36 bg-background'>
-							<SelectValue placeholder='All' />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value={CLEAR_SELECT_VALUE}>All</SelectItem>
-							{options.map((option) => (
-								<SelectItem key={option} value={`${SELECT_VALUE_PREFIX}${option}`}>
-									{option}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<StoryFilterOptionPicker
+						label={filter.label}
+						options={options}
+						value={typeof selection === 'string' && selection ? [selection] : []}
+						multiple={false}
+						onChange={(value) => onChange(value[0] ?? '')}
+					/>
 				)
 			) : filter.filterType === 'multi_select' ? (
 				isLoading ? (
 					<FilterOptionsLoading />
 				) : (
-					<MultiSelectFilter
+					<StoryFilterOptionPicker
+						label={filter.label}
 						options={options}
 						value={Array.isArray(selection) ? selection : []}
+						multiple
 						onChange={onChange}
 					/>
 				)
@@ -197,40 +175,6 @@ function FilterOptionsLoading() {
 			<Loader2 className='size-3.5 animate-spin' />
 			Loading…
 		</div>
-	);
-}
-
-function MultiSelectFilter({
-	options,
-	value,
-	onChange,
-}: {
-	options: string[];
-	value: string[];
-	onChange: (value: string[]) => void;
-}) {
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger asChild>
-				<Button variant='outline' size='sm' className='h-8 min-w-36 justify-between bg-background font-normal'>
-					{value.length > 0 ? `${value.length} selected` : 'All'}
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent className='max-h-64 min-w-48'>
-				{options.map((option) => (
-					<DropdownMenuCheckboxItem
-						key={option}
-						checked={value.includes(option)}
-						onSelect={(event) => event.preventDefault()}
-						onCheckedChange={(checked) =>
-							onChange(checked ? [...value, option] : value.filter((candidate) => candidate !== option))
-						}
-					>
-						{option}
-					</DropdownMenuCheckboxItem>
-				))}
-			</DropdownMenuContent>
-		</DropdownMenu>
 	);
 }
 
