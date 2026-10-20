@@ -9,6 +9,7 @@ import type { ParsedFilterBlock } from '@nao/shared/story-segments';
 
 import type { StoryFilterApi } from '@/hooks/use-story-filters';
 import { FixInChatButton } from '@/components/fix-in-chat-button';
+import { EXPANDED_PICKER_MIN_OPTIONS, StoryFilterOptionPicker } from '@/components/story-filter-option-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -135,43 +136,45 @@ function StoryFilterControl({
 					</button>
 				)}
 			</div>
-			{filter.filterType === 'select' ? (
-				isLoading ? (
-					<FilterOptionsLoading />
-				) : (
-					<Select
-						value={
-							typeof selection === 'string' && selection
-								? `${SELECT_VALUE_PREFIX}${selection}`
-								: CLEAR_SELECT_VALUE
-						}
-						onValueChange={(value) =>
-							onChange(value === CLEAR_SELECT_VALUE ? '' : value.slice(SELECT_VALUE_PREFIX.length))
-						}
-					>
-						<SelectTrigger className='h-8 min-w-36 bg-background'>
-							<SelectValue placeholder='All' />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value={CLEAR_SELECT_VALUE}>All</SelectItem>
-							{options.map((option) => (
-								<SelectItem key={option} value={`${SELECT_VALUE_PREFIX}${option}`}>
-									{option}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				)
+			{isLoading ? (
+				<FilterOptionsLoading />
+			) : isOptionFilter(filter.filterType) && options.length >= EXPANDED_PICKER_MIN_OPTIONS ? (
+				<StoryFilterOptionPicker
+					label={filter.label}
+					options={options}
+					multiple={filter.filterType === 'multi_select'}
+					value={toValueList(selection)}
+					onChange={(value) => onChange(filter.filterType === 'select' ? (value[0] ?? '') : value)}
+				/>
+			) : filter.filterType === 'select' ? (
+				<Select
+					value={
+						typeof selection === 'string' && selection
+							? `${SELECT_VALUE_PREFIX}${selection}`
+							: CLEAR_SELECT_VALUE
+					}
+					onValueChange={(value) =>
+						onChange(value === CLEAR_SELECT_VALUE ? '' : value.slice(SELECT_VALUE_PREFIX.length))
+					}
+				>
+					<SelectTrigger className='h-8 min-w-36 bg-background'>
+						<SelectValue placeholder='All' />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={CLEAR_SELECT_VALUE}>All</SelectItem>
+						{options.map((option) => (
+							<SelectItem key={option} value={`${SELECT_VALUE_PREFIX}${option}`}>
+								{option}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
 			) : filter.filterType === 'multi_select' ? (
-				isLoading ? (
-					<FilterOptionsLoading />
-				) : (
-					<MultiSelectFilter
-						options={options}
-						value={Array.isArray(selection) ? selection : []}
-						onChange={onChange}
-					/>
-				)
+				<MultiSelectFilter
+					options={options}
+					value={Array.isArray(selection) ? selection : []}
+					onChange={onChange}
+				/>
 			) : filter.filterType === 'date_range' ? (
 				<RangeFilter value={Array.isArray(selection) ? selection : []} onChange={onChange} />
 			) : (
@@ -189,6 +192,17 @@ function StoryFilterControl({
 
 function emptySelection(filterType: ParsedFilterBlock['filterType']): StoryFilterSelection {
 	return filterType === 'select' || filterType === 'search' ? '' : [];
+}
+
+function isOptionFilter(filterType: ParsedFilterBlock['filterType']): boolean {
+	return filterType === 'select' || filterType === 'multi_select';
+}
+
+function toValueList(selection: StoryFilterSelection | undefined): string[] {
+	if (Array.isArray(selection)) {
+		return selection;
+	}
+	return selection ? [selection] : [];
 }
 
 function FilterOptionsLoading() {
