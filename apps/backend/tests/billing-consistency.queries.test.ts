@@ -138,6 +138,10 @@ describe('billing consistency queries', () => {
 		Object.assign(process.env, {
 			NAO_MODE: 'cloud',
 			CLOUD_BILLING_ENABLED: 'true',
+			CLOUD_GITHUB_PROJECT_APP_ID: '123',
+			CLOUD_GITHUB_PROJECT_INSTALLATION_ID: '456',
+			CLOUD_GITHUB_PROJECT_ORG: 'test-org',
+			CLOUD_GITHUB_PROJECT_PRIVATE_KEY: 'test-private-key',
 			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
 			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
 			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
@@ -238,6 +242,10 @@ describe('billing consistency queries', () => {
 		Object.assign(process.env, {
 			NAO_MODE: 'cloud',
 			CLOUD_BILLING_ENABLED: 'true',
+			CLOUD_GITHUB_PROJECT_APP_ID: '123',
+			CLOUD_GITHUB_PROJECT_INSTALLATION_ID: '456',
+			CLOUD_GITHUB_PROJECT_ORG: 'test-org',
+			CLOUD_GITHUB_PROJECT_PRIVATE_KEY: 'test-private-key',
 			STRIPE_CLOUD_PRODUCT_ID: 'prod_cloud',
 			STRIPE_CLOUD_MONTHLY_PRICE_LOOKUP_KEY: 'monthly_sub',
 			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
