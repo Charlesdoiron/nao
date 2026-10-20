@@ -285,8 +285,16 @@ export async function createCloudCheckoutSession(
 	if (input.trialEnd && input.trialEnd.getTime() <= Date.now()) {
 		throw new CloudInitialCheckoutUnavailableError('This organization trial has expired');
 	}
+	if (
+		input.trialEnd &&
+		input.trialEnd.getTime() < Date.now() + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_CLOCK_SKEW_MS
+	) {
+		throw new CloudInitialCheckoutUnavailableError(
+			'Not enough time remains for Stripe Checkout to preserve this organization trial',
+		);
+	}
 	const sourceTrialEnd = input.trialEnd ? stripeTimestamp(input.trialEnd) : null;
-	const effectiveTrialEnd = input.trialEnd ? effectiveCheckoutTrialEnd(input.trialEnd) : null;
+	const effectiveTrialEnd = sourceTrialEnd;
 	return createSubscriptionCheckoutSession({
 		...input,
 		currency: input.currency ?? 'usd',
@@ -1097,11 +1105,6 @@ function checkoutTrialMessage(trialEnd: Date): string {
 
 function checkoutTrialDaysMessage(trialDays: number): string {
 	return `Nothing is charged today. Your ${trialDays}-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.`;
-}
-
-function effectiveCheckoutTrialEnd(trialEnd: Date): number {
-	const minimumTrialEnd = Date.now() + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_CLOCK_SKEW_MS;
-	return stripeTimestamp(new Date(Math.max(trialEnd.getTime(), minimumTrialEnd)));
 }
 
 function stripeTimestamp(date: Date): number {

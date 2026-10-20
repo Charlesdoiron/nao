@@ -35,7 +35,7 @@ describe('cloud billing lifecycle', () => {
 		mocks.provisionTrial.mockResolvedValue(undefined);
 	});
 
-	it('recovers every unprovisioned trial without aborting after one failure', async () => {
+	it('continues provisioning and reconciles a mapped organization after its provisioning fails', async () => {
 		mocks.listPendingTrials.mockResolvedValue([{ orgId: 'org-one' }, { orgId: 'org-two' }]);
 		mocks.listMappedOrganizations.mockResolvedValue([
 			{ orgId: 'org-one', stripeCustomerId: 'cus_one' },
@@ -49,8 +49,12 @@ describe('cloud billing lifecycle', () => {
 		expect(mocks.provisionTrial).toHaveBeenCalledTimes(2);
 		expect(mocks.provisionTrial).toHaveBeenNthCalledWith(1, 'org-one');
 		expect(mocks.provisionTrial).toHaveBeenNthCalledWith(2, 'org-two');
-		expect(mocks.reconcileCustomer).toHaveBeenCalledOnce();
-		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
+		expect(mocks.reconcileCustomer).toHaveBeenCalledTimes(2);
+		expect(mocks.reconcileCustomer).toHaveBeenNthCalledWith(1, {
+			stripeCustomerId: 'cus_one',
+			organizationIdHint: 'org-one',
+		});
+		expect(mocks.reconcileCustomer).toHaveBeenNthCalledWith(2, {
 			stripeCustomerId: 'cus_three',
 			organizationIdHint: 'org-three',
 		});

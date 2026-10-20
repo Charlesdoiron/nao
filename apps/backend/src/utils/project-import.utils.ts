@@ -86,17 +86,23 @@ export async function createNewProject({
 		});
 	}
 
-	const project = await projectQueries.createProject(
-		{
-			id: projectId,
-			name: projectName,
-			type: 'local',
-			path: projectDir,
-			orgId,
-		},
-		undefined,
-		actingUserId,
-	);
+	let project: DBProject;
+	try {
+		project = await projectQueries.createProject(
+			{
+				id: projectId,
+				name: projectName,
+				type: 'local',
+				path: projectDir,
+				orgId,
+			},
+			undefined,
+			actingUserId,
+		);
+	} catch (err) {
+		fs.rmSync(projectDir, { recursive: true, force: true });
+		throw err;
+	}
 
 	await ensureContextRecommendationsScheduleForNewProject(project.id);
 	await recordOrganizationSetupCandidate(project.id);

@@ -13,12 +13,12 @@ import { trpc } from '@/main';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TRIAL_WARNING_MS = 3 * DAY_MS;
-const dismissedTrialBannerStorage = createLocalStorage<string>('nao-dismissed-trial-banner', '');
+const dismissedTrialBannerStorage = createLocalStorage<string | string[]>('nao-dismissed-trial-banner', []);
 
 export function CloudBillingAccessBanner() {
 	const openOrganizationBilling = useOpenOrganizationBilling();
 	const pathname = useRouterState({ select: (state) => state.location.pathname });
-	const [dismissedTrial, setDismissedTrial] = useState(() => dismissedTrialBannerStorage.get());
+	const [dismissedTrials, setDismissedTrials] = useState(getDismissedTrialKeys);
 	const config = useQuery(trpc.system.getPublicConfig.queryOptions());
 	const access = useCloudBillingAccess({
 		enabled: config.data?.cloudBillingEnabled === true,
@@ -32,7 +32,7 @@ export function CloudBillingAccessBanner() {
 		!notice ||
 		pathname === '/settings/organization/billing' ||
 		(notice.trial && pathname.startsWith('/settings')) ||
-		(notice.dismissible && dismissedTrial === trialKey)
+		(notice.dismissible && trialKey && dismissedTrials.includes(trialKey))
 	) {
 		return null;
 	}
@@ -63,8 +63,9 @@ export function CloudBillingAccessBanner() {
 						size='icon-sm'
 						aria-label='Dismiss trial banner'
 						onClick={() => {
-							dismissedTrialBannerStorage.set(trialKey);
-							setDismissedTrial(trialKey);
+							const nextDismissedTrials = [...new Set([...getDismissedTrialKeys(), trialKey])];
+							dismissedTrialBannerStorage.set(nextDismissedTrials);
+							setDismissedTrials(nextDismissedTrials);
 						}}
 					>
 						<X />
@@ -73,6 +74,11 @@ export function CloudBillingAccessBanner() {
 			</div>
 		</Callout>
 	);
+}
+
+function getDismissedTrialKeys(): string[] {
+	const dismissedTrials = dismissedTrialBannerStorage.get();
+	return Array.isArray(dismissedTrials) ? dismissedTrials : dismissedTrials ? [dismissedTrials] : [];
 }
 
 function getAccessNotice(access: CloudBillingAccess | undefined, now = Date.now()) {

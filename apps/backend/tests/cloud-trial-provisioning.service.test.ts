@@ -66,11 +66,18 @@ describe('cloud trial provisioning', () => {
 			organizationName: 'Acme',
 			adminEmail: 'admin@example.com',
 		});
+		expect(mocks.attachCustomer).toHaveBeenCalledWith('org-id', 'cus_cloud');
 		expect(mocks.createPlaceholder).toHaveBeenCalledWith({
 			organizationId: 'org-id',
 			stripeCustomerId: 'cus_cloud',
 			trialEnd,
 		});
+		expect(mocks.createCustomer.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.attachCustomer.mock.invocationCallOrder[0],
+		);
+		expect(mocks.attachCustomer.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.createPlaceholder.mock.invocationCallOrder[0],
+		);
 		expect(mocks.reconcileCustomer).toHaveBeenCalledWith({
 			stripeCustomerId: 'cus_cloud',
 			organizationIdHint: 'org-id',

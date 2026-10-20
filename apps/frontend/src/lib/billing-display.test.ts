@@ -18,10 +18,24 @@ describe('formatBillingPrice', () => {
 	});
 });
 
-it('describes a canceled placeholder as an ended free trial', () => {
-	expect(getBillingStatusView('canceled', false, false, false)).toEqual({
+it.each([
+	{
+		hasPaidPlan: false,
 		label: 'Free trial ended',
 		description: 'Your free trial has ended. Subscribe to restore access.',
+	},
+	{
+		hasPaidPlan: true,
+		label: 'Canceled',
+		description: 'Your previous subscription is canceled and kept as billing history. It cannot be resumed.',
+	},
+])('describes a canceled subscription when hasPaidPlan=$hasPaidPlan', ({ hasPaidPlan, label, description }) => {
+	const cancellationScheduled = false;
+	const hasDefaultPaymentMethod = false;
+
+	expect(getBillingStatusView('canceled', cancellationScheduled, hasDefaultPaymentMethod, hasPaidPlan)).toEqual({
+		label,
+		description,
 		variant: 'outline',
 	});
 });

@@ -79,6 +79,7 @@ import {
 	createCloudTrialPlaceholderSubscription,
 	createCreditTopUpCheckoutSession,
 	findCloudSubscription,
+	findManagedCloudSubscription,
 	getCloudBillingPlans,
 	getCloudPrice,
 	getCloudSubscriptionCurrency,
@@ -668,42 +669,26 @@ describe('cloud Checkout', () => {
 		);
 	});
 
-	it('extends an initial Checkout trial to Stripe minimum when less than 48 hours remain', async () => {
+	it('rejects initial Checkout when Stripe cannot preserve the remaining trial', async () => {
 		const now = new Date('2026-10-01T00:00:00.000Z');
 		const localTrialEnd = new Date('2026-10-02T00:00:00.000Z');
-		const minimumTrialEnd = Math.floor((now.getTime() + 48 * 60 * 60 * 1000 + 5 * 60 * 1000) / 1_000);
 		vi.useFakeTimers();
 		vi.setSystemTime(now);
-		stripeMocks.createCheckoutSession.mockResolvedValue({ url: 'https://checkout.stripe.com/trial' });
 
 		try {
-			await createCloudCheckoutSession({
-				billingInterval: 'monthly',
-				organizationId: 'org-id',
-				stripeCustomerId: 'cus_cloud',
-				trialEnd: localTrialEnd,
-			});
+			await expect(
+				createCloudCheckoutSession({
+					billingInterval: 'monthly',
+					organizationId: 'org-id',
+					stripeCustomerId: 'cus_cloud',
+					trialEnd: localTrialEnd,
+				}),
+			).rejects.toThrow('Not enough time remains for Stripe Checkout to preserve this organization trial');
 		} finally {
 			vi.useRealTimers();
 		}
 
-		expect(stripeMocks.createCheckoutSession).toHaveBeenCalledWith(
-			expect.objectContaining({
-				custom_text: {
-					submit: {
-						message:
-							'Nothing is charged today. Your recurring price, including any promotion code discount, starts when your trial ends on October 3, 2026.',
-					},
-				},
-				metadata: expect.objectContaining({
-					nao_trial_end: String(Math.floor(localTrialEnd.getTime() / 1_000)),
-				}),
-				subscription_data: expect.objectContaining({ trial_end: minimumTrialEnd }),
-			}),
-			{
-				idempotencyKey: `cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:trial-${Math.floor(localTrialEnd.getTime() / 1_000)}-${minimumTrialEnd}`,
-			},
-		);
+		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
 	});
 
 	it('expires an open monthly Checkout before creating a yearly Checkout', async () => {
@@ -983,6 +968,21 @@ describe('cloud Checkout', () => {
 
 		await expect(findCloudSubscription('sub_cloud')).resolves.toBe(cloud);
 		await expect(findCloudSubscription('sub_unrelated')).resolves.toBeNull();
+	});
+
+	it('finds paid and trial-placeholder managed subscriptions', async () => {
+		const paid = cloudSubscription();
+		const placeholder = cloudTrialSubscription();
+		const unrelated = cloudSubscription({ id: 'sub_unrelated' });
+		unrelated.items.data[0].price = cloudMonthlyPrice({ product: 'prod_unrelated' });
+		stripeMocks.retrieveSubscription
+			.mockResolvedValueOnce(paid)
+			.mockResolvedValueOnce(placeholder)
+			.mockResolvedValueOnce(unrelated);
+
+		await expect(findManagedCloudSubscription('sub_cloud')).resolves.toBe(paid);
+		await expect(findManagedCloudSubscription('sub_cloud_trial')).resolves.toBe(placeholder);
+		await expect(findManagedCloudSubscription('sub_unrelated')).resolves.toBeNull();
 	});
 
 	it('retrieves a subscription currency from Stripe once and drops failed lookups', async () => {

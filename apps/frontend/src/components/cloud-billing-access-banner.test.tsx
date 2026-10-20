@@ -173,7 +173,37 @@ it('lets admins dismiss the trial-start banner', () => {
 
 	expect(screen.queryByRole('status')).toBeNull();
 	expect(localStorage.getItem('nao-dismissed-trial-banner')).toBe(
-		JSON.stringify(`project-organization:${trialEndsAt.toISOString()}`),
+		JSON.stringify([`project-organization:${trialEndsAt.toISOString()}`]),
+	);
+});
+
+it('keeps trial-start dismissals for multiple organizations', () => {
+	const now = new Date('2026-10-05T12:00:00.000Z');
+	const trialEndsAt = new Date(now.getTime() + 14 * DAY_MS);
+	vi.useFakeTimers();
+	vi.setSystemTime(now);
+	mocks.access = {
+		...restrictedTrialAccess,
+		hasAccess: true,
+		trialEndsAt,
+	};
+
+	const view = render(<CloudBillingAccessBanner />);
+	fireEvent.click(screen.getByRole('button', { name: 'Dismiss trial banner' }));
+
+	mocks.access = { ...mocks.access, organizationId: 'other-organization' };
+	view.rerender(<CloudBillingAccessBanner />);
+	fireEvent.click(screen.getByRole('button', { name: 'Dismiss trial banner' }));
+
+	mocks.access = { ...mocks.access, organizationId: 'project-organization' };
+	view.rerender(<CloudBillingAccessBanner />);
+
+	expect(screen.queryByRole('status')).toBeNull();
+	expect(localStorage.getItem('nao-dismissed-trial-banner')).toBe(
+		JSON.stringify([
+			`project-organization:${trialEndsAt.toISOString()}`,
+			`other-organization:${trialEndsAt.toISOString()}`,
+		]),
 	);
 });
 

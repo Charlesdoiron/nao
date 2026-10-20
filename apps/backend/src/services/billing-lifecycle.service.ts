@@ -7,28 +7,39 @@ const BILLING_LIFECYCLE_CONCURRENCY = 5;
 
 export async function runCloudBillingLifecycle(): Promise<void> {
 	const pendingTrials = await billingQueries.listOrganizationTrialsPendingStripeProvisioning(new Date());
-	await provisionPendingTrials(pendingTrials);
-	await reconcileMappedOrganizations(new Set(pendingTrials.map((billing) => billing.orgId)));
+	const provisionedOrganizationIds = await provisionPendingTrials(pendingTrials);
+	await reconcileMappedOrganizations(provisionedOrganizationIds);
 }
 
 async function provisionPendingTrials(
 	billings: Awaited<ReturnType<typeof billingQueries.listOrganizationTrialsPendingStripeProvisioning>>,
-): Promise<void> {
+): Promise<Set<string>> {
+	const provisionedOrganizationIds = new Set<string>();
 	for (let index = 0; index < billings.length; index += BILLING_LIFECYCLE_CONCURRENCY) {
-		await Promise.all(billings.slice(index, index + BILLING_LIFECYCLE_CONCURRENCY).map(provisionOrganizationTrial));
+		const organizationIds = await Promise.all(
+			billings.slice(index, index + BILLING_LIFECYCLE_CONCURRENCY).map(provisionOrganizationTrial),
+		);
+		for (const organizationId of organizationIds) {
+			if (organizationId) {
+				provisionedOrganizationIds.add(organizationId);
+			}
+		}
 	}
+	return provisionedOrganizationIds;
 }
 
 async function provisionOrganizationTrial(
 	billing: Awaited<ReturnType<typeof billingQueries.listOrganizationTrialsPendingStripeProvisioning>>[number],
-): Promise<void> {
+): Promise<string | null> {
 	try {
 		await provisionCloudTrial(billing.orgId);
+		return billing.orgId;
 	} catch (error) {
 		logger.error(`Cloud trial provisioning recovery failed for organization ${billing.orgId}`, {
 			source: 'system',
 			context: serializeError(error),
 		});
+		return null;
 	}
 }
 

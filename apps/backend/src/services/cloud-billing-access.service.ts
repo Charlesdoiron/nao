@@ -72,12 +72,11 @@ export function isActiveTrialWithoutPaidPlan(entitlement: CloudBillingEntitlemen
 }
 
 export function isExpiredTrialWithoutPaidPlan(entitlement: CloudBillingEntitlement | null, now = Date.now()): boolean {
-	return (
-		!entitlement?.billingPlan &&
-		entitlement?.billingStatus === 'trialing' &&
-		entitlement.trialEndsAt !== null &&
-		entitlement.trialEndsAt.getTime() <= now
-	);
+	if (entitlement?.billingPlan || entitlement?.billingStatus !== 'trialing') {
+		return false;
+	}
+	const accessEndsAt = getCloudBillingAccessEndsAt(entitlement);
+	return accessEndsAt !== null && accessEndsAt.getTime() <= now;
 }
 
 function getLocalTrialAccessEndsAt(entitlement: CloudBillingEntitlement | null): Date | null {

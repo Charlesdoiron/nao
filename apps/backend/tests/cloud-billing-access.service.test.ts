@@ -17,6 +17,7 @@ import {
 	assertProjectCloudBillingAccess,
 	hasCloudBillingAccess,
 	hasProjectCloudBillingAccess,
+	isExpiredTrialWithoutPaidPlan,
 } from '../src/services/cloud-billing-access.service';
 import type { BillingStatus } from '../src/types/billing';
 
@@ -145,6 +146,24 @@ describe('cloud billing access entitlement', () => {
 		['missing billing state', null, false],
 	] as const)('%s', (_label, state, expected) => {
 		expect(hasCloudBillingAccess(state)).toBe(expected);
+	});
+
+	it('matches paying trial expiration to the conversion-grace access window', () => {
+		const withinGrace = entitlement('trialing', {
+			stripeSubscriptionId: 'sub_trial',
+			trialEndsAt: recentlyPast,
+			billingAccessEndsAt: recentlyPast,
+			hasDefaultPaymentMethod: true,
+		});
+		const afterGrace = entitlement('trialing', {
+			stripeSubscriptionId: 'sub_trial',
+			trialEndsAt: past,
+			billingAccessEndsAt: past,
+			hasDefaultPaymentMethod: true,
+		});
+
+		expect(isExpiredTrialWithoutPaidPlan(withinGrace, now.getTime())).toBe(false);
+		expect(isExpiredTrialWithoutPaidPlan(afterGrace, now.getTime())).toBe(true);
 	});
 });
 
