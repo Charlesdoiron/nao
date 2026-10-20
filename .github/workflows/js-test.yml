@@ -57,5 +57,9 @@ jobs:
                   key: vitest-results-${{ matrix.workspace }}-${{ github.sha }}
                   restore-keys: vitest-results-${{ matrix.workspace }}-
 
+            - name: Apply SQLite migrations
+              if: matrix.workspace == 'backend'
+              run: npm run -w @nao/backend db:migrate
+
             - name: Test ${{ matrix.workspace }}
               run: npm run -w @nao/${{ matrix.workspace }} test
