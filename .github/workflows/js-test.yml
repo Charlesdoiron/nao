@@ -50,5 +50,12 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Restore test durations
+              uses: actions/cache@v4
+              with:
+                  path: apps/${{ matrix.workspace }}/node_modules/.vite/vitest
+                  key: vitest-results-${{ matrix.workspace }}-${{ github.sha }}
+                  restore-keys: vitest-results-${{ matrix.workspace }}-
+
             - name: Test ${{ matrix.workspace }}
               run: npm run -w @nao/${{ matrix.workspace }} test
