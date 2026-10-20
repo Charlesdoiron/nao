@@ -1068,6 +1068,7 @@ describe('user group routes', () => {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'compact',
@@ -1085,6 +1086,7 @@ describe('user group routes', () => {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'compact',
@@ -1131,6 +1133,7 @@ describe('user group routes', () => {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'compact',

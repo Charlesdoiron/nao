@@ -1,6 +1,11 @@
 import type { ToolCallDensity } from './types';
 
-export const USER_GROUP_FEATURES = ['storyCreation', 'customStoryCreation', 'automationCreation'] as const;
+export const USER_GROUP_FEATURES = [
+	'storyCreation',
+	'customStoryCreation',
+	'automationCreation',
+	'advancedSettings',
+] as const;
 
 export type UserGroupFeature = (typeof USER_GROUP_FEATURES)[number];
 
@@ -59,6 +64,11 @@ export const USER_GROUP_FEATURE_DEFINITIONS: ReadonlyArray<UserGroupFeatureDefin
 		key: 'automationCreation',
 		label: 'Automations',
 		description: 'Allow the user to create new automations',
+	},
+	{
+		key: 'advancedSettings',
+		label: 'Advanced settings',
+		description: 'Allow the user to see project and organization settings',
 	},
 ];
 

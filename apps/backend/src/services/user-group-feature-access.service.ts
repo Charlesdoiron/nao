@@ -90,6 +90,8 @@ function featureLabel(feature: UserGroupFeature): string {
 			return 'Custom story creation';
 		case 'automationCreation':
 			return 'Automation creation';
+		case 'advancedSettings':
+			return 'Advanced settings';
 	}
 }
 
@@ -114,7 +116,9 @@ export function resolveAgentUserGroupAccess(
 }
 
 export function appendAgentUserGroupRestrictions(systemPrompt: string, access: AgentUserGroupAccess): string {
-	const messages = access.restrictedFeatures.map((feature) => AGENT_FEATURE_POLICIES[feature].restrictionMessage);
+	const messages = access.restrictedFeatures.flatMap(
+		(feature) => AGENT_FEATURE_POLICIES[feature]?.restrictionMessage ?? [],
+	);
 	if (messages.length === 0) {
 		return systemPrompt;
 	}
@@ -139,7 +143,7 @@ interface AgentFeaturePolicy {
 	restrictionMessage: string;
 }
 
-const AGENT_FEATURE_POLICIES: Record<UserGroupFeature, AgentFeaturePolicy> = {
+const AGENT_FEATURE_POLICIES: Partial<Record<UserGroupFeature, AgentFeaturePolicy>> = {
 	storyCreation: {
 		requiredTool: 'story',
 		restrictionMessage:
@@ -161,6 +165,9 @@ function isAgentFeaturePolicyRelevant(
 	feature: UserGroupFeature,
 	agentTools: Readonly<Record<string, unknown>>,
 ): boolean {
-	const { requiredTool, isOffered } = AGENT_FEATURE_POLICIES[feature];
-	return (isOffered?.() ?? true) && (requiredTool === undefined || requiredTool in agentTools);
+	const policy = AGENT_FEATURE_POLICIES[feature];
+	if (!policy) {
+		return false;
+	}
+	return (policy.isOffered?.() ?? true) && (policy.requiredTool === undefined || policy.requiredTool in agentTools);
 }

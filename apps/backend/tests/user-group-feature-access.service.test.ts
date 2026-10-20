@@ -47,6 +47,7 @@ describe('user group feature access service', () => {
 				storyCreation: true,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			toolCallDensityPolicy: {
 				defaultDensity: 'compact',
@@ -63,6 +64,7 @@ describe('user group feature access service', () => {
 			storyCreation: true,
 			customStoryCreation: false,
 			automationCreation: false,
+			advancedSettings: false,
 		});
 		await expect(getEffectiveUserGroupAccess('project-id', 'user-id')).resolves.toMatchObject({
 			databaseAccess: { mode: 'restricted', strict: false, grants: [], patterns: [] },
@@ -94,6 +96,7 @@ describe('user group feature access service', () => {
 				storyCreation: false,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			restrictedFeatures: ['storyCreation', 'automationCreation'],
 		});
@@ -102,6 +105,7 @@ describe('user group feature access service', () => {
 				storyCreation: false,
 				customStoryCreation: false,
 				automationCreation: false,
+				advancedSettings: false,
 			},
 			restrictedFeatures: ['automationCreation'],
 		});
