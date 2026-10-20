@@ -74,6 +74,8 @@ const MIN_TICK_FONT = 9;
 const MAX_TICK_FONT = 12;
 const MAX_TICK_LABEL_HEIGHT = 44;
 const CHART_MARGIN = { top: 0, right: 0, bottom: 0, left: 0 };
+/** Height-to-width ratio of the default `aspect-video` chart content. */
+const CHART_ASPECT_RATIO = 9 / 16;
 
 type ViewMode = 'chart' | 'data' | 'query';
 
@@ -644,6 +646,13 @@ export const ChartDisplay = memo(function ChartDisplay({
 			}),
 		[pieData, chartType, xAxisKey, visibleSeries, labelFormatter, showDataLabels],
 	);
+	const overflowsContainer = minChartWidth !== undefined && width > 0 && minChartWidth > width;
+	const chartSizeStyle = overflowsContainer
+		? ({
+				'--chart-min-width': `${minChartWidth}px`,
+				'--chart-height': `${width * CHART_ASPECT_RATIO}px`,
+			} as React.CSSProperties)
+		: undefined;
 
 	const chartElement = useMemo(
 		() =>
@@ -822,20 +831,17 @@ export const ChartDisplay = memo(function ChartDisplay({
 			) : (
 				<ChartContainer
 					config={chartConfig}
-					style={
-						minChartWidth
-							? ({ '--chart-min-width': `${minChartWidth}px` } as React.CSSProperties)
-							: undefined
-					}
+					style={chartSizeStyle}
 					className={cn(
 						normalSize ? 'h-full w-full' : 'w-full',
-						minChartWidth ? 'overflow-x-auto overflow-y-hidden' : '',
+						overflowsContainer ? 'overflow-x-auto overflow-y-hidden' : '',
 						pieCenteringClass,
 						chartContainerClassName,
 					)}
 					contentClassName={cn(
 						normalSize ? 'aspect-auto flex-1 min-h-0' : undefined,
-						minChartWidth ? 'min-w-(--chart-min-width)' : undefined,
+						overflowsContainer ? 'min-w-(--chart-min-width)' : undefined,
+						overflowsContainer && !normalSize ? 'aspect-auto h-(--chart-height)' : undefined,
 						chartContentClassName,
 					)}
 					header={inlineHeader}
