@@ -1,4 +1,4 @@
-import { buildChart, labelize } from '@nao/shared/chart-builder';
+import { buildChart, computeChartMinWidth, labelize } from '@nao/shared/chart-builder';
 import {
 	buildSeriesChartConfig,
 	buildSeriesLegendPayload,
@@ -121,6 +121,15 @@ function ChartBody({ rows, chartType, xAxisKey, series, height, showLegend, show
 		return <div className='nao-block__state'>No numeric column to chart.</div>;
 	}
 
+	const minChartWidth = computeChartMinWidth({
+		data: rows,
+		chartType,
+		xAxisKey,
+		series: visibleSeries,
+		showDataLabels: options.showDataLabels,
+		margin: CHART_MARGIN,
+	});
+
 	const chart = buildChart({
 		data: pie?.rows ?? rows,
 		chartType,
@@ -173,10 +182,12 @@ function ChartBody({ rows, chartType, xAxisKey, series, height, showLegend, show
 
 	return (
 		<ChartConfigProvider config={pie?.config ?? buildSeriesChartConfig(series, labelize)}>
-			<div className='nao-chart' style={{ height }}>
-				<ResponsiveContainer width='100%' height='100%'>
-					{chart}
-				</ResponsiveContainer>
+			<div style={minChartWidth ? { overflowX: 'auto', overflowY: 'hidden' } : undefined}>
+				<div className='nao-chart' style={{ height, minWidth: minChartWidth }}>
+					<ResponsiveContainer width='100%' height='100%'>
+						{chart}
+					</ResponsiveContainer>
+				</div>
 			</div>
 		</ChartConfigProvider>
 	);

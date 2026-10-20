@@ -1,4 +1,12 @@
-import { bucketPieData, buildChart, buildStoryChartBlock, labelize, resolveDataKey, useChartStyle } from '@nao/shared';
+import {
+	bucketPieData,
+	buildChart,
+	buildStoryChartBlock,
+	computeChartMinWidth,
+	labelize,
+	resolveDataKey,
+	useChartStyle,
+} from '@nao/shared';
 import {
 	buildSeriesChartConfig,
 	buildSeriesLegendPayload,
@@ -65,6 +73,7 @@ const ANGLE_SIN = Math.sin((35 * Math.PI) / 180);
 const MIN_TICK_FONT = 9;
 const MAX_TICK_FONT = 12;
 const MAX_TICK_LABEL_HEIGHT = 44;
+const CHART_MARGIN = { top: 0, right: 0, bottom: 0, left: 0 };
 
 type ViewMode = 'chart' | 'data' | 'query';
 
@@ -622,6 +631,19 @@ export const ChartDisplay = memo(function ChartDisplay({
 
 	const isDualAxis = isComboChart(chartType) && displayChart.hasRightAxisSeries(visibleSeries);
 	const chartStyle = useChartStyle();
+	const minChartWidth = useMemo(
+		() =>
+			computeChartMinWidth({
+				data: pieData,
+				chartType,
+				xAxisKey,
+				series: visibleSeries,
+				labelFormatter,
+				showDataLabels,
+				margin: CHART_MARGIN,
+			}),
+		[pieData, chartType, xAxisKey, visibleSeries, labelFormatter, showDataLabels],
+	);
 
 	const chartElement = useMemo(
 		() =>
@@ -646,7 +668,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 				comparisonMode,
 				gradientIdPrefix,
 				kpiLeadingSlot,
-				margin: { top: 0, right: 0, bottom: 0, left: 0 },
+				margin: CHART_MARGIN,
 				yAxisMin,
 				yAxisMax,
 				yAxisLabel,
@@ -789,6 +811,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 			className={cn(
 				'flex flex-col items-stretch gap-2 w-full',
 				chartType !== 'kpi_card' && normalSize ? 'h-full' : '',
+				minChartWidth ? 'overflow-x-auto overflow-y-hidden' : '',
 				className,
 			)}
 		>
@@ -800,6 +823,7 @@ export const ChartDisplay = memo(function ChartDisplay({
 			) : (
 				<ChartContainer
 					config={chartConfig}
+					style={minChartWidth ? { minWidth: minChartWidth } : undefined}
 					className={cn(normalSize ? 'h-full w-full' : 'w-full', pieCenteringClass, chartContainerClassName)}
 					contentClassName={cn(normalSize ? 'aspect-auto flex-1 min-h-0' : undefined, chartContentClassName)}
 					header={inlineHeader}

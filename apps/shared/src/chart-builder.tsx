@@ -48,6 +48,7 @@ import {
 } from './chart-domain';
 import { CHART_FONT_STACK } from './chart-fonts';
 import { type ChartStyle, DEFAULT_CHART_STYLE } from './chart-style';
+import { measureChartTextWidth } from './chart-text-measure';
 import {
 	type ChartType,
 	isComboChart,
@@ -115,8 +116,8 @@ const VALUE_AXIS_MAX_WIDTH = 120;
 const VALUE_AXIS_CHARACTER_WIDTH = 7;
 const VALUE_AXIS_PADDING = 12;
 const HORIZONTAL_BAR_CATEGORY_AXIS_MIN_WIDTH = 60;
-const HORIZONTAL_BAR_CATEGORY_AXIS_MAX_WIDTH = 180;
-const HORIZONTAL_BAR_CATEGORY_MAX_LABEL_CHARS = 24;
+/** Narrowest the bar track may get before the chart asks its container for extra width. */
+const HORIZONTAL_BAR_MIN_PLOT_WIDTH = 240;
 const HORIZONTAL_BAR_SIZE = 10;
 const HORIZONTAL_BAR_MAX_SIZE = 28;
 const HORIZONTAL_BAR_CATEGORY_GAP = '20%';
@@ -654,18 +655,38 @@ function formatCategoryTick(value: string, labelFormatter: (value: string) => st
 	return label.length > cap ? `${label.slice(0, cap - 1)}…` : label;
 }
 
+/**
+ * Minimum width a chart needs so its plot area keeps {@link HORIZONTAL_BAR_MIN_PLOT_WIDTH} once
+ * the label gutters are reserved. Only horizontal bars grow their category gutter with the
+ * labels, so other chart types return `undefined` and keep filling their container.
+ */
+export function computeChartMinWidth(props: BuildChartProps): number | undefined {
+	if (props.chartType !== 'horizontal_bar' && props.chartType !== 'horizontal_bar_100') {
+		return undefined;
+	}
+	const resolved = buildResolved(props);
+	const { categoryAxisWidth, valueLabelWidth } = resolveHorizontalBarLayout(resolved);
+	const horizontalMargin = (resolved.margin?.left ?? 0) + (resolved.margin?.right ?? 0);
+	return Math.ceil(categoryAxisWidth + valueLabelWidth + horizontalMargin + HORIZONTAL_BAR_MIN_PLOT_WIDTH);
+}
+
 function buildHorizontalBarChart(props: ResolvedProps) {
-	const { data, chartType, xAxisKey, series, colorFor, labelFormatter, children, xAxisInterval } = props;
-	const isPercent = isPercentStackedChartType(chartType);
-	const renderedSeries = getRenderedSeries(series, series.length > 1);
-	const hasMultipleSeries = renderedSeries.length > 1;
-	const seriesKeys = renderedSeries.map((item) => item.data_key);
-	const isDiverging = !isPercent && hasNegativeSeriesValue(data, seriesKeys);
+	const { data, xAxisKey, colorFor, labelFormatter, children, xAxisInterval } = props;
+	const {
+		isPercent,
+		renderedSeries,
+		hasMultipleSeries,
+		seriesKeys,
+		isDiverging,
+		clampedRowTotals,
+		labelValues,
+		valueFormat,
+		valueFormatter,
+		showValueLabels,
+		categoryAxisWidth,
+		valueLabelWidth,
+	} = resolveHorizontalBarLayout(props);
 	const normalizeValue = isDiverging ? toSignedHorizontalBarValue : clampHorizontalBarValue;
-	const clampedRowTotals = data.map((row) =>
-		seriesKeys.reduce((total, key) => total + clampHorizontalBarValue(row[key]), 0),
-	);
-	const signedRowTotals = data.map((row) => sumStackValue(row, renderedSeries) ?? 0);
 	const maximum = clampedRowTotals.reduce((current, value) => Math.max(current, value), 0) || 1;
 	const showValueAxis = hasMultipleSeries || isDiverging;
 	const visibleValueAxisDomainProps = resolveHorizontalBarValueAxisDomainProps(
@@ -674,15 +695,6 @@ function buildHorizontalBarChart(props: ResolvedProps) {
 		isPercent,
 		isDiverging,
 	);
-	const valueFormat = getChartLevelValueFormat(series);
-	const valueFormatter = (value: number) =>
-		isPercent ? formatPercentAxisTick(value) : formatChartValue(value, valueFormat);
-	const labelValues = isPercent ? clampedRowTotals.map((value) => (value > 0 ? 1 : 0)) : signedRowTotals;
-	const showValueLabels = resolveShowDataLabels(props.chartType, props.showDataLabels);
-	const tickFormatter = (value: string) =>
-		formatCategoryTick(value, labelFormatter, HORIZONTAL_BAR_CATEGORY_MAX_LABEL_CHARS);
-	const categoryAxisWidth = computeHorizontalBarCategoryAxisWidth(data, xAxisKey, tickFormatter);
-	const valueLabelWidth = showValueLabels ? computeHorizontalBarValueLabelWidth(labelValues, valueFormatter) : 0;
 	const horizontalBarValueLabelsLayer = showValueLabels
 		? createHorizontalBarValueLabelsLayer(valueFormatter, valueLabelWidth)
 		: undefined;
@@ -738,7 +750,7 @@ function buildHorizontalBarChart(props: ResolvedProps) {
 				minTickGap={12}
 				interval={xAxisInterval ?? 'preserveStartEnd'}
 				width={categoryAxisWidth}
-				tickFormatter={tickFormatter}
+				tickFormatter={labelFormatter}
 			/>
 			{isDiverging && <ReferenceLine x={0} stroke={HORIZONTAL_BAR_BASELINE_COLOR} strokeWidth={1} />}
 			{children}
@@ -807,22 +819,56 @@ function resolveHorizontalBarValueAxisDomainProps(
 	return { domain: computeNiceDomain(lowest, highest) };
 }
 
+function resolveHorizontalBarLayout(props: ResolvedProps) {
+	const { data, chartType, xAxisKey, series, labelFormatter } = props;
+	const isPercent = isPercentStackedChartType(chartType);
+	const renderedSeries = getRenderedSeries(series, series.length > 1);
+	const seriesKeys = renderedSeries.map((item) => item.data_key);
+	const isDiverging = !isPercent && hasNegativeSeriesValue(data, seriesKeys);
+	const clampedRowTotals = data.map((row) =>
+		seriesKeys.reduce((total, key) => total + clampHorizontalBarValue(row[key]), 0),
+	);
+	const signedRowTotals = data.map((row) => sumStackValue(row, renderedSeries) ?? 0);
+	const labelValues = isPercent ? clampedRowTotals.map((value) => (value > 0 ? 1 : 0)) : signedRowTotals;
+	const valueFormat = getChartLevelValueFormat(series);
+	const valueFormatter = (value: number) =>
+		isPercent ? formatPercentAxisTick(value) : formatChartValue(value, valueFormat);
+	const showValueLabels = resolveShowDataLabels(chartType, props.showDataLabels);
+	return {
+		isPercent,
+		renderedSeries,
+		hasMultipleSeries: renderedSeries.length > 1,
+		seriesKeys,
+		isDiverging,
+		clampedRowTotals,
+		labelValues,
+		valueFormat,
+		valueFormatter,
+		showValueLabels,
+		categoryAxisWidth: computeHorizontalBarCategoryAxisWidth(data, xAxisKey, labelFormatter),
+		valueLabelWidth: showValueLabels ? computeHorizontalBarValueLabelWidth(labelValues, valueFormatter) : 0,
+	};
+}
+
+/**
+ * Sizes the category gutter to the widest rendered label so every label stays on one line.
+ * Recharts wraps tick text that is wider than the axis, so the gutter is never capped here;
+ * callers keep the plot readable by widening the chart via {@link computeChartMinWidth}.
+ */
 function computeHorizontalBarCategoryAxisWidth(
 	data: Record<string, unknown>[],
 	xAxisKey: string,
-	tickFormatter: (value: string) => string,
+	labelFormatter: (value: string) => string,
 ): number {
-	const longestLabelLength = data.reduce(
-		(current, row) => Math.max(current, tickFormatter(String(row[xAxisKey] ?? '')).length),
+	const widestLabel = data.reduce(
+		(current, row) =>
+			Math.max(
+				current,
+				measureChartTextWidth(labelFormatter(String(row[xAxisKey] ?? '')), CHART_LABEL_FONT_SIZE),
+			),
 		0,
 	);
-	return Math.min(
-		HORIZONTAL_BAR_CATEGORY_AXIS_MAX_WIDTH,
-		Math.max(
-			HORIZONTAL_BAR_CATEGORY_AXIS_MIN_WIDTH,
-			longestLabelLength * VALUE_AXIS_CHARACTER_WIDTH + VALUE_AXIS_PADDING,
-		),
-	);
+	return Math.max(HORIZONTAL_BAR_CATEGORY_AXIS_MIN_WIDTH, Math.ceil(widestLabel) + VALUE_AXIS_PADDING);
 }
 
 function computeHorizontalBarValueLabelWidth(values: number[], valueFormatter: (value: number) => string): number {

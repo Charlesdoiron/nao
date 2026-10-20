@@ -2,7 +2,7 @@ import React, { type ReactElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { buildChart } from '../src/chart-builder';
+import { buildChart, computeChartMinWidth } from '../src/chart-builder';
 import { boxesOverlap, labelBox } from '../src/chart-data-labels';
 
 describe('buildChart horizontal bars', () => {
@@ -77,9 +77,10 @@ describe('buildChart horizontal bars', () => {
 		expect(yAxis?.props.width).toBeLessThanOrEqual(180);
 	});
 
-	it('truncates category labels longer than 24 characters', () => {
+	it('keeps long category labels whole and widens the axis to fit them on one line', () => {
+		const longLabel = 'Enterprise Customer Success Operations (EMEA)';
 		const chart = buildChart({
-			data: [{ category: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', value: 20 }],
+			data: [{ category: longLabel, value: 20 }],
 			chartType: 'horizontal_bar',
 			xAxisKey: 'category',
 			xAxisType: 'category',
@@ -87,10 +88,34 @@ describe('buildChart horizontal bars', () => {
 			labelFormatter: (value) => value,
 		});
 		const yAxis = flattenChildren(chart.props.children).find((child) => getDisplayName(child) === 'YAxis');
-		const formattedLabel = yAxis?.props.tickFormatter?.('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
 
-		expect(formattedLabel).toBe('ABCDEFGHIJKLMNOPQRSTUVW…');
-		expect(formattedLabel).toHaveLength(24);
+		expect(yAxis?.props.tickFormatter?.(longLabel)).toBe(longLabel);
+		expect(yAxis?.props.width).toBe(longLabel.length * 7 + 12);
+	});
+
+	it('reserves a minimum plot width on top of the label gutters', () => {
+		const props = {
+			data: [{ category: 'Short', value: 20 }],
+			chartType: 'horizontal_bar' as const,
+			xAxisKey: 'category',
+			xAxisType: 'category' as const,
+			series: [{ data_key: 'value' }],
+			labelFormatter: (value: string) => value,
+		};
+		const shortMinWidth = computeChartMinWidth(props);
+		const longMinWidth = computeChartMinWidth({
+			...props,
+			data: [{ category: 'A much longer category label that used to be truncated', value: 20 }],
+		});
+		const marginMinWidth = computeChartMinWidth({ ...props, margin: { left: 10, right: 20 } });
+		const yAxis = flattenChildren(buildChart(props).props.children).find(
+			(child) => getDisplayName(child) === 'YAxis',
+		);
+
+		expect(shortMinWidth).toBe((yAxis?.props.width ?? 0) + 40 + 240);
+		expect(longMinWidth).toBeGreaterThan(shortMinWidth ?? 0);
+		expect(marginMinWidth).toBe((shortMinWidth ?? 0) + 30);
+		expect(computeChartMinWidth({ ...props, chartType: 'bar' })).toBeUndefined();
 	});
 
 	it('applies the series value format to the always-visible labels', () => {

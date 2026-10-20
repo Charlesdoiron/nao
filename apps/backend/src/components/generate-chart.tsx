@@ -1,4 +1,12 @@
-import { bucketPieData, buildChart, defaultColorFor, labelize, resolveDataKey, sortByDateKey } from '@nao/shared';
+import {
+	bucketPieData,
+	buildChart,
+	computeChartMinWidth,
+	defaultColorFor,
+	labelize,
+	resolveDataKey,
+	sortByDateKey,
+} from '@nao/shared';
 import { isBuiltinChartType } from '@nao/shared/chart-types';
 import type { DateFormatSettings } from '@nao/shared/date';
 import { displayChart } from '@nao/shared/tools';
@@ -87,7 +95,17 @@ export function renderChartToSvg(input: RenderChartInput): string {
 	// Only reserve the right-hand legend column when a vertical legend is drawn.
 	const hasRightLegend = isPie && legend.length > 0;
 	const legendLayout: LegendLayout = hasRightLegend ? 'vertical' : 'horizontal';
-	const chartWidth = hasRightLegend ? Math.max(width - VERTICAL_LEGEND_WIDTH, 0) : width;
+	const availableWidth = hasRightLegend ? Math.max(width - VERTICAL_LEGEND_WIDTH, 0) : width;
+	const minChartWidth = computeChartMinWidth({
+		data: chartData,
+		chartType,
+		xAxisKey,
+		series,
+		labelFormatter,
+		showDataLabels: config.show_data_labels,
+		margin,
+	});
+	const chartWidth = Math.max(availableWidth, minChartWidth ?? 0);
 
 	const chart = buildChart({
 		data: chartData,
