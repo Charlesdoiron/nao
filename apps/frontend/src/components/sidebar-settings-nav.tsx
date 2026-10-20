@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowUpRight, Lock, Search, X } from 'lucide-react';
+import { ArrowUpRight, Search, X } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
@@ -384,7 +384,7 @@ export function SidebarSettingsNav({
 											) : (
 												<Link
 													to={item.to}
-													activeOptions={{ exact: item.exact, includeSearch: false }}
+													activeOptions={item.exact ? { exact: true } : undefined}
 													className={navRowClassName}
 													activeProps={{
 														className: cn('bg-sidebar-accent text-foreground font-medium'),
@@ -403,19 +403,9 @@ export function SidebarSettingsNav({
 								})}
 							</Fragment>
 						))}
-						{!hasAdvancedSettings && !isViewer && <AdvancedSettingsHint />}
 					</nav>
 				)}
 			</div>
-		</div>
-	);
-}
-
-function AdvancedSettingsHint() {
-	return (
-		<div className='mx-2 mt-4 flex gap-2 rounded-md border border-dashed px-2.5 py-2 text-[11px] leading-4 text-muted-foreground'>
-			<Lock aria-hidden='true' className='mt-px size-3 shrink-0' />
-			<span>Project and organization settings are managed by your admins.</span>
 		</div>
 	);
 }

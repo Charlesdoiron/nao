@@ -1,4 +1,4 @@
-import { AppWindow, ArrowRight, Check, Clock3, FileText, Settings2, Zap } from 'lucide-react';
+import { AppWindow, ArrowRight, Check, Clock3, FileText, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UserGroupFeature } from '@nao/shared';
 
@@ -109,7 +109,7 @@ function FeaturePreview({ feature }: { feature: UserGroupFeature }) {
 		case 'automationCreation':
 			return <AutomationCreationPreview />;
 		case 'advancedSettings':
-			return <AdvancedSettingsPreview />;
+			return null;
 	}
 }
 
@@ -182,37 +182,6 @@ function AutomationCreationPreview() {
 			<div className='flex h-10 w-14 flex-col items-center justify-center gap-1 rounded-md border bg-background shadow-sm'>
 				<Zap className='size-3.5 text-primary' />
 				<div className='h-1 w-7 rounded-full bg-foreground/10' />
-			</div>
-		</div>
-	);
-}
-
-function AdvancedSettingsPreview() {
-	return (
-		<div
-			data-testid='advanced-settings-preview'
-			className='absolute left-1/2 top-1/2 flex h-14 w-24 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border bg-background shadow-sm'
-			aria-hidden='true'
-		>
-			<div className='flex w-9 flex-col gap-1 border-r bg-sidebar/60 p-1.5'>
-				<div className='h-1 w-5 rounded-full bg-foreground/20' />
-				<div className='h-1 w-6 rounded-full bg-primary/40' />
-				<div className='h-1 w-5 rounded-full bg-primary/40' />
-				<div className='h-1 w-6 rounded-full bg-primary/40' />
-			</div>
-			<div className='flex flex-1 flex-col gap-1.5 p-1.5'>
-				<div className='flex items-center gap-1'>
-					<Settings2 className='size-3 text-primary' />
-					<div className='h-1 w-6 rounded-full bg-foreground/15' />
-				</div>
-				<div className='flex items-center justify-between rounded-sm border px-1 py-0.5'>
-					<div className='h-1 w-5 rounded-full bg-foreground/10' />
-					<div className='h-1.5 w-3 rounded-full bg-primary' />
-				</div>
-				<div className='flex items-center justify-between rounded-sm border px-1 py-0.5'>
-					<div className='h-1 w-6 rounded-full bg-foreground/10' />
-					<div className='h-1.5 w-3 rounded-full bg-foreground/15' />
-				</div>
 			</div>
 		</div>
 	);

@@ -1028,11 +1028,17 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 	{
 		page: '/settings/project/user-groups',
 		pageLabel: 'Users & Groups',
-		section: 'Manage Groups',
-		search: { tab: 'groups' },
-		title: 'Advanced settings',
-		description: 'Choose which groups can see project and organization settings beyond their own account.',
-		keywords: ['settings access', 'chat only', 'restrict settings', 'hide settings', 'permissions', 'all users'],
+		title: 'Show all settings to users',
+		description: 'Let users see project and organization settings beyond their own account.',
+		keywords: [
+			'advanced settings',
+			'settings access',
+			'chat only',
+			'restrict settings',
+			'hide settings',
+			'permissions',
+			'all users',
+		],
 		adminOnly: true,
 	},
 	{

@@ -236,6 +236,14 @@ function EffectiveFeatures({ access }: { access: EffectiveUserGroupAccess }) {
 						/>
 					))}
 				</div>
+				<dl className='rounded-lg border'>
+					<div className='flex min-h-11 items-center justify-between gap-4 px-3 py-2'>
+						<dt className='text-sm text-muted-foreground'>Sees all settings</dt>
+						<dd>
+							<Badge variant='secondary'>{access.features.advancedSettings ? 'Yes' : 'No'}</Badge>
+						</dd>
+					</div>
+				</dl>
 			</div>
 
 			<div className='flex flex-col gap-3 border-t pt-5'>

@@ -69,7 +69,7 @@ export async function requireAdvancedSettingsForPage({ location }: { location: {
 			? await queryClient.ensureQueryData(trpc.userGroup.effectiveAccess.queryOptions())
 			: undefined;
 	if (!hasAdvancedSettingsAccess(project.userRole ?? undefined, access?.features)) {
-		throw redirect({ to: '/settings/account', search: { restricted: true } });
+		throw redirect({ to: '/settings/account' });
 	}
 }
 

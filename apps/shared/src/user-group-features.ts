@@ -65,11 +65,6 @@ export const USER_GROUP_FEATURE_DEFINITIONS: ReadonlyArray<UserGroupFeatureDefin
 		label: 'Automations',
 		description: 'Allow the user to create new automations',
 	},
-	{
-		key: 'advancedSettings',
-		label: 'Advanced settings',
-		description: 'Allow the user to see project and organization settings',
-	},
 ];
 
 /** Drops the features whose prerequisite is not granted: custom stories without stories grant nothing. */
