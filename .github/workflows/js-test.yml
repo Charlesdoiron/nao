@@ -22,8 +22,13 @@ on:
 
 jobs:
     test:
-        name: Vitest
+        name: Vitest (${{ matrix.workspace }})
         runs-on: ubuntu-latest
+
+        strategy:
+            fail-fast: false
+            matrix:
+                workspace: [backend, frontend, shared]
 
         steps:
             - uses: actions/checkout@v4
@@ -45,14 +50,5 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Test shared
-              run: npm run -w @nao/shared test
-
-            - name: Prepare SQLite test database
-              run: npm run -w @nao/backend db:migrate
-
-            - name: Test backend
-              run: npm run -w @nao/backend test
-
-            - name: Test frontend
-              run: npm run -w @nao/frontend test
+            - name: Test ${{ matrix.workspace }}
+              run: npm run -w @nao/${{ matrix.workspace }} test
