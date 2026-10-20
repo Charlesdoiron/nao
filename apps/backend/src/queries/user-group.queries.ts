@@ -56,6 +56,7 @@ export interface UserGroup extends Omit<
 	featureGrants: UserGroupFeature[];
 	toolCallDensityPolicy: ToolCallDensityPolicy;
 	projectSharing: ProjectSharingPermission;
+	showAllSettings: boolean;
 	databaseAccess: DatabaseContextAccess;
 	docsAccess: DocsContextAccess;
 	filesAccess: FilesContextAccess;
@@ -75,6 +76,7 @@ export interface EffectiveUserGroupAccess {
 	groupNames: string[];
 	features: UserGroupFeature[];
 	toolCallDensityPolicy: ToolCallDensityPolicy;
+	showAllSettings: boolean;
 	databaseAccess: DatabaseContextAccess;
 	docsAccess: DocsContextAccess;
 	filesAccess: FilesContextAccess;
@@ -145,7 +147,7 @@ export const resolveUserGroupAccess = async (
 		.map((group) => ({
 			...group,
 			membershipCreatedAt: membershipDates.get(group.id) ?? null,
-			config: parseStoredUserGroupConfig(group.featureGrants),
+			config: parseStoredUserGroupConfig(group.featureGrants, group.isDefault),
 			contextAccess: parseStoredUserGroupContextAccess(group.contextGrants, group.isDefault),
 		}));
 	const grantedFeatures = new Set(applicableGroups.flatMap((group) => group.config.features));
@@ -175,6 +177,7 @@ export const resolveUserGroupAccess = async (
 				densitySource?.config.toolCallDensity.defaultDensity ?? DEFAULT_TOOL_CALL_DENSITY_POLICY.defaultDensity,
 			canChange: applicableGroups.some((group) => group.config.toolCallDensity.canChange),
 		},
+		showAllSettings: applicableGroups.some((group) => group.config.showAllSettings),
 		databaseAccess: unionDatabaseContextAccess(applicableGroups.map((group) => group.contextAccess.databaseAccess)),
 		docsAccess: unionFileTreeAccess(applicableGroups.map((group) => group.contextAccess.docsAccess)),
 		filesAccess: unionFileTreeAccess(applicableGroups.map((group) => group.contextAccess.filesAccess)),
@@ -244,6 +247,7 @@ export const createUserGroup = async (
 	filesAccess: FilesContextAccess = EMPTY_FILES_CONTEXT_ACCESS,
 	projectSharing: ProjectSharingPermission = 'inherit',
 	mcpAccess: McpAccess = EMPTY_MCP_ACCESS,
+	showAllSettings = false,
 ): Promise<UserGroup> => {
 	const values = createUserGroupValues(
 		projectId,
@@ -257,6 +261,7 @@ export const createUserGroup = async (
 		filesAccess,
 		projectSharing,
 		mcpAccess,
+		showAllSettings,
 	);
 	const group = await executeUserGroupNameMutation(async () => {
 		if (dbConfig.dialect === Dialect.Sqlite) {
@@ -292,6 +297,7 @@ export const createUserGroupWithinLimit = async (
 	filesAccess: FilesContextAccess = EMPTY_FILES_CONTEXT_ACCESS,
 	projectSharing: ProjectSharingPermission = 'inherit',
 	mcpAccess: McpAccess = EMPTY_MCP_ACCESS,
+	showAllSettings = false,
 ): Promise<UserGroup> => {
 	const values = createUserGroupValues(
 		projectId,
@@ -305,6 +311,7 @@ export const createUserGroupWithinLimit = async (
 		filesAccess,
 		projectSharing,
 		mcpAccess,
+		showAllSettings,
 	);
 	const group = await executeUserGroupNameMutation(() => {
 		if (dbConfig.dialect === Dialect.Sqlite) {
@@ -346,6 +353,7 @@ export const updateUserGroup = async (
 		name?: string;
 		featureGrants: UserGroupFeature[];
 		toolCallDensityPolicy?: ToolCallDensityPolicy;
+		showAllSettings?: boolean;
 		databaseAccess?: DatabaseContextAccess;
 		docsAccess?: DocsContextAccess;
 		filesAccess?: FilesContextAccess;
@@ -361,7 +369,7 @@ export const updateUserGroup = async (
 		dbConfig.dialect === Dialect.Postgres && data.rowPolicies !== undefined
 			? (data.rowPoliciesRegistry ?? (await getProjectRowSecurity(projectId)))
 			: undefined;
-	const currentConfig = parseStoredUserGroupConfig(group.featureGrants);
+	const currentConfig = parseStoredUserGroupConfig(group.featureGrants, group.isDefault);
 	const currentContext = parseStoredUserGroupContextAccess(group.contextGrants, group.isDefault);
 	const resultingDatabaseAccess = data.databaseAccess ?? currentContext.databaseAccess;
 	const resultingRowPolicies = filterUserGroupRowPoliciesByDatabaseContext(
@@ -388,6 +396,7 @@ export const updateUserGroup = async (
 			data.featureGrants,
 			data.toolCallDensityPolicy ?? currentConfig.toolCallDensity,
 			data.projectSharing ?? currentConfig.projectSharing,
+			data.showAllSettings ?? currentConfig.showAllSettings,
 		),
 		...(data.databaseAccess === undefined &&
 		data.docsAccess === undefined &&
@@ -633,12 +642,13 @@ function createUserGroupValues(
 	filesAccess: FilesContextAccess = EMPTY_FILES_CONTEXT_ACCESS,
 	projectSharing: ProjectSharingPermission = 'inherit',
 	mcpAccess: McpAccess = EMPTY_MCP_ACCESS,
+	showAllSettings = false,
 ): NewUserGroup {
 	const filteredRowPolicies = filterUserGroupRowPoliciesByDatabaseContext(rowPolicies, databaseAccess);
 	return {
 		projectId,
 		name,
-		featureGrants: serializeUserGroupConfig(featureGrants, toolCallDensityPolicy, projectSharing),
+		featureGrants: serializeUserGroupConfig(featureGrants, toolCallDensityPolicy, projectSharing, showAllSettings),
 		contextGrants: serializeUserGroupContextAccess({ databaseAccess, docsAccess, filesAccess, mcpAccess }),
 		ssoMappings: serializeUserGroupSsoMappings(ssoMappings),
 		rowPolicies: serializeUserGroupRowPolicies(filteredRowPolicies),
@@ -760,7 +770,7 @@ function isUserGroupNameUniqueViolation(error: unknown): boolean {
 }
 
 function normalizeUserGroup(group: DBUserGroup): UserGroup {
-	const config = parseStoredUserGroupConfig(group.featureGrants);
+	const config = parseStoredUserGroupConfig(group.featureGrants, group.isDefault);
 	const contextAccess = parseStoredUserGroupContextAccess(group.contextGrants, group.isDefault);
 	return {
 		id: group.id,
@@ -772,6 +782,7 @@ function normalizeUserGroup(group: DBUserGroup): UserGroup {
 		featureGrants: config.features,
 		toolCallDensityPolicy: config.toolCallDensity,
 		projectSharing: config.projectSharing,
+		showAllSettings: config.showAllSettings,
 		databaseAccess: contextAccess.databaseAccess,
 		docsAccess: contextAccess.docsAccess,
 		filesAccess: contextAccess.filesAccess,

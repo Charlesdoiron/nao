@@ -38,6 +38,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import type { TabBarItem } from '@/components/ui/tab-bar';
 import { ToolCallDensitySlider } from '@/components/settings/tool-call-density-slider';
+import { UserGroupAdvancedSettings } from '@/components/settings/user-group-advanced-settings';
 import { UserGroupBudget } from '@/components/settings/user-group-budget';
 import { UserGroupContextAccess } from '@/components/settings/user-group-context-access';
 import { UserGroupFeatureCard } from '@/components/settings/user-group-feature-card';
@@ -76,6 +77,7 @@ export interface UserGroupEditorGroup {
 	featureGrants: UserGroupFeature[];
 	toolCallDensityPolicy: ToolCallDensityPolicy;
 	projectSharing: ProjectSharingPermission;
+	showAllSettings: boolean;
 	databaseAccess: DatabaseContextAccess;
 	docsAccess: DocsContextAccess;
 	filesAccess: FilesContextAccess;
@@ -84,7 +86,7 @@ export interface UserGroupEditorGroup {
 	rowPolicies?: UserGroupRowPolicies;
 }
 
-export type UserGroupEditorTab = 'features' | 'context' | 'mcp' | 'security' | 'budget' | 'sso';
+export type UserGroupEditorTab = 'features' | 'context' | 'mcp' | 'security' | 'budget' | 'advanced' | 'sso';
 
 interface UserGroupEditorProps {
 	group: UserGroupEditorGroup | 'new';
@@ -101,6 +103,7 @@ const defaultTabs: TabBarItem<UserGroupEditorTab>[] = [
 	{ id: 'mcp', label: 'MCP' },
 	{ id: 'security', label: 'Security' },
 	{ id: 'budget', label: 'Budget' },
+	{ id: 'advanced', label: 'Advanced settings' },
 ];
 
 const defaultProjectRoleOptions: readonly UserRole[] = [...USER_ROLES.filter((role) => role !== 'admin'), 'admin'];
@@ -134,6 +137,7 @@ export function UserGroupEditor({
 	const [toolCallDensityPolicy, setToolCallDensityPolicy] = useState<ToolCallDensityPolicy>(
 		existingGroup?.toolCallDensityPolicy ?? DEFAULT_TOOL_CALL_DENSITY_POLICY,
 	);
+	const [showAllSettings, setShowAllSettings] = useState(existingGroup?.showAllSettings ?? false);
 	const [databaseAccess, setDatabaseAccess] = useState<DatabaseContextAccess>(
 		existingGroup?.databaseAccess ?? EMPTY_DATABASE_CONTEXT_ACCESS,
 	);
@@ -180,6 +184,8 @@ export function UserGroupEditor({
 		: null;
 	const [groupBudgetUsd, setGroupBudgetUsd] = useState<number | null>(savedGroupBudgetUsd);
 	const hasGroupBudgetChanges = hasMemberBudget && groupBudgetUsd !== savedGroupBudgetUsd;
+	const defaultGroup = userGroupOverview.data?.groups.find((candidate) => candidate.isDefault);
+	const allUsersGroup = defaultGroup && !defaultGroup.isLocked ? defaultGroup : null;
 	const rowSecurity = useQuery(trpc.userGroup.rowSecurity.queryOptions());
 	const rowSecurityState = rowSecurity.isLoading ? 'loading' : rowSecurity.isError ? 'error' : 'ready';
 	const rowSecurityRegistry =
@@ -260,6 +266,7 @@ export function UserGroupEditor({
 			featureGrants,
 			toolCallDensityPolicy,
 			projectSharing,
+			showAllSettings,
 			databaseAccess,
 			docsAccess,
 			filesAccess,
@@ -273,6 +280,7 @@ export function UserGroupEditor({
 		setFeatureGrants(existingGroup?.featureGrants ?? []);
 		setToolCallDensityPolicy(existingGroup?.toolCallDensityPolicy ?? DEFAULT_TOOL_CALL_DENSITY_POLICY);
 		setProjectSharing(existingGroup?.projectSharing ?? 'inherit');
+		setShowAllSettings(existingGroup?.showAllSettings ?? false);
 		setDatabaseAccess(existingGroup?.databaseAccess ?? EMPTY_DATABASE_CONTEXT_ACCESS);
 		setDocsAccess(existingGroup?.docsAccess ?? EMPTY_DOCS_CONTEXT_ACCESS);
 		setFilesAccess(existingGroup?.filesAccess ?? EMPTY_FILES_CONTEXT_ACCESS);
@@ -295,6 +303,7 @@ export function UserGroupEditor({
 				featureGrants,
 				toolCallDensityPolicy,
 				projectSharing,
+				showAllSettings,
 				databaseAccess,
 				docsAccess,
 				filesAccess,
@@ -317,6 +326,7 @@ export function UserGroupEditor({
 		projectSharing,
 		resetForm,
 		rowPolicies,
+		showAllSettings,
 		ssoMappings,
 		toolCallDensityPolicy,
 	]);
@@ -380,6 +390,7 @@ export function UserGroupEditor({
 					featureGrants,
 					toolCallDensityPolicy,
 					projectSharing,
+					showAllSettings,
 					databaseAccess,
 					docsAccess,
 					filesAccess,
@@ -395,6 +406,7 @@ export function UserGroupEditor({
 					featureGrants,
 					toolCallDensityPolicy,
 					projectSharing,
+					showAllSettings,
 					databaseAccess,
 					docsAccess,
 					filesAccess,
@@ -544,6 +556,14 @@ export function UserGroupEditor({
 								members={groupBudgetMembers}
 								groups={memberBudgetOverview.data?.groups ?? []}
 								onLimitChange={setGroupBudgetUsd}
+							/>
+						)}
+						{activeTab === 'advanced' && (
+							<UserGroupAdvancedSettings
+								showAllSettings={showAllSettings}
+								onShowAllSettingsChange={setShowAllSettings}
+								isDefaultGroup={existingGroup?.isDefault === true}
+								allUsersGroup={allUsersGroup}
 							/>
 						)}
 						{activeTab === 'sso' && (hasSsoTab || isSsoConfigLoading) && (
@@ -945,6 +965,7 @@ export function hasUserGroupEditorChanges(
 		featureGrants: UserGroupFeature[];
 		toolCallDensityPolicy: ToolCallDensityPolicy;
 		projectSharing?: ProjectSharingPermission;
+		showAllSettings?: boolean;
 		databaseAccess: DatabaseContextAccess;
 		docsAccess?: DocsContextAccess;
 		filesAccess?: FilesContextAccess;
@@ -959,6 +980,7 @@ export function hasUserGroupEditorChanges(
 		values.toolCallDensityPolicy.defaultDensity !== group.toolCallDensityPolicy.defaultDensity ||
 		values.toolCallDensityPolicy.canChange !== group.toolCallDensityPolicy.canChange ||
 		(values.projectSharing ?? group.projectSharing) !== group.projectSharing ||
+		(values.showAllSettings ?? group.showAllSettings) !== group.showAllSettings ||
 		!haveSameDatabaseAccess(values.databaseAccess, group.databaseAccess) ||
 		!haveSameFileTreeAccess(values.docsAccess ?? group.docsAccess, group.docsAccess) ||
 		!haveSameFileTreeAccess(values.filesAccess ?? group.filesAccess, group.filesAccess) ||

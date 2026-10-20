@@ -92,6 +92,7 @@ function isUserGroupEditorTab(value: unknown): value is UserGroupEditorTab {
 		value === 'mcp' ||
 		value === 'security' ||
 		value === 'budget' ||
+		value === 'advanced' ||
 		value === 'sso'
 	);
 }
