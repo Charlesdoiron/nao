@@ -308,7 +308,7 @@ function OnboardingPage() {
 										asChild
 										className='rounded-full bg-violet text-white shadow-sm hover:bg-violet/90'
 									>
-										<Link to='/' search={{ trialStarted: trialStarted || undefined }}>
+										<Link to='/'>
 											Start chatting
 											<ArrowRight className='size-4' />
 										</Link>

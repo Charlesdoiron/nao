@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -6,9 +7,12 @@ import type { CSSProperties } from 'react';
 import { NyanCat } from '@/components/icons/nyan-cat';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useSession } from '@/lib/auth-client';
+import { createLocalStorage } from '@/lib/local-storage';
 import { cn } from '@/lib/utils';
+import { trpc } from '@/main';
 
-const TRIAL_CREDITS = 20;
 const COUNT_UP_DURATION_MS = 900;
 const CONFETTI_COLORS = [
 	'var(--chart-1)',
@@ -20,15 +24,52 @@ const CONFETTI_COLORS = [
 	'var(--chart-7)',
 ];
 const CONFETTI_COUNT = 14;
+const seenSetupCreditGrantsStorage = createLocalStorage<string[]>('nao-seen-setup-credit-grants', []);
 
 interface TrialStartedDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	creditAmountMicroUsd: number;
 	userName?: string | null;
 }
 
-export function TrialStartedDialog({ open, onOpenChange, userName }: TrialStartedDialogProps) {
+export function TrialStartedDialogController() {
+	const { isOrgAdmin } = usePermissions();
+	const { data: session } = useSession();
+	const setupCreditGrant = useQuery({
+		...trpc.account.getOrganizationSetupCreditGrant.queryOptions(),
+		enabled: isOrgAdmin,
+	});
+	const [seenGrantIds, setSeenGrantIds] = useState(getSeenSetupCreditGrantIds);
+	const grant = setupCreditGrant.data;
+	const open = isOrgAdmin && grant !== null && grant !== undefined && !seenGrantIds.includes(grant.id);
+
+	const handleOpenChange = (nextOpen: boolean) => {
+		if (nextOpen || !grant) {
+			return;
+		}
+		const nextSeenGrantIds = [...new Set([...getSeenSetupCreditGrantIds(), grant.id])];
+		seenSetupCreditGrantsStorage.set(nextSeenGrantIds);
+		setSeenGrantIds(nextSeenGrantIds);
+	};
+
+	if (!grant) {
+		return null;
+	}
+
+	return (
+		<TrialStartedDialog
+			open={open}
+			onOpenChange={handleOpenChange}
+			creditAmountMicroUsd={grant.amountMicroUsd}
+			userName={session?.user.name}
+		/>
+	);
+}
+
+export function TrialStartedDialog({ open, onOpenChange, creditAmountMicroUsd, userName }: TrialStartedDialogProps) {
 	const firstName = userName?.trim().split(/\s+/)[0];
+	const formattedCreditAmount = formatCreditAmount(creditAmountMicroUsd, creditAmountMicroUsd);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,13 +93,14 @@ export function TrialStartedDialog({ open, onOpenChange, userName }: TrialStarte
 						<DialogDescription
 							className={cn(enterClass, '[animation-delay:160ms] max-w-md text-center leading-relaxed')}
 						>
-							We’ve added ${TRIAL_CREDITS} of credits so your team can start asking questions right away.
+							We’ve added {formattedCreditAmount} of credits so your team can start asking questions right
+							away.
 						</DialogDescription>
 					</DialogHeader>
 					<div className={cn(enterClass, '[animation-delay:260ms] relative my-8 flex flex-col items-center')}>
 						<ConfettiBurst delayMs={COUNT_UP_DURATION_MS - 150} />
 						<span className='relative font-borna text-6xl font-medium tracking-tight text-violet tabular-nums'>
-							$<CountUp to={TRIAL_CREDITS} durationMs={COUNT_UP_DURATION_MS} />
+							<CountUp toMicroUsd={creditAmountMicroUsd} durationMs={COUNT_UP_DURATION_MS} />
 						</span>
 						<span className='relative mt-1 text-sm font-medium text-foreground'>
 							Free credits, ready to use
@@ -118,8 +160,8 @@ function ConfettiBurst({ delayMs }: { delayMs: number }) {
 	);
 }
 
-function CountUp({ to, durationMs }: { to: number; durationMs: number }) {
-	const [value, setValue] = useState(prefersReducedMotion() ? to : 0);
+function CountUp({ toMicroUsd, durationMs }: { toMicroUsd: number; durationMs: number }) {
+	const [value, setValue] = useState(prefersReducedMotion() ? toMicroUsd : 0);
 
 	useEffect(() => {
 		if (prefersReducedMotion()) {
@@ -129,16 +171,16 @@ function CountUp({ to, durationMs }: { to: number; durationMs: number }) {
 		const start = performance.now();
 		const tick = (now: number) => {
 			const progress = Math.min((now - start) / durationMs, 1);
-			setValue(Math.round(to * easeOutCubic(progress)));
+			setValue(Math.round(toMicroUsd * easeOutCubic(progress)));
 			if (progress < 1) {
 				frame = requestAnimationFrame(tick);
 			}
 		};
 		frame = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(frame);
-	}, [to, durationMs]);
+	}, [toMicroUsd, durationMs]);
 
-	return <>{value}</>;
+	return <>{formatCreditAmount(value, toMicroUsd)}</>;
 }
 
 function easeOutCubic(t: number): number {
@@ -147,4 +189,19 @@ function easeOutCubic(t: number): number {
 
 function prefersReducedMotion(): boolean {
 	return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function formatCreditAmount(amountMicroUsd: number, finalAmountMicroUsd: number): string {
+	const showCents = finalAmountMicroUsd % 1_000_000 !== 0;
+	return new Intl.NumberFormat('en-US', {
+		style: 'currency',
+		currency: 'USD',
+		minimumFractionDigits: showCents ? 2 : 0,
+		maximumFractionDigits: showCents ? 2 : 0,
+	}).format(amountMicroUsd / 1_000_000);
+}
+
+function getSeenSetupCreditGrantIds(): string[] {
+	const grantIds = seenSetupCreditGrantsStorage.get();
+	return Array.isArray(grantIds) ? grantIds : [];
 }

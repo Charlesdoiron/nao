@@ -147,6 +147,8 @@ describe('billing consistency queries', () => {
 			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
 			STRIPE_CLOUD_TRIAL_PRODUCT_ID: 'prod_cloud_trial',
 			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
+			STRIPE_CREDIT_PLATFORM_FEE_PRODUCT_ID: 'prod_platform_fee',
+			STRIPE_CREDIT_PRODUCT_ID: 'prod_credits',
 			STRIPE_SECRET_KEY: 'sk_test_example',
 			STRIPE_WEBHOOK_SECRET: 'whsec_example',
 		});
@@ -251,6 +253,8 @@ describe('billing consistency queries', () => {
 			STRIPE_CLOUD_TRIAL_PRICE_LOOKUP_KEY: 'trial_sub',
 			STRIPE_CLOUD_TRIAL_PRODUCT_ID: 'prod_cloud_trial',
 			STRIPE_CLOUD_YEARLY_PRICE_LOOKUP_KEY: 'yearly_sub',
+			STRIPE_CREDIT_PLATFORM_FEE_PRODUCT_ID: 'prod_platform_fee',
+			STRIPE_CREDIT_PRODUCT_ID: 'prod_credits',
 			STRIPE_SECRET_KEY: 'sk_test_example',
 			STRIPE_WEBHOOK_SECRET: 'whsec_example',
 		});
