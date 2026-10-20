@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createMcpProject } from '../helpers/mcp-project';
+import { useMcpProject } from '../helpers/mcp-project';
 
 const createdRuntimes: FakeRuntime[] = [];
 
@@ -63,6 +63,7 @@ vi.mock(
 import { McpService } from '../../src/services/mcp';
 
 const SERVERS = ['alpha', 'beta', 'gamma'];
+const createMcpProject = useMcpProject();
 
 describe('MCP concurrent discovery (issue #1292)', () => {
 	beforeEach(async () => {

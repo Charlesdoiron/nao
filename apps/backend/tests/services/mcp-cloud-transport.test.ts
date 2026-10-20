@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createMcpProject } from '../helpers/mcp-project';
+import { useMcpProject } from '../helpers/mcp-project';
 
 const mocks = vi.hoisted(() => ({ isCloud: false }));
 
@@ -61,6 +61,7 @@ const MCP_SERVERS = {
 };
 const STDIO_SERVERS = ['shell', 'implicitStdio'];
 const HTTP_SERVERS = ['remote', 'events', 'typed'];
+const createMcpProject = useMcpProject();
 
 const registeredStdioServers = (): string[] =>
 	registeredDefinitions.filter((definition) => definition.command.kind === 'stdio').map((d) => d.name);
