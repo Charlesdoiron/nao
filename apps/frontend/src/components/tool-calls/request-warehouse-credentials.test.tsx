@@ -125,7 +125,8 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 
 		await screen.findByText('Postgres credentials verified');
 		expect(screen.getByText('Your connection is being set up.')).toBeTruthy();
-		expect(screen.getByRole('button', { name: 'View progress' })).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'View credentials' }));
+		expect(screen.getByRole('button', { name: 'Verify credentials' })).toBeTruthy();
 	});
 
 	it('waits for the current turn to finish before requesting business context', async () => {
@@ -150,7 +151,7 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		);
 	});
 
-	it('hides the credentials request after provisioning completes', async () => {
+	it('keeps the completed warehouse connection visible', async () => {
 		mocks.jobStatus = 'ready';
 		const toolPart = {
 			type: 'tool-request_warehouse_credentials',
@@ -159,9 +160,11 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 			input: { provider: 'postgres' },
 			output: { provider: 'postgres', status: 'credentials-required' },
 		} as ToolCallComponentProps<'request_warehouse_credentials'>['toolPart'];
-		const view = render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
+		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
 
-		await waitFor(() => expect(view.queryByText('Action required')).toBeNull());
+		expect(await screen.findByText('Postgres credentials verified')).toBeTruthy();
+		expect(screen.getByText('Your warehouse connection is ready.')).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'View credentials' })).toBeTruthy();
 	});
 
 	it('waits for the active job before falling back to a persisted job ID', async () => {

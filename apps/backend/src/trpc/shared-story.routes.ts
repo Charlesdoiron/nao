@@ -16,6 +16,7 @@ import {
 	getSharedCustomStoryQuerySql,
 } from '../services/custom-story';
 import { getCustomStoryState, setCustomStoryState } from '../services/custom-story-state';
+import { canUserAccessSystemExampleProject, SYSTEM_EXAMPLE_PROJECT_ID } from '../services/example-project';
 import { executeLiveQuery, getStoryQueryData, refreshStoryData } from '../services/live-story';
 import { notifySharedItem } from '../services/notification.service';
 import {
@@ -57,6 +58,7 @@ const shareAccessProcedure = resourceProjectProcedure(
 	sharedStoryQueries.getSharedStoryByStoryId,
 	'Shared story',
 	canUserAccessShare,
+	canAccessExampleShare,
 );
 const cloudBillingShareAccessProcedure = shareAccessProcedure.use(
 	cloudBillingMiddleware<{ resource: { projectId: string } }>(({ resource }) => ({
@@ -68,12 +70,16 @@ const legacyShareAccessProcedure = resourceProjectProcedure(
 	sharedStoryQueries.getSharedStory,
 	'Shared story',
 	canUserAccessShare,
+	canAccessExampleShare,
 );
 
 export const sharedStoryRoutes = {
 	list: protectedProcedure.input(z.object({ projectId: z.string() })).query(async ({ input, ctx }) => {
 		const projects = await projectQueries.listUserProjects(ctx.user.id);
 		const projectIds = projects.map((p) => p.id);
+		if (await canUserAccessSystemExampleProject(ctx.user.id, input.projectId)) {
+			projectIds.push(SYSTEM_EXAMPLE_PROJECT_ID);
+		}
 		const stories = await sharedStoryQueries.listUserSharedStories(projectIds, ctx.user.id, input.projectId);
 		return stories.map(({ id: _shareId, ...story }) => ({
 			...story,
@@ -626,6 +632,10 @@ async function canUserAccessShare(
 		share.userId === userId ||
 		sharedStoryQueries.canUserAccessSharedStory(share.id, userId)
 	);
+}
+
+async function canAccessExampleShare(share: { projectId: string }, userId: string): Promise<boolean> {
+	return canUserAccessSystemExampleProject(userId, share.projectId);
 }
 
 async function getStoryRefreshAccess(

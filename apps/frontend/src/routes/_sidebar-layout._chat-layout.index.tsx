@@ -3,8 +3,9 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, PlusIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { StoryItem } from '@/lib/stories-page';
+import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
 import type { UIMessage } from '@nao/backend/chat';
+import type { StoryItem } from '@/lib/stories-page';
 
 import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
@@ -65,28 +66,34 @@ function HomePage() {
 	const isCloud = useIsCloud();
 	const showProjectSetupCue = project.isSuccess && project.data === null;
 	const showExampleProject = isCloud && (showProjectSetupCue || exampleSearch === true);
+	const storiesProjectId =
+		project.data?.id ?? (isCloud && showProjectSetupCue ? SYSTEM_EXAMPLE_PROJECT_ID : undefined);
 	const stateTitle = `${username ? capitalize(username) : ''}, what do you want to analyze?`;
 	const isDark = useIsDarkMode();
-	const stories = useQuery({ ...trpc.story.listAll.queryOptions(), enabled: isEmptyState });
+	const stories = useQuery({
+		...trpc.story.listAll.queryOptions({ projectId: storiesProjectId }),
+		enabled: isEmptyState && !!storiesProjectId,
+	});
 	const sharedStories = useQuery({
-		...trpc.storyShare.list.queryOptions({ projectId: project.data?.id ?? '' }),
-		enabled: isEmptyState && !!project.data?.id,
+		...trpc.storyShare.list.queryOptions({ projectId: storiesProjectId ?? '' }),
+		enabled: isEmptyState && !!storiesProjectId,
 	});
 	const favorites = useQuery({
 		...trpc.favorite.list.queryOptions(),
-		enabled: isEmptyState,
+		enabled: isEmptyState && !!project.data?.id,
 	});
 	const folderItems = useQuery({
 		...trpc.storyFolder.listItems.queryOptions(),
-		enabled: isEmptyState,
+		enabled: isEmptyState && !!project.data?.id,
 	});
 	const folderTree = useQuery({
 		...trpc.storyFolder.listTree.queryOptions({ archived: false }),
-		enabled: isEmptyState,
+		enabled: isEmptyState && !!project.data?.id,
 	});
 	const storiesGridRef = useRef<HTMLDivElement>(null);
 	const [storyCols, setStoryCols] = useState(STORY_CARD_MAX_COLS);
-	const hasStories = (stories.data?.length ?? 0) > 0;
+	const storyCount = (stories.data?.length ?? 0) + (sharedStories.data?.length ?? 0);
+	const hasStories = storyCount > 0;
 	useResizeObserver(
 		storiesGridRef,
 		(el) => {
@@ -130,7 +137,7 @@ function HomePage() {
 		folderTree.data,
 	]);
 	const storyGroups = useMemo(() => buildStoryGroups(latestStoryItems), [latestStoryItems]);
-	const hasMoreStories = (stories.data?.length ?? 0) > storyCols;
+	const hasMoreStories = storyCount > storyCols;
 
 	const logoSrc = isDark ? '/darkLogo.svg' : '/lightLogo.svg';
 	const cardLogoSrc = isDark ? '/dark-card-logo.svg' : '/light-card-logo.svg';
@@ -186,13 +193,15 @@ function HomePage() {
 								</div>
 								{showProjectSetupCue && (
 									<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
-										<HomeLinkCard
-											to='/onboarding'
-											label='Guided setup'
-											title='Set up your nao project'
-											subtitle='Chat with the onboarding agent'
-											logoSrc={cardLogoSrc}
-										/>
+										{latestStoryItems[0] && (
+											<div className='w-full max-w-md'>
+												<StoryCard
+													item={latestStoryItems[0]}
+													displayMode='grid'
+													showArchived={false}
+												/>
+											</div>
+										)}
 										<ExampleProjectPromptCard />
 									</div>
 								)}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildWarehouseCredentials } from './warehouse-credentials';
@@ -68,6 +68,7 @@ export function RequestWarehouseCredentialsToolCall({
 		trpc.onboarding.startWarehouseProvisioning.mutationOptions({
 			onSuccess: ({ jobId: nextJobId }) => {
 				setJobId(nextJobId);
+				setOpen(false);
 				if (canRestoreJob) {
 					void queryClient.invalidateQueries({
 						queryKey: trpc.onboarding.getActiveWarehouseProvisioningJob.queryKey({
@@ -132,17 +133,18 @@ export function RequestWarehouseCredentialsToolCall({
 		return () => window.removeEventListener('resize', alignDialog);
 	}, [alignDialog, open]);
 
-	if (!provider || job.data?.status === 'ready') {
+	if (!provider) {
 		return null;
 	}
 
+	const setupReady = job.data?.status === 'ready';
 	const setupFailed = job.data?.status === 'failed' || job.data?.status === 'cancelled';
-	const setupInProgress = startProvisioning.isPending || (jobId !== null && !setupFailed);
+	const setupInProgress = startProvisioning.isPending || (jobId !== null && !setupReady && !setupFailed);
 	const credentialsVerified =
 		validatedCredentialFingerprint !== null &&
 		credentialValues !== undefined &&
 		validatedCredentialFingerprint === JSON.stringify(credentialValues);
-	const credentialsAccepted = credentialsVerified || setupInProgress;
+	const credentialsAccepted = credentialsVerified || setupInProgress || setupReady;
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
@@ -181,11 +183,13 @@ export function RequestWarehouseCredentialsToolCall({
 						<p className='text-xs text-muted-foreground'>
 							{setupFailed
 								? 'Open the setup to review the problem and try again.'
-								: setupInProgress
-									? 'Your connection is being set up.'
-									: credentialsVerified
-										? 'Ready to continue. You can still review or edit these details.'
-										: 'Credentials are submitted securely and are never shared with the agent.'}
+								: setupReady
+									? 'Your warehouse connection is ready.'
+									: setupInProgress
+										? 'Your connection is being set up.'
+										: credentialsVerified
+											? 'Ready to continue. You can still review or edit these details.'
+											: 'Credentials are submitted securely and are never shared with the agent.'}
 						</p>
 					</div>
 				</div>
@@ -202,8 +206,8 @@ export function RequestWarehouseCredentialsToolCall({
 					>
 						{setupFailed
 							? 'Review setup'
-							: setupInProgress
-								? 'View progress'
+							: setupReady || setupInProgress
+								? 'View credentials'
 								: credentialsVerified
 									? 'Edit credentials'
 									: 'Enter credentials'}
@@ -220,12 +224,20 @@ export function RequestWarehouseCredentialsToolCall({
 							<DatabaseIcon dialect={provider} className='size-5' />
 						</div>
 						<div className='space-y-1'>
-							<DialogTitle>Connect {WAREHOUSE_PROVIDER_LABELS[provider]}</DialogTitle>
-							<DialogDescription>Add a secure connection for your nao project.</DialogDescription>
+							<DialogTitle>
+								{jobId
+									? `${WAREHOUSE_PROVIDER_LABELS[provider]} connection details`
+									: `Connect ${WAREHOUSE_PROVIDER_LABELS[provider]}`}
+							</DialogTitle>
+							<DialogDescription>
+								{jobId
+									? 'These credentials are securely stored and cannot be changed during setup.'
+									: 'Add a secure connection for your nao project.'}
+							</DialogDescription>
 						</div>
 					</div>
 				</DialogHeader>
-				{jobId ? (
+				{jobId && setupFailed ? (
 					<WarehouseProvisioningProgress
 						job={job}
 						onRetry={() => {
@@ -257,6 +269,7 @@ export function RequestWarehouseCredentialsToolCall({
 						onValuesChange={setCredentialValues}
 						initialValidatedFingerprint={validatedCredentialFingerprint}
 						onValidatedFingerprintChange={setValidatedCredentialFingerprint}
+						locked={jobId !== null}
 					/>
 				) : (
 					<div className='rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground'>
@@ -314,10 +327,15 @@ function WarehouseProvisioningProgress({
 		cancelled: 'Warehouse setup was cancelled.',
 		ready: 'Connection ready.',
 	}[job.data?.status ?? 'queued'];
+	const isReady = job.data?.status === 'ready';
 
 	return (
 		<div className='flex items-center gap-3 rounded-lg border bg-muted/30 p-4'>
-			<Loader2 className='size-4 animate-spin text-primary' />
+			{isReady ? (
+				<CheckCircle2 className='size-4 text-emerald-600 dark:text-emerald-400' />
+			) : (
+				<Loader2 className='size-4 animate-spin text-primary' />
+			)}
 			<p className='text-sm'>{statusLabel}</p>
 		</div>
 	);

@@ -463,16 +463,31 @@ function SidebarNav({
 			))}
 
 			{isEmpty && (
-				<p className='text-sm text-muted-foreground text-center p-4'>
+				<div className='text-sm text-muted-foreground text-center p-4'>
 					{isViewer ? (
 						'No chats shared with you.'
 					) : isTrial ? (
 						<>
-							{username ? `Welcome to nao, ${capitalize(username)}! ` : ''}
-							<br />
-							Your chat history will appear here.
-							<br />
-							Start a new chat!
+							<Link
+								to='/onboarding'
+								className='group mb-5 flex w-full items-center justify-between gap-2 rounded-lg border border-violet/20 bg-background p-3 text-left shadow-xs transition-colors hover:border-violet/40'
+							>
+								<span className='min-w-0'>
+									<span className='block text-[10px] font-semibold uppercase tracking-[0.16em] text-primary'>
+										Guided setup
+									</span>
+									<span className='mt-1 block font-medium text-foreground'>
+										Set up your nao project
+									</span>
+								</span>
+								<ChevronRight className='size-4 shrink-0 transition-transform group-hover:translate-x-0.5' />
+							</Link>
+							{username && <span className='mb-3 block'>Welcome to nao, {capitalize(username)}!</span>}
+							<span className='block'>
+								Your chat history will appear here.
+								<br />
+								Start a new chat!
+							</span>
 						</>
 					) : (
 						<>
@@ -481,7 +496,7 @@ function SidebarNav({
 							Start a new chat!
 						</>
 					)}
-				</p>
+				</div>
 			)}
 		</div>
 	);

@@ -7,7 +7,8 @@ vi.mock('@/main', () => ({ trpc: {} }));
 describe('isOnboardingComplete', () => {
 	it.each([
 		[false, { flow: 'local', step: 4 }, false, false],
-		[true, { flow: 'local', step: 3 }, false, false],
+		[true, { flow: 'local', step: 2 }, false, false],
+		[true, { flow: 'local', step: 3 }, false, true],
 		[true, { flow: 'local', step: 4 }, false, true],
 		[true, { flow: 'github', step: 2 }, false, true],
 		[true, { flow: 'github', step: 4 }, false, false],

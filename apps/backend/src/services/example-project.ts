@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
 
 import { isCloud } from '../env';
+import { upsertSystemExampleStory } from '../queries/example-story.queries';
 import * as projectQueries from '../queries/project.queries';
 
 export { SYSTEM_EXAMPLE_PROJECT_ID };
+export { SYSTEM_EXAMPLE_STORY_ID } from '../queries/example-story.queries';
 
 export async function ensureSystemExampleProject() {
 	const projectPath = fileURLToPath(new URL('../../../../example', import.meta.url));
@@ -16,7 +18,9 @@ export async function ensureSystemExampleProject() {
 		throw new Error(`Example project not found at ${projectPath}`);
 	}
 
-	return projectQueries.upsertSystemExampleProject(projectPath);
+	const project = await projectQueries.upsertSystemExampleProject(projectPath);
+	await upsertSystemExampleStory();
+	return project;
 }
 
 export async function getExampleProjectForUser(userId: string) {
@@ -39,4 +43,8 @@ export async function getSystemExampleProject() {
 	}
 
 	return projectQueries.getProjectById(SYSTEM_EXAMPLE_PROJECT_ID);
+}
+
+export async function canUserAccessSystemExampleProject(userId: string, projectId: string): Promise<boolean> {
+	return projectId === SYSTEM_EXAMPLE_PROJECT_ID && Boolean(await getExampleProjectForUser(userId));
 }
