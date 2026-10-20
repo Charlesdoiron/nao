@@ -132,7 +132,9 @@ function getAccessNotice(access: CloudBillingAccess | undefined, now = Date.now(
 		description: endingSoon
 			? `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'} left. ${
 					access.requiresBillingAction
-						? 'Manage billing to keep access.'
+						? access.canManageBilling
+							? 'Manage billing to keep access.'
+							: 'An organization admin must manage billing to keep access.'
 						: 'Your subscription will start automatically.'
 				}`
 			: `${remainingDays} ${remainingDays === 1 ? 'day' : 'days'} left. Only admins can see this banner.`,

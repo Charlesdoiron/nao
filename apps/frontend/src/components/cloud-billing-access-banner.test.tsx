@@ -246,7 +246,9 @@ it('hides the trial-start notice from non-admins but shows the final three-day w
 	mocks.access = { ...mocks.access, trialEndsAt: new Date(now.getTime() + 2 * DAY_MS) };
 	view.rerender(<CloudBillingAccessBanner />);
 
-	expect(screen.getByRole('status').textContent).toContain('Your free trial ends soon. 2 days left.');
+	expect(screen.getByRole('status').textContent).toContain(
+		'Your free trial ends soon. 2 days left. An organization admin must manage billing to keep access.',
+	);
 	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
 });
 
