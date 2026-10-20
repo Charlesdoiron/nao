@@ -119,7 +119,7 @@ function OnboardingPage() {
 	const warehouseReady = warehouseJob.data?.status === 'ready';
 	const setupReportedComplete = isOnboardingComplete(true, progress, warehouseReady);
 	const onboardingComplete = isOnboardingComplete(currentProject.data != null, progress, warehouseReady);
-	const trialStarted = onboardingComplete && billingAccess.data?.status === 'trialing';
+	const trialActive = onboardingComplete && billingAccess.data?.status === 'trialing';
 	const [deployDialogStyle, setDeployDialogStyle] = useState<React.CSSProperties>();
 	const [importDialogStyle, setImportDialogStyle] = useState<React.CSSProperties>();
 	const [latestPlaintextDeployKey, setLatestPlaintextDeployKey] = useState<string | null>(null);
@@ -300,8 +300,8 @@ function OnboardingPage() {
 							{onboardingComplete ? (
 								<div className='flex flex-col items-center gap-2 pb-4'>
 									<p className='text-center text-sm font-medium text-violet'>
-										{trialStarted
-											? 'Project created! Your free trial has started.'
+										{trialActive
+											? 'Project created! Your free trial is active.'
 											: 'Project setup successful!'}
 									</p>
 									<Button

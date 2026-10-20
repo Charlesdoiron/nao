@@ -113,12 +113,16 @@ function getAccessNotice(access: CloudBillingAccess | undefined, now = Date.now(
 	}
 
 	const remainingMs = access.trialEndsAt ? access.trialEndsAt.getTime() - now : 0;
-	if (access.status !== 'trialing' || remainingMs <= 0 || !access.canManageBilling) {
+	if (access.status !== 'trialing' || remainingMs <= 0) {
 		return null;
 	}
 
 	const remainingDays = Math.ceil(remainingMs / DAY_MS);
 	const endingSoon = remainingMs <= TRIAL_WARNING_MS;
+	if (!endingSoon && !access.canManageBilling) {
+		return null;
+	}
+
 	return {
 		restricted: false,
 		trial: true,

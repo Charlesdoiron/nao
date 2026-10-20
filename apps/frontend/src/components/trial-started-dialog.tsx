@@ -34,11 +34,11 @@ interface TrialStartedDialogProps {
 }
 
 export function TrialStartedDialogController() {
-	const { isOrgAdmin } = usePermissions();
+	const { isOrgAdmin, role } = usePermissions();
 	const { data: session } = useSession();
 	const setupCreditGrant = useQuery({
 		...trpc.account.getOrganizationSetupCreditGrant.queryOptions(),
-		enabled: isOrgAdmin,
+		enabled: isOrgAdmin && role !== undefined,
 	});
 	const [seenGrantIds, setSeenGrantIds] = useState(getSeenSetupCreditGrantIds);
 	const grant = setupCreditGrant.data;
@@ -123,7 +123,7 @@ export function TrialStartedDialog({ open, onOpenChange, creditAmountMicroUsd, u
 	);
 }
 
-const enterClass = 'animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500';
+const enterClass = 'animate-in fade-in-0 slide-in-from-bottom-2 fill-mode-both duration-500 motion-reduce:animate-none';
 
 function NyanCatSky() {
 	return (

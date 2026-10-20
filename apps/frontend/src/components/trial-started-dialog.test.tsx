@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { TrialStartedDialogController } from './trial-started-dialog';
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 		amountMicroUsd: number;
 	} | null,
 	isOrgAdmin: true,
+	role: 'admin' as string | undefined,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -29,7 +30,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 vi.mock('@/hooks/use-permissions', () => ({
-	usePermissions: () => ({ isOrgAdmin: mocks.isOrgAdmin }),
+	usePermissions: () => ({ isOrgAdmin: mocks.isOrgAdmin, role: mocks.role }),
 }));
 
 vi.mock('@/lib/auth-client', () => ({
@@ -49,6 +50,7 @@ vi.mock('@/main', () => ({
 beforeEach(() => {
 	mocks.grant = { id: 'setup-grant-id', amountMicroUsd: 20_000_000 };
 	mocks.isOrgAdmin = true;
+	mocks.role = 'admin';
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => values.get(key) ?? null,
@@ -78,10 +80,37 @@ it('shows setup credits to an admin once per browser', () => {
 	expect(screen.queryByRole('dialog')).toBeNull();
 });
 
+it('counts setup credits up when motion is allowed', () => {
+	const animationFrames: FrameRequestCallback[] = [];
+	vi.stubGlobal('matchMedia', () => ({ matches: false }));
+	vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+		animationFrames.push(callback);
+		return animationFrames.length;
+	});
+
+	render(<TrialStartedDialogController />);
+
+	expect(screen.getByText('$0')).toBeTruthy();
+	act(() => animationFrames[0](performance.now() + 900));
+	expect(screen.getByText('$20')).toBeTruthy();
+});
+
 it('does not show setup credits to non-admins', () => {
 	mocks.isOrgAdmin = false;
 
 	render(<TrialStartedDialogController />);
 
 	expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('waits for the first project before loading setup credits', () => {
+	mocks.role = undefined;
+	const view = render(<TrialStartedDialogController />);
+
+	expect(screen.queryByRole('dialog')).toBeNull();
+
+	mocks.role = 'admin';
+	view.rerender(<TrialStartedDialogController />);
+
+	expect(screen.getByRole('dialog')).toBeTruthy();
 });

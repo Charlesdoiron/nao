@@ -228,7 +228,7 @@ it('shows the final three-day warning even when the trial-start banner was dismi
 	expect(screen.queryByRole('button', { name: 'Dismiss trial banner' })).toBeNull();
 });
 
-it('hides the active trial banner from non-admins', () => {
+it('hides the trial-start notice from non-admins but shows the final three-day warning', () => {
 	const now = new Date('2026-10-05T12:00:00.000Z');
 	vi.useFakeTimers();
 	vi.setSystemTime(now);
@@ -239,9 +239,15 @@ it('hides the active trial banner from non-admins', () => {
 		trialEndsAt: new Date(now.getTime() + 14 * DAY_MS),
 	};
 
-	render(<CloudBillingAccessBanner />);
+	const view = render(<CloudBillingAccessBanner />);
 
 	expect(screen.queryByRole('status')).toBeNull();
+
+	mocks.access = { ...mocks.access, trialEndsAt: new Date(now.getTime() + 2 * DAY_MS) };
+	view.rerender(<CloudBillingAccessBanner />);
+
+	expect(screen.getByRole('status').textContent).toContain('Your free trial ends soon. 2 days left.');
+	expect(screen.getByText('Ask an organization admin to manage billing.')).toBeTruthy();
 });
 
 it('offers an available trial to non-managers without a billing action', () => {

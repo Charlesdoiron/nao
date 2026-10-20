@@ -39,6 +39,7 @@ describe('cloud billing lifecycle', () => {
 		mocks.listPendingTrials.mockResolvedValue([{ orgId: 'org-one' }, { orgId: 'org-two' }]);
 		mocks.listMappedOrganizations.mockResolvedValue([
 			{ orgId: 'org-one', stripeCustomerId: 'cus_one' },
+			{ orgId: 'org-two', stripeCustomerId: 'cus_two' },
 			{ orgId: 'org-three', stripeCustomerId: 'cus_three' },
 		]);
 		mocks.provisionTrial.mockRejectedValueOnce(new Error('temporary')).mockResolvedValueOnce(undefined);
@@ -57,6 +58,10 @@ describe('cloud billing lifecycle', () => {
 		expect(mocks.reconcileCustomer).toHaveBeenNthCalledWith(2, {
 			stripeCustomerId: 'cus_three',
 			organizationIdHint: 'org-three',
+		});
+		expect(mocks.reconcileCustomer).not.toHaveBeenCalledWith({
+			stripeCustomerId: 'cus_two',
+			organizationIdHint: 'org-two',
 		});
 		expect(mocks.logError).toHaveBeenCalledWith(
 			'Cloud trial provisioning recovery failed for organization org-one',

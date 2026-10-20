@@ -67,6 +67,9 @@ export function isActiveTrialWithoutPaidPlan(entitlement: CloudBillingEntitlemen
 	if (entitlement?.billingPlan || entitlement?.billingStatus !== 'trialing') {
 		return false;
 	}
+	if (!entitlement.billingAccessEndsAt) {
+		return false;
+	}
 	const accessEndsAt = earlierDate(entitlement.trialEndsAt, entitlement.billingAccessEndsAt);
 	return accessEndsAt !== null && accessEndsAt.getTime() > now;
 }

@@ -17,6 +17,8 @@ import {
 	assertProjectCloudBillingAccess,
 	hasCloudBillingAccess,
 	hasProjectCloudBillingAccess,
+	isActiveLocalTrial,
+	isActiveTrialWithoutPaidPlan,
 	isExpiredTrialWithoutPaidPlan,
 } from '../src/services/cloud-billing-access.service';
 import type { BillingStatus } from '../src/types/billing';
@@ -148,6 +150,14 @@ describe('cloud billing access entitlement', () => {
 		expect(hasCloudBillingAccess(state)).toBe(expected);
 	});
 
+	it('does not activate an unconfirmed local trial', () => {
+		const unconfirmedTrial = entitlement('trialing', { trialEndsAt: future });
+
+		expect(hasCloudBillingAccess(unconfirmedTrial)).toBe(false);
+		expect(isActiveLocalTrial(unconfirmedTrial, now.getTime())).toBe(false);
+		expect(isActiveTrialWithoutPaidPlan(unconfirmedTrial, now.getTime())).toBe(false);
+	});
+
 	it('matches paying trial expiration to the conversion-grace access window', () => {
 		const withinGrace = entitlement('trialing', {
 			stripeSubscriptionId: 'sub_trial',
@@ -164,6 +174,22 @@ describe('cloud billing access entitlement', () => {
 
 		expect(isExpiredTrialWithoutPaidPlan(withinGrace, now.getTime())).toBe(false);
 		expect(isExpiredTrialWithoutPaidPlan(afterGrace, now.getTime())).toBe(true);
+	});
+
+	it.each([
+		['expired local trial', entitlement('trialing', { trialEndsAt: past, billingAccessEndsAt: past }), true],
+		[
+			'trial with a paid plan',
+			entitlement('trialing', {
+				billingPlan: 'cloud_monthly_v2',
+				stripeSubscriptionId: 'sub_trial',
+				trialEndsAt: past,
+				billingAccessEndsAt: past,
+			}),
+			false,
+		],
+	] as const)('%s expiration without a paid plan is %s', (_label, state, expected) => {
+		expect(isExpiredTrialWithoutPaidPlan(state, now.getTime())).toBe(expected);
 	});
 });
 
