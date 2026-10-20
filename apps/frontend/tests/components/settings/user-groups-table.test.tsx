@@ -13,7 +13,7 @@ import {
 } from '@nao/shared';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { stubClipboard, stubResizeObserver } from '../../helpers/browser-stubs';
 import { openDropdownMenu } from '../../helpers/dropdown-menu';
@@ -984,7 +984,7 @@ describe('UserGroupEditor', () => {
 			isLoading: boolean;
 			isError: boolean;
 			data?: ProjectRowSecurity;
-			refetch: ReturnType<typeof vi.fn>;
+			refetch: Mock<() => unknown>;
 		} = {
 			isLoading: true,
 			isError: false,

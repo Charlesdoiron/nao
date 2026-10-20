@@ -19,19 +19,21 @@ const createAudioContextMock = () => {
 		linearRampToValueAtTime: vi.fn(),
 		exponentialRampToValueAtTime: vi.fn(),
 	};
-	return vi.fn(() => ({
-		currentTime: 0,
-		destination: {},
-		createOscillator: () => ({
-			...audioNode,
-			frequency: { value: 0 },
-			type: 'sine',
-			start: vi.fn(),
-			stop: vi.fn(),
-		}),
-		createGain: () => ({ ...audioNode, gain: gainParam }),
-		close: vi.fn(),
-	}));
+	return vi.fn(function () {
+		return {
+			currentTime: 0,
+			destination: {},
+			createOscillator: () => ({
+				...audioNode,
+				frequency: { value: 0 },
+				type: 'sine',
+				start: vi.fn(),
+				stop: vi.fn(),
+			}),
+			createGain: () => ({ ...audioNode, gain: gainParam }),
+			close: vi.fn(),
+		};
+	});
 };
 
 describe('useStreamEndSound', () => {
