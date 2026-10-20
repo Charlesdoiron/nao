@@ -28,6 +28,10 @@ vi.mock('@/hooks/use-license', () => ({
 	useLicenseFeatures: () => ({ data: {} }),
 }));
 
+vi.mock('@/hooks/use-can-see-advanced-settings', () => ({
+	useCanSeeAdvancedSettings: () => true,
+}));
+
 vi.mock('@/hooks/use-nao-mode', () => ({
 	useIsCloud: () => mocks.isCloud,
 }));
