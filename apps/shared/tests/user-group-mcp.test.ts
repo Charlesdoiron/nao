@@ -10,7 +10,7 @@ import {
 	normalizeMcpAccess,
 	parseMcpAccess,
 	unionMcpAccess,
-} from './user-group-mcp';
+} from '../src/user-group-mcp';
 
 describe('user group MCP access', () => {
 	it('trims, deduplicates, sorts, and drops tool grants covered by a server grant', () => {

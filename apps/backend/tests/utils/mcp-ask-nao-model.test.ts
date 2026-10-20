@@ -6,7 +6,7 @@ import {
 	pickRequestedModel,
 	type ProjectAvailableModel,
 	RequestedModelError,
-} from '../src/utils/llm';
+} from '../../src/utils/llm';
 
 const available: ProjectAvailableModel[] = [
 	{ provider: 'mistral', modelId: 'mistral-medium-latest', name: 'Mistral Medium', baseUrl: null },

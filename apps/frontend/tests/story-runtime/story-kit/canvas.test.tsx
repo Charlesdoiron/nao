@@ -4,10 +4,10 @@ import { STORY_PRINT_CANVAS_ATTRIBUTE } from '@nao/shared/story-app';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Canvas } from './canvas';
+import { Canvas } from '@/story-runtime/story-kit/canvas';
 
 const host = vi.hoisted(() => ({ print: false }));
-vi.mock('../story-host', () => ({ isPrintMode: () => host.print }));
+vi.mock('@/story-runtime/story-host', () => ({ isPrintMode: () => host.print }));
 
 vi.stubGlobal(
 	'ResizeObserver',

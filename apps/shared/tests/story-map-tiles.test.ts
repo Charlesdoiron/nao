@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { isStoryMapTileUrl, STORY_MAP_TILE_LAYERS } from './story-map-tiles';
-import type { StoryThemeMode } from './story-theme';
+import { isStoryMapTileUrl, STORY_MAP_TILE_LAYERS } from '../src/story-map-tiles';
+import type { StoryThemeMode } from '../src/story-theme';
 
 function tile(mode: StoryThemeMode, z: number, y: number, x: number): URL {
 	const template = STORY_MAP_TILE_LAYERS[mode].url;

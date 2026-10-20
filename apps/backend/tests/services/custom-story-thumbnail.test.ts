@@ -1,22 +1,22 @@
-import '../src/env';
+import '../../src/env';
 
 import { DEFAULT_DARK_STORY_THEME, DEFAULT_STORY_THEME, type StoryThemePair } from '@nao/shared/story-theme';
 import { eq } from 'drizzle-orm';
 import sharp from 'sharp';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import s from '../src/db/abstractSchema';
-import { db } from '../src/db/db';
-import * as storyQueries from '../src/queries/story.queries';
-import * as storyFileQueries from '../src/queries/story-file.queries';
-import { getCustomStoryThumbnail, queueCustomStoryThumbnail } from '../src/services/custom-story-thumbnail';
-import type { StoryScreenshot } from '../src/utils/story-screenshot';
+import s from '../../src/db/abstractSchema';
+import { db } from '../../src/db/db';
+import * as storyQueries from '../../src/queries/story.queries';
+import * as storyFileQueries from '../../src/queries/story-file.queries';
+import { getCustomStoryThumbnail, queueCustomStoryThumbnail } from '../../src/services/custom-story-thumbnail';
+import type { StoryScreenshot } from '../../src/utils/story-screenshot';
 
-vi.mock('../src/db/db', async () => {
+vi.mock('../../src/db/db', async () => {
 	const { default: Database } = await import('better-sqlite3');
 	const { drizzle } = await import('drizzle-orm/better-sqlite3');
 	const { generateSQLiteDrizzleJson, generateSQLiteMigration } = await import('drizzle-kit/api');
-	const sqliteSchema = await import('../src/db/sqlite-schema');
+	const sqliteSchema = await import('../../src/db/sqlite-schema');
 
 	const sqlite = new Database(':memory:');
 	const statements = await generateSQLiteMigration(
@@ -42,8 +42,8 @@ const screenshots = vi.hoisted(() => ({
 	brokenModes: [] as string[],
 	calls: 0,
 }));
-vi.mock('../src/utils/story-screenshot', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../src/utils/story-screenshot')>()),
+vi.mock('../../src/utils/story-screenshot', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../src/utils/story-screenshot')>()),
 	renderStoryScreenshot: async (html: string) => {
 		screenshots.calls++;
 		const isBroken = screenshots.brokenModes.some((mode) => html.includes(`data-mode="${mode}"`));
@@ -57,7 +57,7 @@ vi.mock('../src/utils/story-screenshot', async (importOriginal) => ({
 }));
 
 const documents = vi.hoisted(() => ({ modes: [] as string[] }));
-vi.mock('../src/services/custom-story-export', () => ({
+vi.mock('../../src/services/custom-story-export', () => ({
 	buildCustomStoryDocumentByStoryId: async (
 		_storyId: string,
 		_version: unknown,
@@ -71,8 +71,8 @@ vi.mock('../src/services/custom-story-export', () => ({
 const versionIds = vi.hoisted(() => ({ current: '' }));
 const queries = vi.hoisted(() => ({ ids: [] as string[], saved: [] as string[] }));
 const themes = vi.hoisted(() => ({ active: null as StoryThemePair | null }));
-vi.mock('../src/services/custom-story', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../src/services/custom-story')>()),
+vi.mock('../../src/services/custom-story', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../src/services/custom-story')>()),
 	getLatestCustomStoryVersionByStoryId: async () => ({
 		version: { id: versionIds.current },
 		app: { kind: 'react', bundle: 'bundle' },

@@ -20,30 +20,30 @@ vi.mock('mcporter', () => ({
 	createRuntime: async () => new FakeRuntime(),
 }));
 
-vi.mock('../src/db/db', () => ({ db: {} }));
+vi.mock('../../src/db/db', () => ({ db: {} }));
 
 let projectPath = '';
 
-vi.mock('../src/queries/project.queries', () => ({
+vi.mock('../../src/queries/project.queries', () => ({
 	retrieveProjectById: async () => ({ path: projectPath }),
 	getDisabledMcpServers: async () => [],
 	getDisabledMcpTools: async () => [],
 	getEnvVars: async () => ({}),
 }));
 
-vi.mock('../src/queries/mcp-oauth.queries', () => ({
+vi.mock('../../src/queries/mcp-oauth.queries', () => ({
 	claimMcpDiscoveryUser: async () => false,
 	deleteMcpUserToken: async () => undefined,
 	getMcpOAuthClient: async () => null,
 	hasMcpUserToken: async () => false,
 }));
 
-vi.mock('../src/services/mcp-oauth', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../src/services/mcp-oauth')>()),
+vi.mock('../../src/services/mcp-oauth', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../../src/services/mcp-oauth')>()),
 	isOAuthServer: async () => false,
 }));
 
-import { McpService } from '../src/services/mcp';
+import { McpService } from '../../src/services/mcp';
 
 const MCP_SERVERS = {
 	github: { transport: 'streamable-http', url: 'https://github.example.com/mcp' },

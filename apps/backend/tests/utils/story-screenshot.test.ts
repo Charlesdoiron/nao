@@ -1,12 +1,12 @@
 import sharp from 'sharp';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { closeBrowser } from '../src/utils/headless-browser';
-import { isBrokenRender, renderStoryScreenshot } from '../src/utils/story-screenshot';
+import { closeBrowser } from '../../src/utils/headless-browser';
+import { isBrokenRender, renderStoryScreenshot } from '../../src/utils/story-screenshot';
 
 const VIEWPORT = { width: 1280, height: 800 };
 
-const isChromeAvailable = await import('../src/utils/headless-browser')
+const isChromeAvailable = await import('../../src/utils/headless-browser')
 	.then(({ getBrowser }) => getBrowser())
 	.then(
 		() => true,

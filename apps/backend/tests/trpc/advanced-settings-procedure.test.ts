@@ -5,16 +5,16 @@ const mocks = vi.hoisted(() => ({
 	resolveUserGroupAccess: vi.fn(),
 }));
 
-vi.mock('../src/auth', () => ({ getAuth: vi.fn() }));
-vi.mock('../src/queries/project.queries', () => ({
+vi.mock('../../src/auth', () => ({ getAuth: vi.fn() }));
+vi.mock('../../src/queries/project.queries', () => ({
 	getProjectByUserId: vi.fn(async () => ({ id: 'project-id', orgId: 'org-id', name: 'Project', path: null })),
 	getUserRoleInProject: vi.fn(async () => mocks.role),
 }));
-vi.mock('../src/services/user-group-availability.service', () => ({
+vi.mock('../../src/services/user-group-availability.service', () => ({
 	resolveAvailableUserGroupAccess: mocks.resolveUserGroupAccess,
 }));
 
-import { advancedSettingsProtectedProcedure, router } from '../src/trpc/trpc';
+import { advancedSettingsProtectedProcedure, router } from '../../src/trpc/trpc';
 
 const testRouter = router({ settings: advancedSettingsProtectedProcedure.query(() => 'settings') });
 

@@ -1,7 +1,7 @@
 import { STORY_FRAME_CONTAINER } from '@nao/shared/story-app';
 import { describe, expect, it } from 'vitest';
 
-import { rebaseCssOnFrame } from './frame-styles';
+import { rebaseCssOnFrame } from '@/story-runtime/story-kit/frame-styles';
 
 describe('rebaseCssOnFrame', () => {
 	it('rebases range queries whichever side the dimension is on', () => {
