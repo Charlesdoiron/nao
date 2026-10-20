@@ -275,7 +275,7 @@ export const DisplayChartToolCall = ({ toolPart }: ToolCallComponentProps<'displ
 				viewMode === 'chart' ? 'gap-2 px-3' : 'gap-0',
 				isKpiChartView ? 'py-3' : '',
 				viewMode === 'chart' && chartConfig.chart_type !== 'kpi_card' && !normalSize ? 'aspect-3/2' : '',
-				isHorizontalBarChartView && 'min-h-fit',
+				isHorizontalBarChartView && 'overflow-visible',
 			)}
 		>
 			<div
