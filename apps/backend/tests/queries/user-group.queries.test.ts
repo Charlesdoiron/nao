@@ -807,6 +807,13 @@ describe('user group queries', () => {
 		expect(await countCustomUserGroups(PROJECT_ID)).toBe(1);
 	});
 
+	it('rejects sequential exact and case-only create name conflicts', async () => {
+		await createGroup('Finance');
+
+		await expect(createGroup('Finance')).rejects.toMatchObject(NAME_CONFLICT);
+		await expect(createGroup('finance')).rejects.toMatchObject(NAME_CONFLICT);
+	});
+
 	it.each([
 		{ title: 'translates concurrent rename name conflicts', names: ['Analysts', 'Analysts'] },
 		{ title: 'translates concurrent case-only rename name conflicts', names: ['Analysts', 'analysts'] },

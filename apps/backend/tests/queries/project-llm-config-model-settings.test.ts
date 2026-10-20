@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import s from '../../src/db/abstractSchema';
 import { db } from '../../src/db/db';
@@ -24,6 +24,8 @@ describe('project_llm_config model settings round-trip (sqlite)', () => {
 			.insert(s.project)
 			.values({ id: projectId, name: 'Model Settings Test', type: 'local', path: '/tmp/model-settings-test' });
 	});
+
+	afterAll(() => db.$client.close());
 
 	it('has a non-null model_settings column defaulting to an empty object', () => {
 		const columns = db.$client.prepare('PRAGMA table_info(project_llm_config)').all() as {
