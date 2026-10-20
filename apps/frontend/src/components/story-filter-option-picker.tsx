@@ -312,7 +312,7 @@ function InitialRail({
 	onJump: (initial: string) => void;
 }) {
 	return (
-		<nav aria-label='Jump to letter' className='flex w-7 shrink-0 flex-col items-center justify-center py-2'>
+		<nav aria-label='Jump to letter' className='flex w-7 shrink-0 flex-col justify-center py-2'>
 			{ALPHABET.map((initial) => (
 				<button
 					key={initial}
@@ -320,7 +320,7 @@ function InitialRail({
 					tabIndex={-1}
 					disabled={!availableInitials.has(initial)}
 					onClick={() => onJump(initial)}
-					className='w-full rounded-sm text-[10px] leading-[1.15rem] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30'
+					className='flex max-h-5 min-h-0 w-full flex-1 items-center justify-center rounded-sm text-[10px] leading-none font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30'
 				>
 					{initial}
 				</button>
