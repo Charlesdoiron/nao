@@ -98,6 +98,10 @@ describe('DISABLED_PROVIDERS', () => {
 	it('never auto-registers the nao-managed key as an environment provider', () => {
 		process.env.NAO_MANAGED_OPENAI_API_KEY = 'managed-key';
 		process.env.NAO_MODE = 'cloud';
+		process.env.CLOUD_GITHUB_PROJECT_ORG = 'test-org';
+		process.env.CLOUD_GITHUB_PROJECT_APP_ID = '123';
+		process.env.CLOUD_GITHUB_PROJECT_INSTALLATION_ID = '456';
+		process.env.CLOUD_GITHUB_PROJECT_PRIVATE_KEY = 'test-private-key';
 		setDisabledProviders(undefined);
 		expect(isManagedAiEnabled()).toBe(true);
 		expect(hasEnvApiKey('nao')).toBe(false);
