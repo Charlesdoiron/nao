@@ -384,7 +384,7 @@ export function SidebarSettingsNav({
 											) : (
 												<Link
 													to={item.to}
-													activeOptions={item.exact ? { exact: true } : undefined}
+													activeOptions={{ exact: item.exact, includeSearch: false }}
 													className={navRowClassName}
 													activeProps={{
 														className: cn('bg-sidebar-accent text-foreground font-medium'),
