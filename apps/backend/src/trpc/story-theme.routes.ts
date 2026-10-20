@@ -12,7 +12,8 @@ import { env } from '../env';
 import * as storyThemeQueries from '../queries/story-theme.queries';
 import { generateStoryThemePairFromSources } from '../services/story-theme/generate';
 import { DesignSourceError } from '../services/story-theme/signals';
-import { cloudBillingAdminProcedure, projectProtectedProcedure } from './trpc';
+import { storyThemeFingerprint } from '../utils/story-theme-fingerprint';
+import { advancedSettingsProtectedProcedure, cloudBillingAdminProcedure, projectProtectedProcedure } from './trpc';
 import { assertUserGroupFeatureForTrpc } from './user-group-feature-access';
 
 const base64Length = (bytes: number): number => 4 * Math.ceil(bytes / 3);
@@ -40,7 +41,7 @@ function assertCustomStoriesEnabled() {
 	}
 }
 
-const storyThemeReadProcedure = projectProtectedProcedure.use(async ({ next }) => {
+const storyThemeReadProcedure = advancedSettingsProtectedProcedure.use(async ({ next }) => {
 	assertCustomStoriesEnabled();
 	return next();
 });
@@ -53,10 +54,10 @@ const storyThemeAdminProcedure = cloudBillingAdminProcedure.use(async ({ ctx, ne
 
 export const storyThemeRoutes = {
 	getActive: projectProtectedProcedure.query(async ({ ctx }) => {
-		if (!env.BETA_CUSTOM_STORIES_ENABLED) {
-			return { theme: null };
-		}
-		return { theme: await storyThemeQueries.getActiveStoryTheme(ctx.project.id) };
+		const theme = env.BETA_CUSTOM_STORIES_ENABLED
+			? await storyThemeQueries.getActiveStoryTheme(ctx.project.id)
+			: null;
+		return { theme, thumbnailFingerprint: storyThemeFingerprint(theme) };
 	}),
 
 	getState: storyThemeReadProcedure.query(async ({ ctx }) => {

@@ -1,8 +1,12 @@
-import type { ToolCallDensity } from './types';
+import type { ToolCallDensity, UserRole } from './types';
 
 export const USER_GROUP_FEATURES = ['storyCreation', 'customStoryCreation', 'automationCreation'] as const;
 
 export type UserGroupFeature = (typeof USER_GROUP_FEATURES)[number];
+
+export const PROJECT_SHARING_PERMISSIONS = ['inherit', 'allowed', 'blocked'] as const;
+
+export type ProjectSharingPermission = (typeof PROJECT_SHARING_PERMISSIONS)[number];
 
 export interface ToolCallDensityPolicy {
 	defaultDensity: ToolCallDensity;
@@ -12,6 +16,8 @@ export interface ToolCallDensityPolicy {
 export interface UserGroupConfig {
 	features: UserGroupFeature[];
 	toolCallDensity: ToolCallDensityPolicy;
+	showAllSettings: boolean;
+	projectSharing: ProjectSharingPermission;
 }
 
 export type StoredUserGroupConfig =
@@ -20,6 +26,8 @@ export type StoredUserGroupConfig =
 			version: 2;
 			features: UserGroupFeature[];
 			toolCallDensity: ToolCallDensityPolicy;
+			showAllSettings?: boolean;
+			projectSharing?: ProjectSharingPermission;
 	  };
 
 export const DEFAULT_TOOL_CALL_DENSITY_POLICY: ToolCallDensityPolicy = {
@@ -93,7 +101,38 @@ export function normalizeUserGroupFeatures(features: readonly string[]): UserGro
 	];
 }
 
-export function parseStoredUserGroupConfig(value: unknown): UserGroupConfig {
+/**
+ * Advanced settings are every settings page beyond the user's own account. Only the User role depends
+ * on its groups: admins and context admins always see them, viewers never do.
+ */
+export function canRoleSeeAdvancedSettings(role: UserRole | null | undefined, groupsShowAllSettings: boolean): boolean {
+	switch (role) {
+		case 'admin':
+		case 'context_admin':
+			return true;
+		case 'user':
+			return groupsShowAllSettings;
+		default:
+			return false;
+	}
+}
+
+/** An explicit block on any of the user's groups wins over an explicit allow, which wins over the All Users default. */
+export function resolveProjectSharingPermission(
+	groups: ReadonlyArray<{ isDefault: boolean; projectSharing: ProjectSharingPermission }>,
+): boolean {
+	const overrides = groups.filter((group) => !group.isDefault).map((group) => group.projectSharing);
+	if (overrides.includes('blocked')) {
+		return false;
+	}
+	if (overrides.includes('allowed')) {
+		return true;
+	}
+	return !groups.some((group) => group.isDefault && group.projectSharing === 'blocked');
+}
+
+/** Groups saved before the setting existed keep the previous behavior: All Users shows every settings page. */
+export function parseStoredUserGroupConfig(value: unknown, isDefault = false): UserGroupConfig {
 	if (Array.isArray(value)) {
 		const legacyFeatures = value.filter((feature): feature is string => typeof feature === 'string');
 		return {
@@ -102,6 +141,8 @@ export function parseStoredUserGroupConfig(value: unknown): UserGroupConfig {
 				defaultDensity: 'detailed',
 				canChange: legacyFeatures.includes('compact-mode'),
 			},
+			projectSharing: 'inherit',
+			showAllSettings: isDefault,
 		};
 	}
 
@@ -109,6 +150,8 @@ export function parseStoredUserGroupConfig(value: unknown): UserGroupConfig {
 		return {
 			features: [],
 			toolCallDensity: { defaultDensity: 'detailed', canChange: false },
+			projectSharing: 'inherit',
+			showAllSettings: isDefault,
 		};
 	}
 
@@ -123,12 +166,16 @@ export function parseStoredUserGroupConfig(value: unknown): UserGroupConfig {
 			defaultDensity: policy.defaultDensity === 'compact' ? 'compact' : 'detailed',
 			canChange: policy.canChange === true,
 		},
+		projectSharing: parseProjectSharingPermission(value.projectSharing),
+		showAllSettings: typeof value.showAllSettings === 'boolean' ? value.showAllSettings : isDefault,
 	};
 }
 
 export function serializeUserGroupConfig(
 	features: readonly string[],
 	toolCallDensity: ToolCallDensityPolicy,
+	projectSharing: ProjectSharingPermission = 'inherit',
+	showAllSettings = false,
 ): StoredUserGroupConfig {
 	return {
 		version: 2,
@@ -137,7 +184,15 @@ export function serializeUserGroupConfig(
 			defaultDensity: toolCallDensity.defaultDensity,
 			canChange: toolCallDensity.canChange,
 		},
+		projectSharing: parseProjectSharingPermission(projectSharing),
+		showAllSettings,
 	};
+}
+
+function parseProjectSharingPermission(value: unknown): ProjectSharingPermission {
+	return PROJECT_SHARING_PERMISSIONS.includes(value as ProjectSharingPermission)
+		? (value as ProjectSharingPermission)
+		: 'inherit';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

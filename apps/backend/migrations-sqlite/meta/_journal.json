@@ -579,8 +579,15 @@
     {
       "idx": 82,
       "version": "6",
-      "when": 1792483728156,
-      "tag": "0082_managed_ai_usage_wallet",
+      "when": 1792482050064,
+      "tag": "0082_add_story_bundle_thumbnail",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1792510635466,
+      "tag": "0083_managed_ai_usage_wallet",
       "breakpoints": true
     }
   ]
