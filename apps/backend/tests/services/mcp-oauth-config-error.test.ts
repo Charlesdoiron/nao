@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { useTemporaryFolders } from '../helpers/temporary-folders';
 
 class FakeRuntime {
 	registerDefinition(): void {}
@@ -61,8 +62,10 @@ const MCP_SERVERS = {
 	},
 };
 
+const createTemporaryFolder = useTemporaryFolders();
+
 async function createProject(): Promise<string> {
-	const root = await mkdtemp(join(tmpdir(), 'nao-mcp-oauth-config-'));
+	const root = createTemporaryFolder('nao-mcp-oauth-config-');
 	const mcpsDir = join(root, 'agent', 'mcps');
 	await mkdir(mcpsDir, { recursive: true });
 	await writeFile(join(mcpsDir, 'mcp.json'), JSON.stringify({ mcpServers: MCP_SERVERS }, null, 2), 'utf8');
