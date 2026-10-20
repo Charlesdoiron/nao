@@ -1,5 +1,4 @@
 import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -9,8 +8,7 @@ vi.hoisted(() => {
 
 import '../../src/env';
 
-import { db as appDb } from '../../src/db/db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { db } from '../../src/db/db';
 import { organization, orgMember, project, projectMember, user } from '../../src/db/sqlite-schema';
 import { env, isCloud } from '../../src/env';
 import { listOrgProjectsWithAccess } from '../../src/queries/organization.queries';
@@ -24,12 +22,9 @@ import {
 } from '../../src/queries/project.queries';
 
 vi.mock('../../src/db/db', async () => {
-	const { drizzle } = await import('drizzle-orm/better-sqlite3');
-	const schema = await import('../../src/db/sqlite-schema');
-	return { db: drizzle('./db.sqlite', { schema }) };
+	const { createInMemoryDb } = await import('../helpers/in-memory-db');
+	return { db: createInMemoryDb() };
 });
-
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
 
 async function cleanup() {
 	await db.delete(projectMember).where(eq(projectMember.projectId, 'system-example-project'));
@@ -95,7 +90,6 @@ describe('project accessible users', () => {
 	});
 
 	afterAll(() => {
-		appDb.$client.close();
 		db.$client.close();
 	});
 

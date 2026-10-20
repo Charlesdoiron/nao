@@ -1,5 +1,4 @@
 import { eq, inArray } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -19,17 +18,14 @@ vi.mock('../../src/env', () => ({
 }));
 
 vi.mock('../../src/db/db', async () => {
-	const { drizzle } = await import('drizzle-orm/better-sqlite3');
-	const schema = await import('../../src/db/sqlite-schema');
-	return { db: drizzle('./db.sqlite', { schema }) };
+	const { createInMemoryDb } = await import('../helpers/in-memory-db');
+	return { db: createInMemoryDb() };
 });
 
-import { db as appDb } from '../../src/db/db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { db } from '../../src/db/db';
 import { organization, orgMember, project, user } from '../../src/db/sqlite-schema';
 import { getProjectByUserId } from '../../src/queries/project.queries';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
 const ORGANIZATION_A_ID = 'project-selection-org-a';
 const ORGANIZATION_B_ID = 'project-selection-org-b';
 const PROJECT_A_ID = 'project-selection-project-a';
@@ -77,7 +73,6 @@ describe('project selection', () => {
 	afterEach(cleanup);
 
 	afterAll(() => {
-		appDb.$client.close();
 		db.$client.close();
 	});
 

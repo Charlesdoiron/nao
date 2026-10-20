@@ -1,37 +1,26 @@
-import '../../src/env';
-
-import { eq, inArray } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { runScopedAppDbQuery } from '../../src/db/readonly-app-db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
 import { chat, chatMessage, messagePart, organization, project, user } from '../../src/db/sqlite-schema';
+import { getTemporaryFileDb, removeTemporaryFileDb } from '../helpers/in-memory-db';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
+vi.mock('../../src/db/dbConfig', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../src/db/dbConfig')>();
+	const { getTemporaryFileDb } = await import('../helpers/in-memory-db');
+	return { ...actual, default: { ...actual.default, dbUrl: getTemporaryFileDb().path } };
+});
+
+const { db } = getTemporaryFileDb();
 
 const ORG_ID = 'ro-test-org';
 const USER_ID = 'ro-test-user';
 const PROJECT_A = 'ro-test-project-a';
 const PROJECT_B = 'ro-test-project-b';
-const CHAT_IDS = ['ro-chat-a', 'ro-chat-b'];
-const MESSAGE_IDS = ['ro-msg-a', 'ro-msg-b'];
-const PART_IDS = ['ro-part-a', 'ro-part-b'];
 const PART_A_TIME = new Date('2024-06-23T08:15:00Z');
 
-async function cleanup() {
-	// Child -> parent so the cleanup works even without cascading FKs.
-	await db.delete(messagePart).where(inArray(messagePart.id, PART_IDS));
-	await db.delete(chatMessage).where(inArray(chatMessage.id, MESSAGE_IDS));
-	await db.delete(chat).where(inArray(chat.id, CHAT_IDS));
-	await db.delete(project).where(inArray(project.id, [PROJECT_A, PROJECT_B]));
-	await db.delete(organization).where(eq(organization.id, ORG_ID));
-	await db.delete(user).where(eq(user.id, USER_ID));
-}
-
 describe('runScopedAppDbQuery', () => {
-	beforeEach(async () => {
-		await cleanup();
+	beforeAll(async () => {
 		await db.insert(organization).values({ id: ORG_ID, name: 'RO', slug: 'ro-test-org' });
 		await db.insert(user).values({ id: USER_ID, name: 'RO', email: 'ro@example.com' });
 		await db.insert(project).values([
@@ -52,11 +41,7 @@ describe('runScopedAppDbQuery', () => {
 		]);
 	});
 
-	afterEach(cleanup);
-
-	afterAll(() => {
-		db.$client.close();
-	});
+	afterAll(removeTemporaryFileDb);
 
 	it('returns only the scoped project rows', async () => {
 		const { rows } = await runScopedAppDbQuery(PROJECT_A, 'SELECT chat_id, title FROM v_messages');

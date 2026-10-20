@@ -8,7 +8,7 @@ import { deleteUnreferencedFileBlobs } from '../../src/queries/story-file.querie
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;

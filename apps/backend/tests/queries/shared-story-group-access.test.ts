@@ -17,7 +17,7 @@ import { canUserAccessStory, getStorySharingInfo } from '../../src/queries/story
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 const PROJECT_ID = 'group-share-project';

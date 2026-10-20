@@ -1,14 +1,11 @@
-import '../../src/env';
-
 import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, describe } from 'vitest';
 
 import { user } from '../../src/db/sqlite-schema';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { createInMemoryDb } from '../helpers/in-memory-db';
 import { registerUserTableCrudTests } from '../helpers/user-table-crud';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
+const db = createInMemoryDb();
 
 describe('userTable', () => {
 	afterAll(() => {

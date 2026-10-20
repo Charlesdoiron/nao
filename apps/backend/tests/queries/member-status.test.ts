@@ -10,7 +10,7 @@ import { deleteExpiredInvitations } from '../../src/queries/user.queries';
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 const ORG_ID = 'status-org';

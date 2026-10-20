@@ -11,7 +11,7 @@ import { createMcpContext, FakeMcpServer } from '../helpers/fake-mcp-server';
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDbWithInlineTransactions } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDbWithInlineTransactions() };
+	return { db: createInMemoryDbWithInlineTransactions() };
 });
 
 const buildErrors = vi.hoisted(() => ({ current: [] as string[] }));

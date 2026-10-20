@@ -10,7 +10,7 @@ import { deleteFeedbackVote, upsertFeedback } from '../../src/queries/feedback.q
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 const SOURCE_PROJECT_ID = 'mattermost-source-project';

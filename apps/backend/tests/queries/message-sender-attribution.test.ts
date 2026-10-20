@@ -10,7 +10,7 @@ import { getMessagesUsage, getTotalUsage } from '../../src/queries/usage.queries
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 vi.mock('../../src/queries/project-llm-config.queries', () => ({

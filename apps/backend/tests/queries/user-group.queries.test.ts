@@ -7,7 +7,6 @@ import {
 } from '@nao/shared';
 import type { UserRole } from '@nao/shared/types';
 import { and, eq, inArray } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -16,13 +15,11 @@ vi.hoisted(() => {
 });
 
 vi.mock('../../src/db/db', async () => {
-	const { drizzle } = await import('drizzle-orm/better-sqlite3');
-	const schema = await import('../../src/db/sqlite-schema');
-	return { db: drizzle('./db.sqlite', { schema }) };
+	const { createInMemoryDb } = await import('../helpers/in-memory-db');
+	return { db: createInMemoryDb() };
 });
 
-import { db as appDb } from '../../src/db/db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { db } from '../../src/db/db';
 import {
 	organization,
 	orgMember,
@@ -51,7 +48,6 @@ import {
 } from '../../src/queries/user-group.queries';
 import { addProjectMemberWithUserGroups } from '../../src/services/project-user-group-membership.service';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
 const PROJECT_ID = 'user-group-project';
 const FOREIGN_PROJECT_ID = 'foreign-user-group-project';
 const ORG_ID = 'user-group-org';
@@ -101,7 +97,6 @@ describe('user group queries', () => {
 	afterEach(cleanup);
 
 	afterAll(() => {
-		appDb.$client.close();
 		db.$client.close();
 	});
 

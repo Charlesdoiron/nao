@@ -1,32 +1,24 @@
-import '../../src/env';
-
-import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { queryAppDb } from '../../src/agents/tools/query-app-db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
 import { chat, chatMessage, messagePart, organization, project, user } from '../../src/db/sqlite-schema';
 import { explainAppDbError } from '../../src/utils/app-db-errors';
+import { getTemporaryFileDb, removeTemporaryFileDb } from '../helpers/in-memory-db';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
+vi.mock('../../src/db/dbConfig', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('../../src/db/dbConfig')>();
+	const { getTemporaryFileDb } = await import('../helpers/in-memory-db');
+	return { ...actual, default: { ...actual.default, dbUrl: getTemporaryFileDb().path } };
+});
+
+const { db } = getTemporaryFileDb();
 
 const ORG_ID = 'q-org';
 const USER_ID = 'q-user';
 const PROJECT_ID = 'q-project';
 
-async function cleanup() {
-	await db.delete(messagePart).where(eq(messagePart.id, 'q-part'));
-	await db.delete(chatMessage).where(eq(chatMessage.id, 'q-msg'));
-	await db.delete(chat).where(eq(chat.id, 'q-chat'));
-	await db.delete(project).where(eq(project.id, PROJECT_ID));
-	await db.delete(organization).where(eq(organization.id, ORG_ID));
-	await db.delete(user).where(eq(user.id, USER_ID));
-}
-
 describe('queryAppDb', () => {
-	beforeEach(async () => {
-		await cleanup();
+	beforeAll(async () => {
 		await db.insert(organization).values({ id: ORG_ID, name: 'Q', slug: 'q-org' });
 		await db.insert(user).values({ id: USER_ID, name: 'Q', email: 'q@example.com' });
 		await db.insert(project).values({ id: PROJECT_ID, orgId: ORG_ID, name: 'Q', type: 'local', path: '/tmp/q' });
@@ -35,9 +27,7 @@ describe('queryAppDb', () => {
 		await db.insert(messagePart).values({ id: 'q-part', messageId: 'q-msg', order: 0, type: 'text', text: 'hi' });
 	});
 
-	afterEach(cleanup);
-
-	afterAll(() => db.$client.close());
+	afterAll(removeTemporaryFileDb);
 
 	it('runs an allowlisted read-only query', async () => {
 		const out = await queryAppDb(PROJECT_ID, 'SELECT chat_id FROM v_messages');

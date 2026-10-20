@@ -1,5 +1,4 @@
 import { eq, inArray } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -9,18 +8,14 @@ vi.hoisted(() => {
 
 import '../../src/env';
 
-import { db as appDb } from '../../src/db/db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { db } from '../../src/db/db';
 import { organization, orgMember, project, projectMember, user } from '../../src/db/sqlite-schema';
 import { getFirstProjectAdminUserId } from '../../src/queries/context-recommendation.queries';
 
 vi.mock('../../src/db/db', async () => {
-	const { drizzle } = await import('drizzle-orm/better-sqlite3');
-	const schema = await import('../../src/db/sqlite-schema');
-	return { db: drizzle('./db.sqlite', { schema }) };
+	const { createInMemoryDb } = await import('../helpers/in-memory-db');
+	return { db: createInMemoryDb() };
 });
-
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
 
 const PROJECT_IDS = ['cra-direct', 'cra-inherited', 'cra-solo'];
 const USER_IDS = ['cra-project-admin', 'cra-org-admin', 'cra-demoted-org-admin'];
@@ -62,7 +57,6 @@ describe('getFirstProjectAdminUserId', () => {
 	});
 
 	afterAll(() => {
-		appDb.$client.close();
 		db.$client.close();
 	});
 

@@ -15,7 +15,7 @@ import {
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDbWithInlineTransactions } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDbWithInlineTransactions() };
+	return { db: createInMemoryDbWithInlineTransactions() };
 });
 
 const CHAT = 'chat-1';

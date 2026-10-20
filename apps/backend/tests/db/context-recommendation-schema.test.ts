@@ -1,13 +1,10 @@
-import '../../src/env';
-
 import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
-import * as sqliteSchema from '../../src/db/sqlite-schema';
 import { contextRecommendation, contextRecommendationRun, organization, project } from '../../src/db/sqlite-schema';
+import { createInMemoryDb } from '../helpers/in-memory-db';
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
+const db = createInMemoryDb();
 
 const ORG_ID = 'cr-test-org';
 const PROJECT_ID = 'cr-test-project';

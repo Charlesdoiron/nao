@@ -11,7 +11,7 @@ import { createToolContext, executeTool } from '../helpers/tool-context';
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDbWithInlineTransactions } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDbWithInlineTransactions() };
+	return { db: createInMemoryDbWithInlineTransactions() };
 });
 
 vi.mock('../../src/services/story-mount', async (importOriginal) => ({

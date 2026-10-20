@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 import s from '../../src/db/abstractSchema';

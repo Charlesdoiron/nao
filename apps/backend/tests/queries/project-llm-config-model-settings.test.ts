@@ -8,7 +8,7 @@ import { getDefaultModelId, getProjectAvailableModels } from '../../src/utils/ll
 
 vi.mock('../../src/db/db', async () => {
 	const { createInMemoryDb } = await import('../helpers/in-memory-db');
-	return { db: await createInMemoryDb() };
+	return { db: createInMemoryDb() };
 });
 
 const projectId = 'test-project-model-settings';

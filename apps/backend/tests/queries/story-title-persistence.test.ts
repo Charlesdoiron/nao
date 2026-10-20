@@ -1,11 +1,9 @@
 import '../../src/env';
 
 import { eq } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { db as appDb } from '../../src/db/db';
-import * as sqliteSchema from '../../src/db/sqlite-schema';
+import { db } from '../../src/db/db';
 import { chat, project, story, user } from '../../src/db/sqlite-schema';
 import {
 	createStandaloneVersion,
@@ -16,12 +14,10 @@ import {
 } from '../../src/queries/story.queries';
 
 vi.mock('../../src/db/db', async () => {
-	const { drizzle } = await import('drizzle-orm/better-sqlite3');
-	const schema = await import('../../src/db/sqlite-schema');
-	return { db: drizzle('./db.sqlite', { schema }) };
+	const { createInMemoryDb } = await import('../helpers/in-memory-db');
+	return { db: createInMemoryDb() };
 });
 
-const db = drizzle('./db.sqlite', { schema: sqliteSchema });
 const userId = 'story-title-persistence-user';
 const projectId = 'story-title-persistence-project';
 const chatId = 'story-title-persistence-chat';
@@ -50,7 +46,6 @@ describe('story title persistence', () => {
 	afterEach(cleanup);
 
 	afterAll(() => {
-		appDb.$client.close();
 		db.$client.close();
 	});
 
