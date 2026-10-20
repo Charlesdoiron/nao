@@ -12,6 +12,16 @@ export function stubResizeObserver() {
 	);
 }
 
+/** jsdom does not implement scrollIntoView; it stays writable so later test files on the same worker can replace it. */
+export function stubScrollIntoView(scrollIntoView = vi.fn()) {
+	Object.defineProperty(Element.prototype, 'scrollIntoView', {
+		configurable: true,
+		writable: true,
+		value: scrollIntoView,
+	});
+	return scrollIntoView;
+}
+
 export function stubLocalStorage() {
 	vi.stubGlobal('localStorage', createMemoryStorage());
 }

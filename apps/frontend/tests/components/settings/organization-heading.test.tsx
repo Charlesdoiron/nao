@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { stubLocalStorage, stubResizeObserver } from '../../helpers/browser-stubs';
+import { stubLocalStorage, stubResizeObserver, stubScrollIntoView } from '../../helpers/browser-stubs';
 import { OrganizationHeading } from '@/components/settings/organization-heading';
 
 const mocks = vi.hoisted(() => ({
@@ -28,16 +28,12 @@ describe('OrganizationHeading', () => {
 		vi.clearAllMocks();
 		stubLocalStorage();
 		stubResizeObserver();
-		Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-			configurable: true,
-			value: vi.fn(),
-		});
+		stubScrollIntoView();
 	});
 
 	afterEach(() => {
 		cleanup();
 		vi.unstubAllGlobals();
-		Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
 	});
 
 	it('persists the displayed organization without invalidating it', async () => {

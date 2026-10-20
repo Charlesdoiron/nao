@@ -2,6 +2,7 @@
 
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stubScrollIntoView } from '../../helpers/browser-stubs';
 import { LlmProviderForm } from '@/components/settings/llm-provider-form';
 
 describe('LlmProviderForm', () => {
@@ -28,7 +29,7 @@ describe('LlmProviderForm', () => {
 	});
 
 	it('opens the settings dialog of the model it is focused on, and follows a new focus', () => {
-		Element.prototype.scrollIntoView = vi.fn();
+		stubScrollIntoView();
 		const { rerender } = render(renderFocusedForm('acme/new-model'));
 
 		expect(within(screen.getByRole('dialog')).getByText(/acme\/new-model/)).toBeTruthy();

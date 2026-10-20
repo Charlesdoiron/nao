@@ -4,6 +4,7 @@ import { parseStoryTabs } from '@nao/shared/story-tabs';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubScrollIntoView } from '../../helpers/browser-stubs';
 import type { Editor } from '@tiptap/react';
 import type { MutableRefObject } from 'react';
 
@@ -54,7 +55,7 @@ describe('edit-mode chart actions', () => {
 	const nativeDragEvent = globalThis.DragEvent;
 
 	beforeEach(() => {
-		Element.prototype.scrollIntoView = scrollIntoView;
+		stubScrollIntoView(scrollIntoView);
 		Object.defineProperty(globalThis, 'DragEvent', {
 			configurable: true,
 			value: MouseEvent,

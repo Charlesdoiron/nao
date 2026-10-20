@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { stubClipboard } from '../../helpers/browser-stubs';
+import { stubClipboard, stubScrollIntoView } from '../../helpers/browser-stubs';
 import type { UserRole } from '@nao/shared/types';
 import { ConditionalRulesHelp, DefaultProjectRole } from '@/components/settings/user-group-editor';
 
@@ -30,7 +30,7 @@ vi.mock('@tanstack/react-query', () => ({
 
 beforeEach(() => {
 	writeText.mockReset();
-	HTMLElement.prototype.scrollIntoView = vi.fn();
+	stubScrollIntoView();
 	stubClipboard(writeText);
 });
 

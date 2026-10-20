@@ -13,10 +13,11 @@ import {
 } from '@nao/shared';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { stubClipboard, stubResizeObserver } from '../../helpers/browser-stubs';
+import { stubClipboard, stubResizeObserver, stubScrollIntoView } from '../../helpers/browser-stubs';
 import { openDropdownMenu } from '../../helpers/dropdown-menu';
+import type { Mock } from 'vitest';
 import type { UserGroupEditorGroup, UserGroupEditorTab } from '@/components/settings/user-group-editor';
 import type { UserGroupUserDetailTab } from '@/components/settings/user-group-user-detail';
 import type { ProjectRowSecurity } from '@nao/shared';
@@ -411,10 +412,7 @@ beforeEach(() => {
 	mocks.invalidateQueries.mockResolvedValue(undefined);
 	mocks.navigate.mockReset();
 	stubResizeObserver();
-	Object.defineProperty(Element.prototype, 'scrollIntoView', {
-		configurable: true,
-		value: vi.fn(),
-	});
+	stubScrollIntoView();
 });
 
 afterEach(() => {
