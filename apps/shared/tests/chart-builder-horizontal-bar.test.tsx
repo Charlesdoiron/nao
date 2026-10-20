@@ -93,6 +93,23 @@ describe('buildChart horizontal bars', () => {
 		expect(yAxis?.props.width).toBe(longLabel.length * 7 + 12);
 	});
 
+	it('renders each category label as a single unwrapped line', () => {
+		const longLabel = 'Platform Reliability & Incident Response';
+		const chart = buildChart({
+			data: [{ category: longLabel, value: 20 }],
+			chartType: 'horizontal_bar',
+			xAxisKey: 'category',
+			xAxisType: 'category',
+			series: [{ data_key: 'value' }],
+			labelFormatter: (value) => value,
+		});
+		const html = renderToString(React.cloneElement(chart, { width: 600, height: 300 }));
+		const tickPattern = /<text[^>]*recharts-cartesian-axis-tick-value[^>]*>([\s\S]*?)<\/text>/g;
+		const categoryTicks = [...html.matchAll(tickPattern)].map((match) => match[1]);
+
+		expect(categoryTicks).toEqual(['Platform Reliability &amp; Incident Response']);
+	});
+
 	it('reserves a minimum plot width on top of the label gutters', () => {
 		const props = {
 			data: [{ category: 'Short', value: 20 }],

@@ -744,13 +744,13 @@ function buildHorizontalBarChart(props: ResolvedProps) {
 			<YAxis
 				type='category'
 				dataKey={xAxisKey}
-				tick={AXIS_TICK}
 				tickLine={false}
 				axisLine={false}
 				minTickGap={12}
 				interval={xAxisInterval ?? 'preserveStartEnd'}
 				width={categoryAxisWidth}
 				tickFormatter={labelFormatter}
+				tick={renderHorizontalBarCategoryTick}
 			/>
 			{isDiverging && <ReferenceLine x={0} stroke={HORIZONTAL_BAR_BASELINE_COLOR} strokeWidth={1} />}
 			{children}
@@ -869,6 +869,38 @@ function computeHorizontalBarCategoryAxisWidth(
 		0,
 	);
 	return Math.max(HORIZONTAL_BAR_CATEGORY_AXIS_MIN_WIDTH, Math.ceil(widestLabel) + VALUE_AXIS_PADDING);
+}
+
+interface HorizontalBarCategoryTickProps {
+	x?: number;
+	y?: number;
+	fill?: string;
+	index?: number;
+	payload?: { value?: unknown };
+	tickFormatter?: (value: string, index: number) => string;
+}
+
+/**
+ * Recharts' default tick wraps text it measures against an unstyled span, which overestimates
+ * 12px labels and breaks them onto several lines even when the gutter fits them.
+ */
+function renderHorizontalBarCategoryTick(tickProps: unknown) {
+	const { x, y, fill, index = 0, payload, tickFormatter } = tickProps as HorizontalBarCategoryTickProps;
+	const value = String(payload?.value ?? '');
+	return (
+		<text
+			x={x}
+			y={y}
+			dy='0.355em'
+			textAnchor='end'
+			fill={fill}
+			fontSize={CHART_LABEL_FONT_SIZE}
+			fontFamily={CHART_FONT_STACK}
+			className='recharts-cartesian-axis-tick-value'
+		>
+			{tickFormatter ? tickFormatter(value, index) : value}
+		</text>
+	);
 }
 
 function computeHorizontalBarValueLabelWidth(values: number[], valueFormatter: (value: number) => string): number {
