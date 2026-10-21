@@ -5,6 +5,7 @@ import { createLocalStorage } from './local-storage';
 const ACTIVE_PROJECT_STORAGE_KEY = 'nao.active-project-id';
 const activeProjectStorage = createLocalStorage<string>(ACTIVE_PROJECT_STORAGE_KEY);
 const listeners = new Set<() => void>();
+const externalChangeListeners = new Set<() => void>();
 
 function subscribe(listener: () => void) {
 	listeners.add(listener);
@@ -18,10 +19,20 @@ if (typeof window !== 'undefined') {
 		if (event.key !== null && event.key !== ACTIVE_PROJECT_STORAGE_KEY) {
 			return;
 		}
+		for (const listener of externalChangeListeners) {
+			listener();
+		}
 		for (const listener of listeners) {
 			listener();
 		}
 	});
+}
+
+export function subscribeToExternalActiveProjectChanges(listener: () => void) {
+	externalChangeListeners.add(listener);
+	return () => {
+		externalChangeListeners.delete(listener);
+	};
 }
 
 export function getActiveProjectId(): string | null {

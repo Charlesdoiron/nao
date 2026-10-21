@@ -5,9 +5,9 @@ import { useActiveProjectId } from '@/lib/active-project';
 import { trpc } from '@/main';
 
 export function useShareAudience() {
+	const activeProjectId = useActiveProjectId();
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const access = useQuery({
 		...trpc.userGroup.projectSharingAccess.queryOptions(),
@@ -24,9 +24,9 @@ export function useMemberPicker(currentUserId: string | undefined, initialIds: s
 	const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(() => new Set(initialIds));
 	const [search, setSearch] = useState('');
 
+	const activeProjectId = useActiveProjectId();
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const membersQuery = useQuery({
 		...trpc.project.getProjectMembersByChatId.queryOptions({ chatId }),

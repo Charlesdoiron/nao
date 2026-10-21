@@ -104,9 +104,9 @@ export function ChatPrompt({
 	onChange,
 	onEnter,
 }: ChatPromptProps) {
+	const activeProjectId = useActiveProjectId();
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const skillsQuery = useQuery({
 		...trpc.skill.list.queryOptions(),
