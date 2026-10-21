@@ -1,23 +1,27 @@
 import { memo } from 'react';
 import { Streamdown } from 'streamdown';
-
+import { ArrowRight } from 'lucide-react';
 import { normalizeCitationMarkers, stripAssistantTags } from '@nao/shared';
+import type { ComponentProps } from 'react';
 
 import { CitationPopover } from '@/components/citation-popover';
 import { MarkdownTable } from '@/components/chat-messages/markdown-table';
 import { StreamingMarkdown } from '@/components/chat-messages/streaming-markdown';
 import { FileChip } from '@/components/file-chip';
+import { Button } from '@/components/ui/button';
 import { isStoredFilePath } from '@/lib/attachments';
 import { markdownPlugins } from '@/lib/markdown';
 import { markdownLinkSafety } from '@/components/external-link-dialog';
 
 const CLOBBER_PREFIX = 'user-content-';
 const SETTLED_COMPONENTS = {
+	a: MarkdownLinkRenderer,
 	table: MarkdownTableRenderer,
 	'citation-number': CitationNumberRenderer,
 	'saved-file': SavedFileRenderer,
 };
 const STREAMING_COMPONENTS = {
+	a: MarkdownLinkRenderer,
 	table: MarkdownTableRenderer,
 };
 const ALLOWED_TAGS = {
@@ -44,10 +48,22 @@ export const AssistantTextWithCitation = memo(({ text, isStreaming }: { text: st
 			literalTagContent={LITERAL_TAG_CONTENT}
 			components={SETTLED_COMPONENTS}
 		>
-			{unwrapBacktickedSavedFiles(normalizeCitationMarkers(text))}
+			{unwrapBacktickedSavedFiles(normalizeCitationMarkers(placeMessageActionsLast(text)))}
 		</Streamdown>
 	);
 });
+
+function placeMessageActionsLast(markdown: string): string {
+	return markdown
+		.replace(
+			'[Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
+			'This conversation is saved.\n\n[Set up your own project](/onboarding)',
+		)
+		.replace(
+			'[Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
+			'If you need help debugging your setup.\n\n[Contact support](mailto:support@getnao.io)',
+		);
+}
 
 function unwrapBacktickedSavedFiles(markdown: string): string {
 	return transformMarkdownOutsideCodeBlocks(markdown, (line) =>
@@ -188,6 +204,36 @@ const asText = (value: unknown): string => (typeof value === 'string' ? value.tr
 
 function MarkdownTableRenderer({ node, className }: any) {
 	return <MarkdownTable node={node} className={className} />;
+}
+
+function MarkdownLinkRenderer({ href, children, node: _, ...props }: ComponentProps<'a'> & { node?: unknown }) {
+	if (href === '/onboarding') {
+		return (
+			<Button asChild size='sm' className='mt-3 flex w-fit rounded-full no-underline'>
+				<a href={href} {...props}>
+					{children}
+					<ArrowRight className='size-3.5' />
+				</a>
+			</Button>
+		);
+	}
+
+	if (href === 'mailto:support@getnao.io') {
+		return (
+			<Button asChild size='sm' className='mt-3 flex w-fit rounded-full no-underline'>
+				<a href={href} {...props}>
+					{children}
+					<ArrowRight className='size-3.5' />
+				</a>
+			</Button>
+		);
+	}
+
+	return (
+		<a href={href} {...props}>
+			{children}
+		</a>
+	);
 }
 
 function CitationNumberRenderer({ id, column, children }: any) {

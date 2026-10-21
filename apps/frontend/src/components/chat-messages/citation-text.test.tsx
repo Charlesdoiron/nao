@@ -138,6 +138,36 @@ describe('AssistantTextWithCitation', () => {
 		expect(screen.queryByRole('button')).toBeNull();
 	});
 
+	it.each([
+		['Set up your project', '/onboarding'],
+		['Contact support', 'mailto:support@getnao.io'],
+	])('turns the %s message action into a button', (label, href) => {
+		renderAnswer(`[${label}](${href})`);
+
+		expect(screen.getByRole('link', { name: label }).getAttribute('data-slot')).toBe('button');
+	});
+
+	it('keeps ordinary message links as links', () => {
+		renderAnswer('[Read the docs](https://docs.getnao.io)');
+
+		expect(screen.getByRole('link', { name: 'Read the docs' }).getAttribute('data-slot')).toBeNull();
+	});
+
+	it.each([
+		[
+			'You’ve finished the Jaffle Shop preview. [Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
+			'Set up your own project',
+		],
+		[
+			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. [Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
+			'Contact support',
+		],
+	])('keeps legacy message text above its action', (message, actionLabel) => {
+		const { container } = renderAnswer(message);
+
+		expect(container.textContent?.trim().endsWith(actionLabel)).toBe(true);
+	});
+
 	it('does not turn a saved-file example in a fenced code block into a chip', () => {
 		const markup = '<saved-file path="/home/exports/report.md">report.md</saved-file>';
 		const { container } = renderAnswer(`\`\`\`xml\n${markup}\n\`\`\``);
