@@ -7,6 +7,7 @@ import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
 import { isCloud } from '../env';
 import { upsertSystemExampleStory } from '../queries/example-story.queries';
 import * as projectQueries from '../queries/project.queries';
+import { upsertSystemExampleSavedPrompts } from '../queries/project-saved-prompt.queries';
 
 export { SYSTEM_EXAMPLE_PROJECT_ID };
 export { SYSTEM_EXAMPLE_STORY_ID } from '../queries/example-story.queries';
@@ -20,6 +21,7 @@ export async function ensureSystemExampleProject() {
 
 	const project = await projectQueries.upsertSystemExampleProject(projectPath);
 	await upsertSystemExampleStory();
+	await upsertSystemExampleSavedPrompts();
 	return project;
 }
 

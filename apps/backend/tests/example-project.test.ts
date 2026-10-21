@@ -29,6 +29,7 @@ import {
 } from '../src/queries/example-story.queries';
 import { getLatestSqlQueryDataByIds } from '../src/queries/execute-sql.queries';
 import { upsertSystemExampleProject } from '../src/queries/project.queries';
+import { upsertSystemExampleSavedPrompts } from '../src/queries/project-saved-prompt.queries';
 
 describe('system example project', () => {
 	afterAll(() => db.$client.close());
@@ -94,5 +95,25 @@ describe('system example project', () => {
 			new Set(Object.keys(JAFFLE_SHOP_STORY.queries)),
 		);
 		expect(Object.keys(queryData).sort()).toEqual(Object.keys(JAFFLE_SHOP_STORY.queries).sort());
+	});
+
+	it('upserts the Jaffle Shop saved prompts', async () => {
+		await upsertSystemExampleProject('/tmp/example');
+		await upsertSystemExampleSavedPrompts();
+		await upsertSystemExampleSavedPrompts();
+
+		const prompts = await db
+			.select()
+			.from(s.projectSavedPrompt)
+			.where(eq(s.projectSavedPrompt.projectId, 'system-example-project'));
+
+		expect(prompts).toHaveLength(3);
+		expect(prompts.map(({ title }) => title)).toEqual(
+			expect.arrayContaining([
+				'How is monthly revenue trending?',
+				'Make a chart of our top 5 customers by total revenue.',
+				'Create a story, using chart blocks, summarizing our sales performance and key customer trends.',
+			]),
+		);
 	});
 });

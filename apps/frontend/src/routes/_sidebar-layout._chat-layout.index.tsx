@@ -10,7 +10,6 @@ import type { StoryItem } from '@/lib/stories-page';
 
 import { ChatInput } from '@/components/chat-input';
 import { ChatMessages } from '@/components/chat-messages/chat-messages';
-import { ExampleProjectPromptCard } from '@/components/example-project-info-card';
 import { SavedPromptSuggestions } from '@/components/chat-saved-prompt-suggestions';
 import { MobileHeader } from '@/components/mobile-header';
 import { ProjectSwitcher } from '@/components/project-selector';
@@ -182,34 +181,39 @@ function HomePage() {
 								<div className='relative z-10 mb-6 max-w-2xl space-y-2 px-6 text-center'>
 									<h1 className='font-borna text-xl tracking-tight md:text-3xl'>{stateTitle}</h1>
 								</div>
-								<div className='relative flex w-full max-w-3xl mx-auto flex-col gap-4'>
+								<div className='relative mt-6 flex w-full max-w-3xl mx-auto flex-col gap-4 md:mt-10'>
 									<img
 										src={logoSrc}
 										alt=''
 										aria-hidden
 										className='pointer-events-none absolute -top-60 left-1/2 -translate-x-1/2 w-full max-w-2xl select-none -z-10'
 									/>
+									{showProjectSetupCue && <TrialOnboardingBanner />}
 									<ChatInput />
 									<SavedPromptSuggestions />
 								</div>
-								{showProjectSetupCue && (
-									<>
-										<div className='grid w-full max-w-3xl grid-cols-1 gap-4 px-4 py-6 sm:grid-cols-2'>
-											{latestStoryItems[0] && (
-												<div className='w-full max-w-md'>
-													<StoryCard
-														item={latestStoryItems[0]}
-														displayMode='grid'
-														showArchived={false}
-													/>
+								{/* {showProjectSetupCue && (
+									<div className='hidden 2xl:absolute 2xl:right-6 2xl:top-6 2xl:z-20 2xl:block 2xl:w-72'>
+										<TrialOnboardingBanner variant='card' />
+									</div>
+								)} */}
+								{latestStoryItems.length > 0 && (
+									<div className='flex flex-col gap-3 w-full px-4 py-6 max-w-3xl mx-auto'>
+										<div
+											ref={storiesGridRef}
+											className='grid gap-x-5 gap-y-2'
+											style={{
+												gridTemplateColumns: `repeat(${storyCols}, minmax(0, 1fr))`,
+											}}
+										>
+											{renderStoryGroupHeaders(storyGroups)}
+											{latestStoryItems.map((item, index) => (
+												<div key={item.storyId} style={{ gridColumn: index + 1, gridRow: 2 }}>
+													<StoryCard item={item} displayMode='grid' showArchived={false} />
 												</div>
-											)}
-											<ExampleProjectPromptCard />
+											))}
 										</div>
-										<div className='absolute inset-x-0 bottom-35'>
-											<TrialOnboardingBanner />
-										</div>
-									</>
+									</div>
 								)}
 							</>
 						) : showProjectSetupCue ? (

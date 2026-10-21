@@ -44,6 +44,7 @@ import { useTrackViewDuration } from '@/hooks/use-track-view-duration';
 import { getTextOffset } from '@/lib/selection-dom.utils';
 import { findStories } from '@/lib/story.utils';
 import { isForbiddenError, shouldShowChatAccessError } from '@/lib/trpc-error';
+import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/_sidebar-layout/_chat-layout/$chatId')({
 	component: RouteComponent,
@@ -365,28 +366,58 @@ function ChatPage() {
 	);
 }
 
-export function TrialOnboardingBanner() {
+export function TrialOnboardingBanner({ variant = 'banner' }: { variant?: 'banner' | 'card' }) {
 	const logoSrc = useIsDarkMode() ? '/dark-card-logo.svg' : '/light-card-logo.svg';
+	const isCard = variant === 'card';
 
 	return (
-		<div className='mx-auto w-full max-w-3xl px-3'>
-			<div className='relative mb-2 flex flex-col items-stretch gap-3 overflow-hidden rounded-xl border border-violet/20 bg-background px-4 py-3 shadow-xs sm:flex-row sm:items-center'>
+		<div className={cn('w-full', !isCard && 'mx-auto max-w-3xl px-3')}>
+			<div
+				className={cn(
+					'relative flex overflow-hidden border border-violet/20 bg-background',
+					isCard
+						? 'min-h-52 flex-col items-start justify-between gap-6 rounded-2xl p-5 shadow-lg ring-1 ring-violet/10'
+						: 'mb-2 flex-col items-stretch gap-3 rounded-xl px-4 py-3 shadow-xs sm:flex-row sm:items-center',
+				)}
+			>
 				<img
 					src={logoSrc}
 					alt=''
 					aria-hidden
-					className='pointer-events-none absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 scale-150 select-none'
+					className={cn(
+						'pointer-events-none absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 select-none',
+						isCard ? 'scale-[1.8]' : 'scale-150',
+					)}
 				/>
 				<div className='relative z-10 min-w-0 flex-1'>
 					<span className='block text-[10px] font-semibold uppercase tracking-[0.16em] text-primary'>
 						Guided setup
 					</span>
-					<p className='mt-0.5 text-sm font-semibold text-foreground'>Ready to use your own data?</p>
-					<p className='mt-0.5 text-xs text-muted-foreground'>
+					<p
+						className={cn(
+							'font-semibold text-foreground',
+							isCard ? 'font-borna mt-3 text-xl tracking-tight' : 'mt-0.5 text-sm',
+						)}
+					>
+						Ready to use your own data?
+					</p>
+					<p
+						className={cn(
+							'text-muted-foreground',
+							isCard ? 'mt-2 text-sm leading-relaxed' : 'mt-0.5 text-xs',
+						)}
+					>
 						Set up your project with the help of our onboarding agent
 					</p>
 				</div>
-				<Button asChild size='sm' className='relative z-10 shrink-0 self-start rounded-full sm:self-center'>
+				<Button
+					asChild
+					size={isCard ? 'default' : 'sm'}
+					className={cn(
+						'relative z-10 shrink-0 rounded-full',
+						isCard ? 'w-full justify-between' : 'self-start sm:self-center',
+					)}
+				>
 					<Link to='/onboarding'>
 						Start setup
 						<ArrowRight className='size-3.5' />
