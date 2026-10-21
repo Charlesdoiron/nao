@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type MockWarehouseJob = {
@@ -43,6 +44,9 @@ vi.mock('../src/queries/project.queries', () => ({
 }));
 vi.mock('../src/queries/scheduled-job.queries', () => ({
 	deleteJobByUniqueKey: vi.fn(),
+}));
+vi.mock('../src/queries/user.queries', () => ({
+	getGithubToken: vi.fn(async () => 'github-secret'),
 }));
 vi.mock('../src/queries/warehouse-provisioning-job.queries', () => ({
 	createWarehouseProvisioningJob: vi.fn(async (input: Partial<MockWarehouseJob> & { id: string }) => {
@@ -198,6 +202,8 @@ import {
 	queueWarehouseFinalization,
 	reconcileWarehouseProvisioningJobs,
 	startWarehouseProvisioning,
+	validateConfluenceContext,
+	validateNotionContext,
 	validateWarehouseCredentials,
 } from '../src/services/warehouse-provisioning';
 import { createNewProject, createTempProjectDir } from '../src/utils/project-import.utils';
@@ -218,10 +224,19 @@ afterEach(() => {
 describe('warehouse provisioning', () => {
 	it('validates credentials before starting provisioning', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
-			new Response(JSON.stringify({ valid: true }), {
-				status: 200,
-				headers: { 'Content-Type': 'application/json' },
-			}),
+			new Response(
+				JSON.stringify({
+					valid: true,
+					schemas: [
+						{ schema: 'public', tables: ['customers', 'orders'] },
+						{ schema: 'warehouse', tables: ['events'] },
+					],
+				}),
+				{
+					status: 200,
+					headers: { 'Content-Type': 'application/json' },
+				},
+			),
 		);
 		vi.stubGlobal('fetch', fetchMock);
 
@@ -230,7 +245,13 @@ describe('warehouse provisioning', () => {
 				provider: 'postgres',
 				credentials: { host: 'warehouse.example.com', password: 'secret', schemaName: 'public' },
 			}),
-		).resolves.toEqual({ valid: true });
+		).resolves.toEqual({
+			valid: true,
+			schemas: [
+				{ schema: 'public', tables: ['customers', 'orders'] },
+				{ schema: 'warehouse', tables: ['events'] },
+			],
+		});
 		expect(fetchMock).toHaveBeenCalledWith(
 			expect.stringContaining('/warehouse/validate'),
 			expect.objectContaining({ method: 'POST', signal: expect.any(AbortSignal) }),
@@ -251,6 +272,79 @@ describe('warehouse provisioning', () => {
 		).rejects.toMatchObject({
 			code: 'BAD_REQUEST',
 			message: 'The warehouse rejected these credentials. Check them and try again.',
+		});
+	});
+
+	it('validates Notion context without exposing its token', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				valid: true,
+				pages: [{ url: 'https://notion.so/page', title: 'Company context' }],
+			}),
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			validateNotionContext({
+				apiKey: 'notion-secret',
+				pages: ['https://notion.so/page'],
+			}),
+		).resolves.toEqual({
+			valid: true,
+			pages: [{ url: 'https://notion.so/page', title: 'Company context' }],
+		});
+		expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+			api_key: 'notion-secret',
+			pages: ['https://notion.so/page'],
+		});
+	});
+
+	it('returns the actionable Notion validation error', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi
+				.fn()
+				.mockResolvedValue(
+					Response.json({ detail: "Add the integration from the page's Connections menu." }, { status: 422 }),
+				),
+		);
+
+		await expect(
+			validateNotionContext({
+				apiKey: 'notion-secret',
+				pages: ['https://notion.so/page'],
+			}),
+		).rejects.toMatchObject({
+			code: 'BAD_REQUEST',
+			message: "Add the integration from the page's Connections menu.",
+		});
+	});
+
+	it('validates Confluence context without exposing its token', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			Response.json({
+				valid: true,
+				pages: [{ url: '123', title: 'Company handbook' }],
+			}),
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			validateConfluenceContext({
+				baseUrl: 'https://acme.atlassian.net/wiki',
+				email: 'person@acme.com',
+				apiToken: 'atlassian-secret',
+				pages: ['123'],
+			}),
+		).resolves.toEqual({
+			valid: true,
+			pages: [{ url: '123', title: 'Company handbook' }],
+		});
+		expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+			base_url: 'https://acme.atlassian.net/wiki',
+			email: 'person@acme.com',
+			api_token: 'atlassian-secret',
+			pages: ['123'],
 		});
 	});
 
@@ -536,7 +630,14 @@ describe('warehouse provisioning', () => {
 				);
 			}
 			queueMicrotask(() => {
-				child.stdout.emit('data', Buffer.from(`Running nao ${args?.[0]}\n`));
+				child.stdout.emit(
+					'data',
+					Buffer.from(
+						args?.[0] === 'sync'
+							? 'Cloning https://x-access-token:github-secret@github.com/acme/analytics.git\n'
+							: `Running nao ${args?.[0]}\n`,
+					),
+				);
 				child.emit('close', 0);
 			});
 			return child as never;
@@ -563,6 +664,29 @@ describe('warehouse provisioning', () => {
 			projectName: 'analytics',
 			provider: 'postgres',
 			credentials: { password: 'super-secret' },
+			contextSources: {
+				notion: {
+					apiKey: 'notion-secret',
+					pages: ['https://notion.so/company-context'],
+				},
+				confluence: {
+					baseUrl: 'https://acme.atlassian.net/wiki',
+					email: 'person@acme.com',
+					apiToken: 'confluence-secret',
+					pages: ['123'],
+				},
+				github: {
+					repoFullName: 'acme/analytics',
+					branch: 'main',
+				},
+			},
+			tableSelection: {
+				mode: 'selected',
+				tables: [
+					{ schema: 'public', table: 'orders' },
+					{ schema: 'sales*', table: 'forecast?' },
+				],
+			},
 		});
 
 		await vi.waitFor(async () => {
@@ -572,7 +696,17 @@ describe('warehouse provisioning', () => {
 		expect(vi.mocked(spawn).mock.calls.map(([, args]) => args)).toEqual([
 			['init', '--yes'],
 			['debug'],
-			['sync', '--provider', 'databases'],
+			[
+				'sync',
+				'--provider',
+				'databases',
+				'--provider',
+				'notion',
+				'--provider',
+				'confluence',
+				'--provider',
+				'repositories',
+			],
 		]);
 		expect(registeredConfig).toContain('project_name: analytics');
 		expect(registeredConfig).toContain('name: postgres');
@@ -581,7 +715,64 @@ describe('warehouse provisioning', () => {
 		expect(registeredConfig).toContain('- preview');
 		expect(registeredConfig).toContain("env('NAO_ONBOARDING_POSTGRES_PASSWORD')");
 		expect(registeredConfig).not.toContain('super-secret');
-		expect(warehouseJobs.get(jobId)?.logs).toContain('Running nao sync');
+		expect(registeredConfig).toContain("env('NAO_ONBOARDING_NOTION_API_KEY')");
+		expect(registeredConfig).not.toContain('notion-secret');
+		expect(registeredConfig).toContain("env('NAO_ONBOARDING_CONFLUENCE_API_TOKEN')");
+		expect(registeredConfig).not.toContain('confluence-secret');
+		expect(registeredConfig).toContain("env('NAO_ONBOARDING_GITHUB_REPOSITORY_URL')");
+		expect(registeredConfig).not.toContain('github-secret');
+		expect(
+			(
+				yaml.load(registeredConfig) as {
+					databases: Array<{ include: string[] }>;
+					notion: { pages: string[] };
+				}
+			).databases[0]?.include,
+		).toEqual(['public.orders', 'sales[*].forecast[?]']);
+		expect(
+			(
+				yaml.load(registeredConfig) as {
+					notion: { pages: string[] };
+				}
+			).notion.pages,
+		).toEqual(['https://notion.so/company-context']);
+		expect(
+			(
+				yaml.load(registeredConfig) as {
+					confluence: { base_url: string; deployment: string; email: string; pages: string[] };
+				}
+			).confluence,
+		).toMatchObject({
+			base_url: 'https://acme.atlassian.net/wiki',
+			deployment: 'cloud',
+			email: 'person@acme.com',
+			pages: ['123'],
+		});
+		expect(
+			(
+				yaml.load(registeredConfig) as {
+					repos: Array<{ name: string; url: string; branch: string }>;
+				}
+			).repos,
+		).toEqual([
+			{
+				name: 'acme-analytics',
+				url: "${{ env('NAO_ONBOARDING_GITHUB_REPOSITORY_URL') }}",
+				branch: 'main',
+			},
+		]);
+		expect(saveProjectWarehouseEnvVars).toHaveBeenCalledWith(
+			'project-safe-config',
+			'postgres',
+			expect.objectContaining({
+				NAO_ONBOARDING_NOTION_API_KEY: '"notion-secret"',
+				NAO_ONBOARDING_CONFLUENCE_API_TOKEN: '"confluence-secret"',
+				NAO_ONBOARDING_GITHUB_REPOSITORY_URL:
+					'"https://x-access-token:github-secret@github.com/acme/analytics.git"',
+			}),
+		);
+		expect(warehouseJobs.get(jobId)?.logs).toContain('Cloning [REDACTED]');
+		expect(warehouseJobs.get(jobId)?.logs).not.toContain('github-secret');
 		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
 	});
 

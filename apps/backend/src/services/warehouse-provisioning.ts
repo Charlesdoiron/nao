@@ -14,17 +14,31 @@ import { env } from '../env';
 import { contextRecommendationsJobUniqueKey } from '../handlers/context-recommendations.handler';
 import * as projectQueries from '../queries/project.queries';
 import * as scheduledJobQueries from '../queries/scheduled-job.queries';
+import * as userQueries from '../queries/user.queries';
 import * as warehouseProvisioningJobQueries from '../queries/warehouse-provisioning-job.queries';
 import {
+	type ConfluenceContextSource,
+	confluenceContextSourceSchema,
+	confluenceContextValidationResultSchema,
+	type NotionContextSource,
+	notionContextSourceSchema,
+	notionContextValidationResultSchema,
+	type OnboardingContextSources,
+	onboardingContextSourcesSchema,
 	type ProjectWarehouseCredentials,
 	warehouseConnectionCredentialsSchema,
 	warehouseCredentialsSchema,
 	type WarehouseProvider,
 	type WarehouseProvisioningStatus,
+	type WarehouseTableSelection,
+	warehouseTableSelectionSchema,
+	type WarehouseValidationResult,
+	warehouseValidationResultSchema,
 } from '../types/warehouse';
 import { decryptSecret, encryptSecret } from '../utils/encryption';
 import { logger, serializeError } from '../utils/logger';
 import { createNewProject, createTempProjectDir } from '../utils/project-import.utils';
+import { authenticatedRepoUrl } from './github';
 import {
 	deleteManagedGithubRepository,
 	getManagedGithubRepositoryFullName,
@@ -44,6 +58,9 @@ const JOB_HEARTBEAT_MS = 30_000;
 const JOB_RECONCILIATION_MS = 60_000;
 const FAILED_JOB_COOLDOWN_MS = 30_000;
 const MAX_JOB_ATTEMPTS = 5;
+const NOTION_API_KEY_ENV = 'NAO_ONBOARDING_NOTION_API_KEY';
+const CONFLUENCE_API_TOKEN_ENV = 'NAO_ONBOARDING_CONFLUENCE_API_TOKEN';
+const GITHUB_REPOSITORY_URL_ENV = 'NAO_ONBOARDING_GITHUB_REPOSITORY_URL';
 const WORKER_ID = `${os.hostname()}:${process.pid}:${crypto.randomUUID()}`;
 const PROVISIONING_STATUSES: WarehouseProvisioningStatus[] = [
 	'queued',
@@ -84,6 +101,10 @@ const warehouseValidationErrorSchema = z.object({
 	]),
 });
 
+const contextValidationErrorSchema = z.object({
+	detail: z.string(),
+});
+
 const WAREHOUSE_CREDENTIAL_LABELS: Record<string, string> = {
 	access_token: 'Access Token',
 	account_id: 'Account ID',
@@ -114,18 +135,35 @@ const WAREHOUSE_CREDENTIAL_LABELS: Record<string, string> = {
 	username: 'Username',
 };
 
-const persistedCredentialsSchema = z.object({
-	version: z.literal(1),
-	credentials: warehouseConnectionCredentialsSchema,
-});
-
-const warehouseValidationResponseSchema = z.object({
-	valid: z.literal(true),
-});
+const persistedCredentialsSchema = z.discriminatedUnion('version', [
+	z.object({
+		version: z.literal(1),
+		credentials: warehouseConnectionCredentialsSchema,
+	}),
+	z.object({
+		version: z.literal(2),
+		credentials: warehouseConnectionCredentialsSchema,
+		tableSelection: warehouseTableSelectionSchema,
+	}),
+	z.object({
+		version: z.literal(3),
+		contextSources: onboardingContextSourcesSchema,
+		credentials: warehouseConnectionCredentialsSchema,
+		tableSelection: warehouseTableSelectionSchema,
+	}),
+]);
 
 class WarehousePreparationError extends Error {}
 
-export async function validateWarehouseCredentials(input: ProjectWarehouseCredentials): Promise<{ valid: true }> {
+class GithubConnectionError extends Error {
+	constructor() {
+		super('GitHub is no longer connected. Reconnect it and try again.');
+	}
+}
+
+export async function validateWarehouseCredentials(
+	input: ProjectWarehouseCredentials,
+): Promise<WarehouseValidationResult> {
 	const connection = warehouseCredentialsSchema.parse(input);
 	let response: Response;
 	try {
@@ -166,7 +204,87 @@ export async function validateWarehouseCredentials(input: ProjectWarehouseCreden
 		});
 	}
 
-	return warehouseValidationResponseSchema.parse(await response.json());
+	return warehouseValidationResultSchema.parse(await response.json());
+}
+
+export async function validateNotionContext(input: NotionContextSource) {
+	const notion = notionContextSourceSchema.parse(input);
+	let response: Response;
+	try {
+		response = await fetch(`http://localhost:${env.FASTAPI_PORT}/context/notion/validate`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-Nao-Internal-Secret': env.BETTER_AUTH_SECRET,
+			},
+			body: JSON.stringify({
+				api_key: notion.apiKey,
+				pages: notion.pages,
+			}),
+			signal: AbortSignal.timeout(120_000),
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+			throw new TRPCError({
+				code: 'BAD_REQUEST',
+				message: 'Notion validation timed out. Check the page URLs and try again.',
+			});
+		}
+		throw error;
+	}
+
+	if (!response.ok) {
+		const body = contextValidationErrorSchema.safeParse(await response.json().catch(() => null));
+		throw new TRPCError({
+			code: 'BAD_REQUEST',
+			message: body.success
+				? body.data.detail
+				: 'Could not access these Notion pages. Check the integration token and page sharing.',
+		});
+	}
+
+	return notionContextValidationResultSchema.parse(await response.json());
+}
+
+export async function validateConfluenceContext(input: ConfluenceContextSource) {
+	const confluence = confluenceContextSourceSchema.parse(input);
+	let response: Response;
+	try {
+		response = await fetch(`http://localhost:${env.FASTAPI_PORT}/context/confluence/validate`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-Nao-Internal-Secret': env.BETTER_AUTH_SECRET,
+			},
+			body: JSON.stringify({
+				base_url: confluence.baseUrl,
+				email: confluence.email,
+				api_token: confluence.apiToken,
+				pages: confluence.pages,
+			}),
+			signal: AbortSignal.timeout(120_000),
+		});
+	} catch (error) {
+		if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+			throw new TRPCError({
+				code: 'BAD_REQUEST',
+				message: 'Confluence validation timed out. Check the site URL and try again.',
+			});
+		}
+		throw error;
+	}
+
+	if (!response.ok) {
+		const body = contextValidationErrorSchema.safeParse(await response.json().catch(() => null));
+		throw new TRPCError({
+			code: 'BAD_REQUEST',
+			message: body.success
+				? body.data.detail
+				: 'Could not access these Confluence pages. Check the site URL, email, API token, and permissions.',
+		});
+	}
+
+	return confluenceContextValidationResultSchema.parse(await response.json());
 }
 
 function getWarehouseCredentialLabel(fieldPath: string): string {
@@ -235,8 +353,15 @@ type StartWarehouseProvisioningInput = {
 	userId: string;
 	orgId: string;
 	projectName: string;
+	contextSources?: OnboardingContextSources;
 	onboardingChatId?: string;
+	tableSelection?: WarehouseTableSelection;
 } & ProjectWarehouseCredentials;
+
+type ProvisionWarehouseInput = StartWarehouseProvisioningInput & {
+	contextSources: OnboardingContextSources;
+	tableSelection: WarehouseTableSelection;
+};
 
 type WarehouseProvisioningFinalization = {
 	businessContext: generateOnboardingRulesTool.Input['businessContext'];
@@ -259,18 +384,23 @@ export async function startWarehouseProvisioning(
 		credentials: input.credentials,
 	});
 
-	const validatedInput: StartWarehouseProvisioningInput = {
+	const validatedInput: ProvisionWarehouseInput = {
 		userId: input.userId,
 		orgId: input.orgId,
 		projectName: input.projectName,
+		contextSources: onboardingContextSourcesSchema.parse(input.contextSources ?? {}),
+		onboardingChatId: input.onboardingChatId,
+		tableSelection: warehouseTableSelectionSchema.parse(input.tableSelection ?? { mode: 'all' }),
 		...connection,
 	};
 
 	const jobId = crypto.randomUUID();
 	const encryptedCredentials = encryptSecret(
 		JSON.stringify({
-			version: 1,
+			version: 3,
+			contextSources: validatedInput.contextSources,
 			credentials: connection.credentials,
+			tableSelection: validatedInput.tableSelection,
 		}),
 	);
 
@@ -338,7 +468,7 @@ async function assertCanStartWarehouseProvisioning(userId: string): Promise<void
 
 async function runProvisioningJob(
 	jobId: string,
-	input: StartWarehouseProvisioningInput,
+	input: ProvisionWarehouseInput,
 	statuses: WarehouseProvisioningStatus[] = PROVISIONING_STATUSES,
 ): Promise<void> {
 	const job = await claimJob(jobId, statuses);
@@ -406,7 +536,7 @@ export async function queueWarehouseFinalization(
 	await maybeStartFinalization(jobId);
 }
 
-async function provisionWarehouse(jobId: string, input: StartWarehouseProvisioningInput): Promise<void> {
+async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput): Promise<void> {
 	let projectDir: string | null = null;
 	let registeredProjectId: string | null = null;
 	let registeredProjectPath: string | null = null;
@@ -420,13 +550,46 @@ async function provisionWarehouse(jobId: string, input: StartWarehouseProvisioni
 		}
 
 		const provisionConfig = await prepareWarehouseConfig(input.provider, input.credentials);
+		const githubToken = input.contextSources.github ? await userQueries.getGithubToken(input.userId) : undefined;
+		if (input.contextSources.github && !githubToken) {
+			throw new GithubConnectionError();
+		}
+		const contextEnvVars: Record<string, string> = {
+			...(input.contextSources.notion && {
+				[NOTION_API_KEY_ENV]: JSON.stringify(input.contextSources.notion.apiKey),
+			}),
+			...(input.contextSources.confluence && {
+				[CONFLUENCE_API_TOKEN_ENV]: JSON.stringify(input.contextSources.confluence.apiToken),
+			}),
+			...(input.contextSources.github &&
+				githubToken && {
+					[GITHUB_REPOSITORY_URL_ENV]: JSON.stringify(
+						authenticatedRepoUrl(githubToken, input.contextSources.github.repoFullName),
+					),
+				}),
+		};
+		const projectEnvVars = { ...provisionConfig.env_vars, ...contextEnvVars };
 
 		await updateJob(jobId, { status: 'initializing' });
-		writeWarehouseConfig(projectDir, input.projectName, input.provider, provisionConfig.database_config);
-		const commandEnvironment = createCommandEnvironment(provisionConfig.env_vars);
+		writeWarehouseConfig(
+			projectDir,
+			input.projectName,
+			input.provider,
+			provisionConfig.database_config,
+			input.tableSelection,
+			input.contextSources,
+		);
+		const commandEnvironment = createCommandEnvironment(projectEnvVars);
 		await runNaoCommand(['init', '--yes'], projectDir, commandEnvironment, INIT_TIMEOUT_MS);
 
-		writeWarehouseConfig(projectDir, input.projectName, input.provider, provisionConfig.database_config);
+		writeWarehouseConfig(
+			projectDir,
+			input.projectName,
+			input.provider,
+			provisionConfig.database_config,
+			input.tableSelection,
+			input.contextSources,
+		);
 
 		await updateJob(jobId, { status: 'debugging', logs: '' });
 		await runNaoCommand(['debug'], projectDir, commandEnvironment, DEBUG_TIMEOUT_MS, (logs) =>
@@ -434,12 +597,18 @@ async function provisionWarehouse(jobId: string, input: StartWarehouseProvisioni
 		);
 
 		await updateJob(jobId, { status: 'syncing', logs: '' });
-		await runNaoCommand(
-			['sync', '--provider', 'databases'],
-			projectDir,
-			commandEnvironment,
-			SYNC_TIMEOUT_MS,
-			(logs) => updateJob(jobId, { logs }),
+		const syncArgs = ['sync', '--provider', 'databases'];
+		if (input.contextSources.notion) {
+			syncArgs.push('--provider', 'notion');
+		}
+		if (input.contextSources.confluence) {
+			syncArgs.push('--provider', 'confluence');
+		}
+		if (input.contextSources.github) {
+			syncArgs.push('--provider', 'repositories');
+		}
+		await runNaoCommand(syncArgs, projectDir, commandEnvironment, SYNC_TIMEOUT_MS, (logs) =>
+			updateJob(jobId, { logs }),
 		);
 
 		const projectId = crypto.randomUUID();
@@ -462,7 +631,7 @@ async function provisionWarehouse(jobId: string, input: StartWarehouseProvisioni
 		}
 		registeredProjectPath = registeredProject.path;
 
-		await saveProjectWarehouseEnvVars(project.projectId, input.provider, provisionConfig.env_vars);
+		await saveProjectWarehouseEnvVars(project.projectId, input.provider, projectEnvVars);
 
 		await updateJob(jobId, {
 			status: 'awaiting_context',
@@ -628,13 +797,53 @@ function writeWarehouseConfig(
 	projectName: string,
 	provider: WarehouseProvider,
 	databaseConfig: Record<string, unknown>,
+	tableSelection: WarehouseTableSelection,
+	contextSources: OnboardingContextSources,
 ): void {
+	const include =
+		tableSelection.mode === 'selected'
+			? [
+					...new Set(
+						tableSelection.tables.map(({ schema, table }) => `${escapeGlob(schema)}.${escapeGlob(table)}`),
+					),
+				]
+			: undefined;
 	const config = yaml.dump({
 		project_name: projectName,
-		databases: [{ ...databaseConfig, name: provider, templates: ['columns', 'preview'] }],
+		databases: [
+			{ ...databaseConfig, name: provider, templates: ['columns', 'preview'], ...(include && { include }) },
+		],
+		...(contextSources.notion && {
+			notion: {
+				api_key: `\${{ env('${NOTION_API_KEY_ENV}') }}`,
+				pages: contextSources.notion.pages,
+			},
+		}),
+		...(contextSources.confluence && {
+			confluence: {
+				base_url: contextSources.confluence.baseUrl,
+				deployment: 'cloud',
+				email: contextSources.confluence.email,
+				api_token: `\${{ env('${CONFLUENCE_API_TOKEN_ENV}') }}`,
+				pages: contextSources.confluence.pages,
+			},
+		}),
+		...(contextSources.github && {
+			repos: [
+				{
+					name: contextSources.github.repoFullName.replace('/', '-'),
+					url: `\${{ env('${GITHUB_REPOSITORY_URL_ENV}') }}`,
+					branch: contextSources.github.branch,
+				},
+			],
+		}),
 	});
 
 	fs.writeFileSync(path.join(projectDir, 'nao_config.yaml'), config, { mode: 0o600 });
+}
+
+function escapeGlob(value: string): string {
+	return value.replaceAll('[', '[[]').replaceAll('*', '[*]').replaceAll('?', '[?]');
 }
 
 function createCommandEnvironment(warehouseEnvVars: Record<string, string>): NodeJS.ProcessEnv {
@@ -669,13 +878,14 @@ function runNaoCommand(
 		});
 		let settled = false;
 		let output = '';
+		const redactOutput = createOutputRedactor(env);
 		let logUpdate: ReturnType<typeof setTimeout> | undefined;
 		let pendingLogUpdate = Promise.resolve<unknown>(undefined);
 		const publishOutput = () => {
 			if (!onOutput) {
 				return;
 			}
-			const visibleOutput = output.replace(ANSI_ESCAPE_PATTERN, '').replaceAll('\r', '\n');
+			const visibleOutput = redactOutput(output).replace(ANSI_ESCAPE_PATTERN, '').replaceAll('\r', '\n');
 			pendingLogUpdate = pendingLogUpdate
 				.then(() => onOutput(visibleOutput))
 				.catch((error) =>
@@ -729,11 +939,28 @@ function runNaoCommand(
 			if (code === 0) {
 				resolve();
 			} else {
-				const details = output.trim();
+				const details = redactOutput(output).trim();
 				reject(new Error(`nao ${args[0]} failed${details ? `: ${details}` : ''}`));
 			}
 		});
 	});
+}
+
+function createOutputRedactor(env: NodeJS.ProcessEnv): (output: string) => string {
+	const secrets = Object.entries(env)
+		.filter(([key, value]) => key.startsWith('NAO_ONBOARDING_') && value)
+		.flatMap(([, value]) => {
+			try {
+				const parsed = JSON.parse(value!);
+				return typeof parsed === 'string' ? [value!, parsed] : [value!];
+			} catch {
+				return [value!];
+			}
+		})
+		.filter((value) => value.length >= 4)
+		.sort((left, right) => right.length - left.length);
+
+	return (output) => secrets.reduce((redacted, secret) => redacted.replaceAll(secret, '[REDACTED]'), output);
 }
 
 let reconcilerStarted = false;
@@ -806,6 +1033,9 @@ async function recoverProvisioningJob(jobId: string): Promise<void> {
 				provider: job.provider,
 				credentials: persistedCredentials.credentials,
 			});
+			const tableSelection =
+				persistedCredentials.version === 1 ? { mode: 'all' as const } : persistedCredentials.tableSelection;
+			const contextSources = persistedCredentials.version === 3 ? persistedCredentials.contextSources : {};
 
 			await updateJob(jobId, {
 				status: 'queued',
@@ -818,6 +1048,8 @@ async function recoverProvisioningJob(jobId: string): Promise<void> {
 				userId: job.userId,
 				orgId: job.orgId,
 				projectName: job.projectName,
+				contextSources,
+				tableSelection,
 				...connection,
 			});
 		} catch (error) {
@@ -937,6 +1169,10 @@ class ProjectNameConflictError extends Error {
 
 export function getPublicProvisioningError(error: unknown): string {
 	if (error instanceof ProjectNameConflictError) {
+		return error.message;
+	}
+
+	if (error instanceof GithubConnectionError) {
 		return error.message;
 	}
 

@@ -5,7 +5,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildWarehouseCredentials } from './warehouse-credentials';
 import { WarehouseCredentialsForm } from './warehouse-credentials-form';
 import { isSqlProvider, WAREHOUSE_PROVIDER_LABELS } from './warehouse-provider-config';
+import {
+	ConfluenceContextSetup,
+	getConfluenceContextFingerprint,
+	parseConfluencePages,
+} from './confluence-context-setup';
+import { GithubContextSetup } from './github-context-setup';
+import { getNotionContextFingerprint, NotionContextSetup, parseNotionPages } from './notion-context-setup';
+import {
+	getAllWarehouseTableKeys,
+	getSelectedWarehouseTables,
+	WarehouseTableSelection,
+} from './warehouse-table-selection';
 import type { WarehouseCredentialsFormValues } from './warehouse-credentials';
+import type { WarehouseSchemaInventory } from './warehouse-table-selection';
+import type { ConfluenceContextValues } from './confluence-context-setup';
+import type { GithubContextValues } from './github-context-setup';
+import type { NotionContextValues } from './notion-context-setup';
 import type { ToolCallComponentProps } from '.';
 
 import { Button } from '@/components/ui/button';
@@ -27,6 +43,13 @@ import { trpc } from '@/main';
 
 export { WarehouseCredentialsForm as SqlCredentialsForm } from './warehouse-credentials-form';
 
+type SetupStep = 'credentials' | 'tables' | 'context';
+type SelectedContextSources = {
+	notion?: { apiKey: string; pages: string[] };
+	confluence?: { baseUrl: string; email: string; apiToken: string; pages: string[] };
+	github?: GithubContextValues;
+};
+
 export function RequestWarehouseCredentialsToolCall({
 	toolPart,
 }: ToolCallComponentProps<'request_warehouse_credentials'>) {
@@ -36,6 +59,21 @@ export function RequestWarehouseCredentialsToolCall({
 	const [dialogCenter, setDialogCenter] = useState<number>();
 	const [credentialValues, setCredentialValues] = useState<WarehouseCredentialsFormValues>();
 	const [validatedCredentialFingerprint, setValidatedCredentialFingerprint] = useState<string | null>(null);
+	const [setupStep, setSetupStep] = useState<SetupStep>('credentials');
+	const [discoveredSchemas, setDiscoveredSchemas] = useState<WarehouseSchemaInventory[]>();
+	const [selectedTableKeys, setSelectedTableKeys] = useState<Set<string>>(new Set());
+	const [notionValues, setNotionValues] = useState<NotionContextValues>({ apiKey: '', pagesText: '' });
+	const [validatedNotionFingerprint, setValidatedNotionFingerprint] = useState<string | null>(null);
+	const [validatedNotionPages, setValidatedNotionPages] = useState<Array<{ url: string; title: string }>>([]);
+	const [confluenceValues, setConfluenceValues] = useState<ConfluenceContextValues>({
+		baseUrl: '',
+		email: '',
+		apiToken: '',
+		pagesText: '',
+	});
+	const [validatedConfluenceFingerprint, setValidatedConfluenceFingerprint] = useState<string | null>(null);
+	const [validatedConfluencePages, setValidatedConfluencePages] = useState<Array<{ url: string; title: string }>>([]);
+	const [githubValues, setGithubValues] = useState<GithubContextValues>({ repoFullName: '', branch: '' });
 	const cardRef = useRef<HTMLDivElement>(null);
 	const notifiedJobId = useRef<string | null>(null);
 	const restoredJobId = useRef(false);
@@ -64,6 +102,8 @@ export function RequestWarehouseCredentialsToolCall({
 			: false,
 	);
 	const validateCredentials = useMutation(trpc.onboarding.validateWarehouseCredentials.mutationOptions());
+	const validateNotion = useMutation(trpc.onboarding.validateNotionContext.mutationOptions());
+	const validateConfluence = useMutation(trpc.onboarding.validateConfluenceContext.mutationOptions());
 	const startProvisioning = useMutation(
 		trpc.onboarding.startWarehouseProvisioning.mutationOptions({
 			onSuccess: ({ jobId: nextJobId }) => {
@@ -142,7 +182,46 @@ export function RequestWarehouseCredentialsToolCall({
 		validatedCredentialFingerprint !== null &&
 		credentialValues !== undefined &&
 		validatedCredentialFingerprint === JSON.stringify(credentialValues);
+	const setupStepsUnlocked = credentialsVerified && discoveredSchemas !== undefined;
+	const tableSelectionReady = setupStep === 'tables' && discoveredSchemas !== undefined && !setupInProgress;
+	const contextSetupReady = setupStep === 'context' && discoveredSchemas !== undefined && !setupInProgress;
 	const credentialsAccepted = credentialsVerified || setupInProgress;
+	const notionConnected =
+		validatedNotionFingerprint !== null && validatedNotionFingerprint === getNotionContextFingerprint(notionValues);
+	const confluenceConnected =
+		validatedConfluenceFingerprint !== null &&
+		validatedConfluenceFingerprint === getConfluenceContextFingerprint(confluenceValues);
+	const githubConnected = githubValues.repoFullName.length > 0 && githubValues.branch.length > 0;
+	const selectedContextSources: SelectedContextSources = {
+		...(notionConnected && {
+			notion: { apiKey: notionValues.apiKey, pages: parseNotionPages(notionValues.pagesText) },
+		}),
+		...(confluenceConnected && {
+			confluence: {
+				baseUrl: confluenceValues.baseUrl.trim(),
+				email: confluenceValues.email.trim(),
+				apiToken: confluenceValues.apiToken.trim(),
+				pages: parseConfluencePages(confluenceValues.pagesText),
+			},
+		}),
+		...(githubConnected && { github: githubValues }),
+	};
+	const hasConnectedContext = notionConnected || confluenceConnected || githubConnected;
+	const startSelectedProvisioning = async (contextSources: SelectedContextSources = {}) => {
+		if (!credentialValues || !discoveredSchemas) {
+			return;
+		}
+		const selectedTables = getSelectedWarehouseTables(discoveredSchemas, selectedTableKeys);
+		const tableCount = discoveredSchemas.reduce((count, schema) => count + schema.tables.length, 0);
+		await startProvisioning.mutateAsync({
+			provider,
+			credentials: buildWarehouseCredentials(provider, credentialValues),
+			contextSources,
+			tableSelection:
+				selectedTables.length === tableCount ? { mode: 'all' } : { mode: 'selected', tables: selectedTables },
+			...(canRestoreJob && { onboardingChatId: chatId }),
+		});
+	};
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
@@ -174,18 +253,26 @@ export function RequestWarehouseCredentialsToolCall({
 						<div className='font-borna text-lg font-medium tracking-tight text-foreground'>
 							{setupFailed
 								? `${WAREHOUSE_PROVIDER_LABELS[provider]} setup needs attention`
-								: credentialsAccepted
-									? `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials verified`
-									: `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials required`}
+								: contextSetupReady
+									? 'Business context optional'
+									: tableSelectionReady
+										? `${WAREHOUSE_PROVIDER_LABELS[provider]} tables ready`
+										: credentialsAccepted
+											? `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials verified`
+											: `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials required`}
 						</div>
 						<p className='text-xs text-muted-foreground'>
 							{setupFailed
 								? 'Open the setup to review the problem and try again.'
 								: setupInProgress
 									? 'Your connection is being set up.'
-									: credentialsVerified
-										? 'Ready to continue. You can still review or edit these details.'
-										: 'Credentials are submitted securely and are never shared with the agent.'}
+									: contextSetupReady
+										? 'Connect documentation or skip to start syncing.'
+										: tableSelectionReady
+											? 'Review which tables nao should sync.'
+											: credentialsVerified
+												? 'Ready to continue. You can still review or edit these details.'
+												: 'Credentials are submitted securely and are never shared with the agent.'}
 						</p>
 					</div>
 				</div>
@@ -204,14 +291,19 @@ export function RequestWarehouseCredentialsToolCall({
 							? 'Review setup'
 							: setupInProgress
 								? 'View progress'
-								: credentialsVerified
-									? 'Edit credentials'
-									: 'Enter credentials'}
+								: contextSetupReady
+									? 'Add context'
+									: tableSelectionReady
+										? 'Choose tables'
+										: credentialsVerified
+											? 'Edit credentials'
+											: 'Enter credentials'}
 					</Button>
 				</DialogTrigger>
 			</div>
 			<DialogContent
 				className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'
+				overlayClassName='data-[state=open]:animate-none data-[state=closed]:animate-none'
 				style={dialogCenter === undefined ? undefined : { left: dialogCenter }}
 			>
 				<DialogHeader className='pr-8'>
@@ -220,11 +312,35 @@ export function RequestWarehouseCredentialsToolCall({
 							<DatabaseIcon dialect={provider} className='size-5' />
 						</div>
 						<div className='space-y-1'>
-							<DialogTitle>Connect {WAREHOUSE_PROVIDER_LABELS[provider]}</DialogTitle>
-							<DialogDescription>Add a secure connection for your nao project.</DialogDescription>
+							<DialogTitle>
+								{jobId
+									? `Set up ${WAREHOUSE_PROVIDER_LABELS[provider]}`
+									: setupStep === 'context'
+										? 'Add business context'
+										: setupStep === 'tables'
+											? `Choose ${WAREHOUSE_PROVIDER_LABELS[provider]} data`
+											: `Connect ${WAREHOUSE_PROVIDER_LABELS[provider]}`}
+							</DialogTitle>
+							<DialogDescription>
+								{jobId
+									? 'Preparing your nao project and syncing metadata.'
+									: setupStep === 'context'
+										? 'Optionally connect documentation before starting sync.'
+										: setupStep === 'tables'
+											? 'Choose the tables nao should use as context.'
+											: 'Add a secure connection for your nao project.'}
+							</DialogDescription>
 						</div>
 					</div>
 				</DialogHeader>
+				{!jobId && isSqlProvider(provider) && (
+					<SetupStepNavigation
+						activeStep={setupStep}
+						unlocked={setupStepsUnlocked}
+						selectedTableCount={selectedTableKeys.size}
+						onStepChange={setSetupStep}
+					/>
+				)}
 				{jobId ? (
 					<WarehouseProvisioningProgress
 						job={job}
@@ -233,21 +349,83 @@ export function RequestWarehouseCredentialsToolCall({
 							startProvisioning.reset();
 						}}
 					/>
+				) : setupStep === 'context' ? (
+					<NotionContextSetup
+						values={notionValues}
+						validatedFingerprint={validatedNotionFingerprint}
+						validatedPages={validatedNotionPages}
+						isValidating={validateNotion.isPending}
+						isContextValidating={validateNotion.isPending || validateConfluence.isPending}
+						isStarting={startProvisioning.isPending}
+						canStart={selectedTableKeys.size > 0}
+						hasConnectedContext={hasConnectedContext}
+						additionalProviders={
+							<>
+								<ConfluenceContextSetup
+									values={confluenceValues}
+									validatedFingerprint={validatedConfluenceFingerprint}
+									validatedPages={validatedConfluencePages}
+									isValidating={validateConfluence.isPending}
+									isStarting={startProvisioning.isPending}
+									error={validateConfluence.error}
+									onValuesChange={setConfluenceValues}
+									onValidatedFingerprintChange={setValidatedConfluenceFingerprint}
+									onValidate={async (values) => {
+										const result = await validateConfluence.mutateAsync({
+											baseUrl: values.baseUrl.trim(),
+											email: values.email.trim(),
+											apiToken: values.apiToken.trim(),
+											pages: parseConfluencePages(values.pagesText),
+										});
+										setValidatedConfluencePages(result.pages);
+									}}
+								/>
+								<GithubContextSetup
+									values={githubValues}
+									isStarting={startProvisioning.isPending}
+									onValuesChange={setGithubValues}
+								/>
+							</>
+						}
+						error={validateNotion.error ?? startProvisioning.error}
+						onValuesChange={setNotionValues}
+						onValidatedFingerprintChange={setValidatedNotionFingerprint}
+						onValidate={async (values) => {
+							const result = await validateNotion.mutateAsync({
+								apiKey: values.apiKey,
+								pages: parseNotionPages(values.pagesText),
+							});
+							setValidatedNotionPages(result.pages);
+						}}
+						onBack={() => setSetupStep('tables')}
+						onSkip={() => void startSelectedProvisioning()}
+						onSubmit={() => void startSelectedProvisioning(selectedContextSources)}
+					/>
+				) : setupStep === 'tables' && discoveredSchemas ? (
+					<WarehouseTableSelection
+						schemas={discoveredSchemas}
+						selectedTableKeys={selectedTableKeys}
+						isPending={startProvisioning.isPending}
+						error={startProvisioning.error}
+						onChange={setSelectedTableKeys}
+						onBack={() => setSetupStep('credentials')}
+						onSubmit={() => setSetupStep('context')}
+					/>
 				) : isSqlProvider(provider) ? (
 					<WarehouseCredentialsForm
 						provider={provider}
 						onValidate={async (values) => {
-							await validateCredentials.mutateAsync({
+							const result = await validateCredentials.mutateAsync({
 								provider,
 								credentials: buildWarehouseCredentials(provider, values),
 							});
+							setDiscoveredSchemas(result.schemas);
+							setSelectedTableKeys(getAllWarehouseTableKeys(result.schemas));
 						}}
-						onSubmit={async (values) => {
-							await startProvisioning.mutateAsync({
-								provider,
-								credentials: buildWarehouseCredentials(provider, values),
-								...(canRestoreJob && { onboardingChatId: chatId }),
-							});
+						onSubmit={async () => {
+							if (discoveredSchemas) {
+								setSetupStep('tables');
+							}
 						}}
 						onCancel={() => setOpen(false)}
 						isValidating={validateCredentials.isPending}
@@ -265,6 +443,60 @@ export function RequestWarehouseCredentialsToolCall({
 				)}
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+function SetupStepNavigation({
+	activeStep,
+	unlocked,
+	selectedTableCount,
+	onStepChange,
+}: {
+	activeStep: SetupStep;
+	unlocked: boolean;
+	selectedTableCount: number;
+	onStepChange: (step: SetupStep) => void;
+}) {
+	const steps: Array<{ id: SetupStep; label: string }> = [
+		{ id: 'credentials', label: 'Credentials' },
+		{ id: 'tables', label: 'Tables' },
+		{ id: 'context', label: 'Business context' },
+	];
+
+	return (
+		<nav aria-label='Setup steps' className='relative -mx-6 px-6 pt-1'>
+			<div className='pointer-events-none absolute inset-x-0 bottom-0 h-px bg-border' />
+			<div className='flex min-h-10 items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
+				{steps.map((step) => {
+					const disabled = step.id !== 'credentials' && !unlocked;
+					const active = step.id === activeStep;
+
+					return (
+						<button
+							key={step.id}
+							type='button'
+							aria-current={active ? 'step' : undefined}
+							disabled={disabled}
+							title={disabled ? 'Validate credentials to unlock' : undefined}
+							onClick={() => onStepChange(step.id)}
+							className={cn(
+								'relative z-10 flex h-9 shrink-0 items-center gap-1.5 rounded-t-md border px-3 text-sm font-medium transition-colors',
+								active
+									? 'border-border border-b-0 bg-background text-foreground'
+									: 'border-transparent text-muted-foreground hover:bg-background/50 hover:text-foreground',
+								disabled &&
+									'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground',
+							)}
+						>
+							{step.label}
+							{step.id === 'tables' && unlocked && (
+								<span className='text-xs font-normal text-muted-foreground'>{selectedTableCount}</span>
+							)}
+						</button>
+					);
+				})}
+			</div>
+		</nav>
 	);
 }
 

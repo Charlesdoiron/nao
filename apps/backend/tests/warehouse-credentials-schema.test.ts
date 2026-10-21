@@ -39,4 +39,94 @@ describe('warehouse credentials schema', () => {
 			}).success,
 		).toBe(true);
 	});
+
+	it('accepts selected tables and rejects an empty selection', () => {
+		expect(
+			warehouseProvisioningInputSchema.parse({
+				provider: 'postgres',
+				credentials: {},
+				tableSelection: {
+					mode: 'selected',
+					tables: [{ schema: 'public', table: 'orders' }],
+				},
+			}).tableSelection,
+		).toEqual({
+			mode: 'selected',
+			tables: [{ schema: 'public', table: 'orders' }],
+		});
+
+		expect(
+			warehouseProvisioningInputSchema.safeParse({
+				provider: 'postgres',
+				credentials: {},
+				tableSelection: { mode: 'selected', tables: [] },
+			}).success,
+		).toBe(false);
+	});
+
+	it('accepts optional documentation context and rejects missing pages', () => {
+		expect(
+			warehouseProvisioningInputSchema.parse({
+				provider: 'postgres',
+				credentials: {},
+				contextSources: {
+					notion: {
+						apiKey: 'secret',
+						pages: ['https://notion.so/page'],
+					},
+					confluence: {
+						baseUrl: 'https://acme.atlassian.net/wiki',
+						email: 'person@acme.com',
+						apiToken: 'secret',
+						pages: ['123'],
+					},
+					github: {
+						repoFullName: 'acme/analytics',
+						branch: 'main',
+					},
+				},
+			}).contextSources,
+		).toEqual({
+			notion: {
+				apiKey: 'secret',
+				pages: ['https://notion.so/page'],
+			},
+			confluence: {
+				baseUrl: 'https://acme.atlassian.net/wiki',
+				email: 'person@acme.com',
+				apiToken: 'secret',
+				pages: ['123'],
+			},
+			github: {
+				repoFullName: 'acme/analytics',
+				branch: 'main',
+			},
+		});
+
+		expect(
+			warehouseProvisioningInputSchema.safeParse({
+				provider: 'postgres',
+				credentials: {},
+				contextSources: {
+					notion: {
+						apiKey: 'secret',
+						pages: [],
+					},
+				},
+			}).success,
+		).toBe(false);
+
+		expect(
+			warehouseProvisioningInputSchema.safeParse({
+				provider: 'postgres',
+				credentials: {},
+				contextSources: {
+					github: {
+						repoFullName: 'https://github.com/acme/analytics',
+						branch: 'main',
+					},
+				},
+			}).success,
+		).toBe(false);
+	});
 });

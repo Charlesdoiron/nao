@@ -5,16 +5,36 @@ import {
 	getActiveWarehouseProvisioningJob,
 	getWarehouseProvisioningJob,
 	startWarehouseProvisioning,
+	validateConfluenceContext,
+	validateNotionContext,
 	validateWarehouseCredentials,
 } from '../services/warehouse-provisioning';
-import { warehouseCredentialsSchema, warehouseProvisioningInputSchema } from '../types/warehouse';
+import {
+	confluenceContextSourceSchema,
+	confluenceContextValidationResultSchema,
+	notionContextSourceSchema,
+	notionContextValidationResultSchema,
+	warehouseCredentialsSchema,
+	warehouseProvisioningInputSchema,
+	warehouseValidationResultSchema,
+} from '../types/warehouse';
 import { organizationProtectedProcedure, protectedProcedure, router } from './trpc';
 
 export const onboardingRoutes = router({
 	validateWarehouseCredentials: organizationProtectedProcedure
 		.input(warehouseCredentialsSchema)
-		.output(z.object({ valid: z.literal(true) }))
+		.output(warehouseValidationResultSchema)
 		.mutation(({ input }) => validateWarehouseCredentials(input)),
+
+	validateNotionContext: organizationProtectedProcedure
+		.input(notionContextSourceSchema)
+		.output(notionContextValidationResultSchema)
+		.mutation(({ input }) => validateNotionContext(input)),
+
+	validateConfluenceContext: organizationProtectedProcedure
+		.input(confluenceContextSourceSchema)
+		.output(confluenceContextValidationResultSchema)
+		.mutation(({ input }) => validateConfluenceContext(input)),
 
 	startWarehouseProvisioning: organizationProtectedProcedure
 		.input(warehouseProvisioningInputSchema)

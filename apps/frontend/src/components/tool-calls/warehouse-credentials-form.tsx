@@ -426,7 +426,7 @@ export function WarehouseCredentialsForm({
 										: isPending
 											? 'Continuing…'
 											: credentialsAreValid
-												? 'Continue'
+												? 'Next'
 												: 'Connect'}
 								</Button>
 							</div>
