@@ -34,11 +34,12 @@ interface TrialStartedDialogProps {
 }
 
 export function TrialStartedDialogController() {
-	const { isOrgAdmin, role } = usePermissions();
+	const { isOrgAdmin } = usePermissions();
 	const { data: session } = useSession();
 	const setupCreditGrant = useQuery({
 		...trpc.account.getOrganizationSetupCreditGrant.queryOptions(),
-		enabled: isOrgAdmin && role !== undefined,
+		enabled: isOrgAdmin,
+		staleTime: 0,
 	});
 	const [seenGrantIds, setSeenGrantIds] = useState(getSeenSetupCreditGrantIds);
 	const grant = setupCreditGrant.data;
@@ -93,8 +94,8 @@ export function TrialStartedDialog({ open, onOpenChange, creditAmountMicroUsd, u
 						<DialogDescription
 							className={cn(enterClass, '[animation-delay:160ms] max-w-md text-center leading-relaxed')}
 						>
-							We’ve added {formattedCreditAmount} of credits so your team can start asking questions right
-							away.
+							We’ve added {formattedCreditAmount} of nao credits so your team can start asking questions
+							right away.
 						</DialogDescription>
 					</DialogHeader>
 					<div className={cn(enterClass, '[animation-delay:260ms] relative my-8 flex flex-col items-center')}>
@@ -103,7 +104,7 @@ export function TrialStartedDialog({ open, onOpenChange, creditAmountMicroUsd, u
 							<CountUp toMicroUsd={creditAmountMicroUsd} durationMs={COUNT_UP_DURATION_MS} />
 						</span>
 						<span className='relative mt-1 text-sm font-medium text-foreground'>
-							Free credits, ready to use
+							Free nao credits, ready to use
 						</span>
 					</div>
 					<Button

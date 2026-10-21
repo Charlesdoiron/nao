@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 		amountMicroUsd: number;
 	} | null,
 	isOrgAdmin: true,
-	role: 'admin' as string | undefined,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -30,7 +29,7 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 vi.mock('@/hooks/use-permissions', () => ({
-	usePermissions: () => ({ isOrgAdmin: mocks.isOrgAdmin, role: mocks.role }),
+	usePermissions: () => ({ isOrgAdmin: mocks.isOrgAdmin }),
 }));
 
 vi.mock('@/lib/auth-client', () => ({
@@ -50,7 +49,6 @@ vi.mock('@/main', () => ({
 beforeEach(() => {
 	mocks.grant = { id: 'setup-grant-id', amountMicroUsd: 20_000_000 };
 	mocks.isOrgAdmin = true;
-	mocks.role = 'admin';
 	const values = new Map<string, string>();
 	vi.stubGlobal('localStorage', {
 		getItem: (key: string) => values.get(key) ?? null,
@@ -103,14 +101,7 @@ it('does not show setup credits to non-admins', () => {
 	expect(screen.queryByRole('dialog')).toBeNull();
 });
 
-it('waits for the first project before loading setup credits', () => {
-	mocks.role = undefined;
-	const view = render(<TrialStartedDialogController />);
-
-	expect(screen.queryByRole('dialog')).toBeNull();
-
-	mocks.role = 'admin';
-	view.rerender(<TrialStartedDialogController />);
-
+it('loads setup credits without waiting for a project role', () => {
+	render(<TrialStartedDialogController />);
 	expect(screen.getByRole('dialog')).toBeTruthy();
 });
