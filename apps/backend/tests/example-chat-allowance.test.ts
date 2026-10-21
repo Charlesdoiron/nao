@@ -73,6 +73,9 @@ describe('example chat allowance', () => {
 	});
 
 	it('keeps independent lifetime caps for example and onboarding submissions', async () => {
+		expect(EXAMPLE_CHAT_RUN_CAP).toBe(30);
+		expect(ONBOARDING_CHAT_RUN_CAP).toBe(100);
+
 		await expect(
 			assertExampleChatAllowance({
 				userId: ALLOWANCE_USER_ID,
