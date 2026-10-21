@@ -55,7 +55,7 @@ export function CardsGrid({ displayMode, children }: { displayMode: StoryPanelDi
 export function GridCardFooter({ title, subtitle }: { title: string; subtitle: ReactNode }) {
 	return (
 		<div className='flex-1 min-w-0 transition-transform duration-200 ease-out group-hover:-translate-y-0.5'>
-			<span className='block text-xs font-medium truncate mb-2'>{title}</span>
+			<span className='block text-xs font-medium truncate mb-1'>{title}</span>
 			<span className='flex items-center text-[10px] font-medium text-muted-foreground/60 truncate'>
 				{subtitle}
 			</span>
@@ -81,12 +81,12 @@ export function NoResults({ query }: { query: string }) {
 	);
 }
 
-export function LiveBadge() {
+export function LiveBadge({ iconOnly = false }: { iconOnly?: boolean }) {
 	return (
 		<SimpleTooltip content='Live story'>
 			<span className='inline-flex items-center text-primary gap-1'>
 				<Activity className='size-3' />
-				<span className='text-[11px] font-medium truncate'>Live</span>
+				<span className={iconOnly ? 'sr-only' : 'text-[11px] font-medium truncate'}>Live</span>
 			</span>
 		</SimpleTooltip>
 	);
