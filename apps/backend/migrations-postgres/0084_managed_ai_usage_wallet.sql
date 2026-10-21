@@ -122,6 +122,14 @@ CREATE TABLE "credit_wallet" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "example_chat_allowance" (
+	"user_id" text NOT NULL,
+	"scope" text NOT NULL,
+	"used_runs" integer DEFAULT 0 NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "example_chat_allowance_user_id_scope_pk" PRIMARY KEY("user_id","scope")
+);
+--> statement-breakpoint
 CREATE TABLE "managed_ai_usage" (
 	"id" text PRIMARY KEY NOT NULL,
 	"operation_id" text NOT NULL,
@@ -170,6 +178,7 @@ ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_proj
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_wallet_id_credit_wallet_id_fk" FOREIGN KEY ("wallet_id") REFERENCES "public"."credit_wallet"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_usage_id_managed_ai_usage_id_fk" FOREIGN KEY ("usage_id") REFERENCES "public"."managed_ai_usage"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_wallet" ADD CONSTRAINT "credit_wallet_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "example_chat_allowance" ADD CONSTRAINT "example_chat_allowance_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_wallet_id_credit_wallet_id_fk" FOREIGN KEY ("wallet_id") REFERENCES "public"."credit_wallet"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -186,13 +195,4 @@ CREATE INDEX "managed_ai_usage_userId_runId_idx" ON "managed_ai_usage" USING btr
 CREATE INDEX "managed_ai_usage_projectId_startedAt_idx" ON "managed_ai_usage" USING btree ("project_id","started_at","id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_chatId_idx" ON "managed_ai_usage" USING btree ("chat_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_chatMessageId_idx" ON "managed_ai_usage" USING btree ("chat_message_id");--> statement-breakpoint
-CREATE INDEX "managed_ai_usage_status_idx" ON "managed_ai_usage" USING btree ("status");--> statement-breakpoint
-CREATE TABLE "example_chat_allowance" (
-	"user_id" text NOT NULL,
-	"scope" text NOT NULL,
-	"used_runs" integer DEFAULT 0 NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "example_chat_allowance_user_id_scope_pk" PRIMARY KEY("user_id","scope")
-);
---> statement-breakpoint
-ALTER TABLE "example_chat_allowance" ADD CONSTRAINT "example_chat_allowance_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+CREATE INDEX "managed_ai_usage_status_idx" ON "managed_ai_usage" USING btree ("status");
