@@ -586,8 +586,15 @@
     {
       "idx": 83,
       "version": "7",
-      "when": 1792510651849,
-      "tag": "0083_managed_ai_usage_wallet",
+      "when": 1792583257419,
+      "tag": "0083_organization_license",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1792591716776,
+      "tag": "0084_managed_ai_usage_wallet",
       "breakpoints": true
     }
   ]
