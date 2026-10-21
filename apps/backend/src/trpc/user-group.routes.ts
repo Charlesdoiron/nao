@@ -7,6 +7,7 @@ import {
 	EMPTY_MCP_ACCESS,
 	FREE_CUSTOM_USER_GROUP_LIMIT,
 	isMicrosoftEntraGroupId,
+	MAX_PRELOADED_SKILLS,
 	type McpAccess,
 	normalizeDatabaseContextAccess,
 	normalizeFileTreeAccess,
@@ -65,6 +66,7 @@ const toolCallDensityPolicySchema = z.object({
 	canChange: z.boolean(),
 });
 const projectSharingSchema = z.enum(PROJECT_SHARING_PERMISSIONS);
+const preloadedSkillsSchema = z.array(z.string().trim().min(1).max(200)).max(MAX_PRELOADED_SKILLS);
 const contextNameSchema = z.string().trim().min(1).max(255);
 const databaseContextGrantSchema = z.discriminatedUnion('kind', [
 	z
@@ -313,6 +315,7 @@ export const userGroupRoutes = {
 				toolCallDensityPolicy: toolCallDensityPolicySchema.default(DEFAULT_TOOL_CALL_DENSITY_POLICY),
 				projectSharing: projectSharingSchema.default('inherit'),
 				showAllSettings: z.boolean().default(false),
+				preloadedSkills: preloadedSkillsSchema.default([]),
 				databaseAccess: databaseAccessSchema.default(EMPTY_DATABASE_CONTEXT_ACCESS),
 				docsAccess: fileTreeAccessSchema.default(EMPTY_DOCS_CONTEXT_ACCESS),
 				filesAccess: fileTreeAccessSchema.default(EMPTY_FILES_CONTEXT_ACCESS),
@@ -355,6 +358,7 @@ export const userGroupRoutes = {
 					input.projectSharing,
 					mcpAccess,
 					input.showAllSettings,
+					input.preloadedSkills,
 				] as const;
 				return createUserGroup(...values);
 			});
@@ -371,6 +375,7 @@ export const userGroupRoutes = {
 				toolCallDensityPolicy: toolCallDensityPolicySchema,
 				projectSharing: projectSharingSchema.optional(),
 				showAllSettings: z.boolean().optional(),
+				preloadedSkills: preloadedSkillsSchema.optional(),
 				databaseAccess: databaseAccessSchema.optional(),
 				docsAccess: fileTreeAccessSchema.optional(),
 				filesAccess: fileTreeAccessSchema.optional(),
@@ -412,6 +417,7 @@ export const userGroupRoutes = {
 					toolCallDensityPolicy: input.toolCallDensityPolicy,
 					projectSharing: input.projectSharing,
 					showAllSettings: input.showAllSettings,
+					preloadedSkills: input.preloadedSkills,
 					...(databaseAccess === undefined ? {} : { databaseAccess }),
 					...(docsAccess === undefined ? {} : { docsAccess }),
 					...(filesAccess === undefined ? {} : { filesAccess }),
