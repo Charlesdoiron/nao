@@ -157,14 +157,17 @@ describe('AssistantTextWithCitation', () => {
 		[
 			'You’ve finished the Jaffle Shop preview. [Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
 			'Set up your own project',
+			'You’ve finished the Jaffle Shop preview. This conversation is saved.',
 		],
 		[
 			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. [Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
 			'Contact support',
+			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. If you need help debugging your setup.',
 		],
-	])('keeps legacy message text above its action', (message, actionLabel) => {
+	])('keeps legacy message text above its action', (message, actionLabel, expectedMessage) => {
 		const { container } = renderAnswer(message);
 
+		expect(container.textContent).toContain(expectedMessage);
 		expect(container.textContent?.trim().endsWith(actionLabel)).toBe(true);
 	});
 
