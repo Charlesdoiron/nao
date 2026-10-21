@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => ({
 	activeProjectId: null as string | null,
 	isFetching: false,
 	project: null as { id: string } | null,
+	queries: [] as Array<{ queryKey: string[]; enabled?: boolean }>,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
-	useQuery: (options: { queryKey: string[] }) => {
+	useQuery: (options: { queryKey: string[]; enabled?: boolean }) => {
+		mocks.queries.push(options);
 		switch (options.queryKey[0]) {
 			case 'project':
 				return { data: mocks.project };
@@ -30,7 +32,7 @@ vi.mock('@tanstack/react-query', () => ({
 }));
 
 vi.mock('@/lib/active-project', () => ({
-	getActiveProjectId: () => mocks.activeProjectId,
+	useActiveProjectId: () => mocks.activeProjectId,
 }));
 
 vi.mock('@/main', () => ({
@@ -49,6 +51,7 @@ beforeEach(() => {
 	mocks.activeProjectId = null;
 	mocks.isFetching = false;
 	mocks.project = null;
+	mocks.queries = [];
 });
 
 it('hides cached sharing access and members when no project is active', () => {
@@ -60,6 +63,8 @@ it('hides cached sharing access and members when no project is active', () => {
 	expect(result.current.audience.canShareToProject).toBe(false);
 	expect(result.current.memberPicker.otherMembers).toEqual([]);
 	expect(result.current.memberPicker.filteredMembers).toEqual([]);
+	expect(mocks.queries.find((query) => query.queryKey[0] === 'sharing-access')?.enabled).toBe(false);
+	expect(mocks.queries.find((query) => query.queryKey[0] === 'members')?.enabled).toBe(false);
 });
 
 it('hides previous project sharing data while the selected project refetches', () => {
@@ -74,4 +79,5 @@ it('hides previous project sharing data while the selected project refetches', (
 
 	expect(result.current.audience.canShareToProject).toBe(false);
 	expect(result.current.memberPicker.otherMembers).toEqual([]);
+	expect(result.current.memberPicker.isLoading).toBe(true);
 });

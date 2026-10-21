@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import { ChatPrompt } from './chat-input-prompt';
+import { setActiveProjectId } from '@/lib/active-project';
 
 const mocks = vi.hoisted(() => ({
-	activeProjectId: null as string | null,
 	project: null as { id: string } | null,
+	storage: new Map<string, string>(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -38,7 +39,15 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('prompt-mentions', () => ({
 	Prompt: ({ mentionConfigs }: { mentionConfigs: { options: { id: string; label: string }[] }[] }) => (
-		<div>{mentionConfigs.flatMap((config) => config.options).map((option) => option.label)}</div>
+		<div>
+			{mentionConfigs.flatMap((config) =>
+				config.options.map((option) => (
+					<span key={option.id} data-testid={`mention-${option.id}`}>
+						{option.label}
+					</span>
+				)),
+			)}
+		</div>
 	),
 }));
 
@@ -48,10 +57,6 @@ vi.mock('@/hooks/use-custom-stories-enabled', () => ({
 
 vi.mock('@/hooks/use-effective-user-group-features', () => ({
 	useEffectiveUserGroupFeatures: () => ({ customStoryCreationEnabled: false }),
-}));
-
-vi.mock('@/lib/active-project', () => ({
-	getActiveProjectId: () => mocks.activeProjectId,
 }));
 
 vi.mock('@/main', () => ({
@@ -67,13 +72,37 @@ vi.mock('@/main', () => ({
 }));
 
 beforeEach(() => {
-	mocks.activeProjectId = null;
+	mocks.storage.clear();
+	vi.stubGlobal('localStorage', {
+		getItem: (key: string) => mocks.storage.get(key) ?? null,
+		setItem: (key: string, value: string) => mocks.storage.set(key, value),
+	});
+	setActiveProjectId(null);
 	mocks.project = null;
+});
+
+afterEach(() => {
+	cleanup();
+	vi.unstubAllGlobals();
 });
 
 it('hides cached project mentions when no project is active', () => {
 	render(<ChatPrompt promptRef={{ current: null }} placeholder='' storyCreationEnabled={false} onChange={vi.fn()} />);
 
-	expect(screen.queryByText('Old skill')).toBeNull();
-	expect(screen.queryByText('orders')).toBeNull();
+	expect(screen.queryByTestId('mention-Old skill')).toBeNull();
+	expect(screen.queryByTestId('mention-old.public.orders')).toBeNull();
+});
+
+it('shows project mentions when the active project id is corrected', () => {
+	setActiveProjectId('stale-project');
+	mocks.project = { id: 'current-project' };
+	render(<ChatPrompt promptRef={{ current: null }} placeholder='' storyCreationEnabled={false} onChange={vi.fn()} />);
+
+	expect(screen.queryByTestId('mention-Old skill')).toBeNull();
+	expect(screen.queryByTestId('mention-old.public.orders')).toBeNull();
+
+	act(() => setActiveProjectId('current-project'));
+
+	expect(screen.getByTestId('mention-Old skill')).toBeDefined();
+	expect(screen.getByTestId('mention-old.public.orders')).toBeDefined();
 });

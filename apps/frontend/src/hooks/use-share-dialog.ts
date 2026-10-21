@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { getActiveProjectId } from '@/lib/active-project';
+import { useActiveProjectId } from '@/lib/active-project';
 import { trpc } from '@/main';
 
 export function useShareAudience() {
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = getActiveProjectId();
+	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const access = useQuery({
 		...trpc.userGroup.projectSharingAccess.queryOptions(),
@@ -26,7 +26,7 @@ export function useMemberPicker(currentUserId: string | undefined, initialIds: s
 
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = getActiveProjectId();
+	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const membersQuery = useQuery({
 		...trpc.project.getProjectMembersByChatId.queryOptions({ chatId }),
@@ -72,6 +72,7 @@ export function useMemberPicker(currentUserId: string | undefined, initialIds: s
 		otherMembers,
 		filteredMembers,
 		toggleUser,
+		isLoading: membersQuery.isFetching,
 		membersQuery,
 		reset,
 	};

@@ -3,13 +3,22 @@ import '../src/env';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({
+	handleAgentRoute: vi.fn(),
+}));
+
+vi.mock('../src/handlers/agent', async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
+	return { ...actual, handleAgentRoute: mocks.handleAgentRoute };
+});
+
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { handleExampleAllowanceExhaustedRoute } from '../src/handlers/agent';
 import * as chatQueries from '../src/queries/chat.queries';
 import { EXAMPLE_CHAT_RUN_CAP, ONBOARDING_CHAT_RUN_CAP } from '../src/queries/example-chat-allowance.queries';
 import { agentRoutes, assertExampleChatAllowance } from '../src/routes/agent';
-import { agentService } from '../src/services/agent';
+import * as exampleProjectService from '../src/services/example-project';
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '../src/services/example-project';
 import { ExampleAllowanceExhaustedError } from '../src/utils/error';
 
@@ -60,6 +69,7 @@ describe('example chat allowance', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		mocks.handleAgentRoute.mockReset();
 	});
 
 	it('keeps independent lifetime caps for example and onboarding submissions', async () => {
@@ -110,7 +120,10 @@ describe('example chat allowance', () => {
 			});
 		}
 		const setupError = new Error('Agent setup failed');
-		vi.spyOn(agentService, 'assertBudget').mockRejectedValue(setupError);
+		vi.spyOn(exampleProjectService, 'getSystemExampleProject').mockResolvedValue({
+			id: SYSTEM_EXAMPLE_PROJECT_ID,
+		} as never);
+		mocks.handleAgentRoute.mockRejectedValue(setupError);
 		const post = vi.fn();
 		await agentRoutes({ addHook: vi.fn(), post } as never);
 		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
@@ -266,7 +279,7 @@ describe('example chat allowance', () => {
 		vi.spyOn(chatQueries, 'isOnboardingChat').mockResolvedValue(false);
 		vi.spyOn(chatQueries, 'getChatProjectId').mockResolvedValue(SYSTEM_EXAMPLE_PROJECT_ID);
 		vi.spyOn(chatQueries, 'getChatOwnerId').mockResolvedValue(PROJECT_USER_ID);
-		vi.spyOn(agentService, 'assertBudget').mockRejectedValue(setupError);
+		mocks.handleAgentRoute.mockRejectedValue(setupError);
 		const post = vi.fn();
 		await agentRoutes({ addHook: vi.fn(), post } as never);
 		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
@@ -286,5 +299,12 @@ describe('example chat allowance', () => {
 				{ status: vi.fn().mockReturnThis(), send: vi.fn() },
 			),
 		).rejects.toBe(setupError);
+		expect(mocks.handleAgentRoute).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
+				model: { provider: 'nao', modelId: 'gpt-5.6-sol' },
+				unbilledManagedAiUsage: true,
+			}),
+		);
 	});
 });

@@ -10,7 +10,7 @@ import type { MentionOption, PromptHandle, PromptTheme, SelectedMention } from '
 import type { RefObject } from 'react';
 import { useCustomStoriesEnabled } from '@/hooks/use-custom-stories-enabled';
 import { useEffectiveUserGroupFeatures } from '@/hooks/use-effective-user-group-features';
-import { getActiveProjectId } from '@/lib/active-project';
+import { useActiveProjectId } from '@/lib/active-project';
 import { cn } from '@/lib/utils';
 import { trpc } from '@/main';
 
@@ -106,7 +106,7 @@ export function ChatPrompt({
 }: ChatPromptProps) {
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
 	const projectId = project.data?.id;
-	const activeProjectId = getActiveProjectId();
+	const activeProjectId = useActiveProjectId();
 	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const skillsQuery = useQuery({
 		...trpc.skill.list.queryOptions(),
