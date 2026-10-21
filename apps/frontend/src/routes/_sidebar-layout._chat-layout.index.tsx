@@ -4,7 +4,6 @@ import { ArrowRight, PlusIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
-import { TrialOnboardingBanner } from './_sidebar-layout._chat-layout.$chatId';
 import type { UIMessage } from '@nao/backend/chat';
 import type { StoryItem } from '@/lib/stories-page';
 
@@ -188,15 +187,9 @@ function HomePage() {
 										aria-hidden
 										className='pointer-events-none absolute -top-60 left-1/2 -translate-x-1/2 w-full max-w-2xl select-none -z-10'
 									/>
-									{showProjectSetupCue && <TrialOnboardingBanner />}
 									<ChatInput />
 									<SavedPromptSuggestions />
 								</div>
-								{/* {showProjectSetupCue && (
-									<div className='hidden 2xl:absolute 2xl:right-6 2xl:top-6 2xl:z-20 2xl:block 2xl:w-72'>
-										<TrialOnboardingBanner variant='card' />
-									</div>
-								)} */}
 								{latestStoryItems.length > 0 && (
 									<div className='flex flex-col gap-3 w-full px-4 py-6 max-w-3xl mx-auto'>
 										<div

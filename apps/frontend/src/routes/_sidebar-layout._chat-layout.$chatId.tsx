@@ -376,26 +376,39 @@ export function TrialOnboardingBanner({ variant = 'banner' }: { variant?: 'banne
 				className={cn(
 					'relative flex overflow-hidden border border-violet/20 bg-background',
 					isCard
-						? 'min-h-52 flex-col items-start justify-between gap-6 rounded-2xl p-5 shadow-lg ring-1 ring-violet/10'
+						? 'min-h-48 flex-col items-start justify-between gap-4 rounded-2xl bg-cover bg-center p-4 shadow-lg ring-1 ring-violet/10'
 						: 'mb-2 flex-col items-stretch gap-3 rounded-xl px-4 py-3 shadow-xs sm:flex-row sm:items-center',
 				)}
+				style={
+					isCard
+						? {
+								backgroundImage: "url('/trial-onboarding-background.jpg')",
+								backgroundSize: 'auto 130%',
+							}
+						: undefined
+				}
 			>
-				<img
-					src={logoSrc}
-					alt=''
-					aria-hidden
-					className={cn(
-						'pointer-events-none absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 select-none',
-						isCard ? 'scale-[1.8]' : 'scale-150',
-					)}
-				/>
+				{!isCard && (
+					<img
+						src={logoSrc}
+						alt=''
+						aria-hidden
+						className='pointer-events-none absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 scale-150 select-none'
+					/>
+				)}
 				<div className='relative z-10 min-w-0 flex-1'>
-					<span className='block text-[10px] font-semibold uppercase tracking-[0.16em] text-primary'>
+					<span
+						className={cn(
+							'block text-[10px] font-semibold uppercase tracking-[0.16em]',
+							isCard ? 'text-white/80' : 'text-primary',
+						)}
+					>
 						Guided setup
 					</span>
 					<p
 						className={cn(
-							'font-semibold text-foreground',
+							'font-semibold',
+							isCard ? 'text-white' : 'text-foreground',
 							isCard ? 'font-borna mt-3 text-xl tracking-tight' : 'mt-0.5 text-sm',
 						)}
 					>
@@ -403,7 +416,7 @@ export function TrialOnboardingBanner({ variant = 'banner' }: { variant?: 'banne
 					</p>
 					<p
 						className={cn(
-							'text-muted-foreground',
+							isCard ? 'text-white/80' : 'text-muted-foreground',
 							isCard ? 'mt-2 text-sm leading-relaxed' : 'mt-0.5 text-xs',
 						)}
 					>
@@ -414,8 +427,8 @@ export function TrialOnboardingBanner({ variant = 'banner' }: { variant?: 'banne
 					asChild
 					size={isCard ? 'default' : 'sm'}
 					className={cn(
-						'relative z-10 shrink-0 rounded-full',
-						isCard ? 'w-full justify-between' : 'self-start sm:self-center',
+						'rounded-full bg-white/20 text-white backdrop-blur hover:bg-white/30',
+						isCard ? 'mt-auto w-fit self-end' : 'self-start sm:self-center',
 					)}
 				>
 					<Link to='/onboarding'>

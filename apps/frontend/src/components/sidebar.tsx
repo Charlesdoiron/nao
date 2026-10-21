@@ -41,6 +41,7 @@ import { trpc } from '@/main';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useUnreadAutomationRunCount, useUnreadCount } from '@/queries/use-notifications';
 import { useSession } from '@/lib/auth-client';
+import { TrialOnboardingBanner } from '@/routes/_sidebar-layout._chat-layout.$chatId';
 
 export function Sidebar() {
 	const navigate = useNavigate();
@@ -68,6 +69,12 @@ export function Sidebar() {
 	const isSettingsRoute = matchRoute({ to: '/settings', fuzzy: true });
 	const isInSettings = !!isSettingsRoute && !isViewer;
 	const effectiveIsCollapsed = isMobile ? false : isCollapsed;
+	const showTrialOnboarding =
+		isCloud &&
+		project.isSuccess &&
+		project.data === null &&
+		locationPath !== '/onboarding' &&
+		!effectiveIsCollapsed;
 
 	useEffect(() => {
 		setToggleHintOpen(false);
@@ -288,6 +295,11 @@ export function Sidebar() {
 						isTrial={project.isSuccess && project.data === null}
 					/>
 				</>
+			)}
+			{showTrialOnboarding && (
+				<div className='mx-2 mb-2'>
+					<TrialOnboardingBanner variant='card' />
+				</div>
 			)}
 			{!isInSettings && <div className='border-b border-sidebar-border mx-2'></div>}
 
