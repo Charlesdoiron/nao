@@ -1617,7 +1617,7 @@ export const exampleChatAllowance = sqliteTable(
 	{
 		userId: text('user_id')
 			.notNull()
-			.references(() => user.id),
+			.references(() => user.id, { onDelete: 'cascade' }),
 		scope: text('scope', { enum: EXAMPLE_CHAT_ALLOWANCE_SCOPES }).$type<ExampleChatAllowanceScope>().notNull(),
 		usedRuns: integer('used_runs').notNull().default(0),
 		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })

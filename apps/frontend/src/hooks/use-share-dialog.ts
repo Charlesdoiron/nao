@@ -1,14 +1,19 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { getActiveProjectId } from '@/lib/active-project';
 import { trpc } from '@/main';
 
 export function useShareAudience() {
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const projectId = project.data?.id;
+	const activeProjectId = getActiveProjectId();
+	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const access = useQuery({
 		...trpc.userGroup.projectSharingAccess.queryOptions(),
-		enabled: project.data != null,
+		enabled: hasProject,
 	});
-	const canShareToProject = access.data?.canShareToProject === true;
+	const canShareToProject = hasProject && !access.isFetching && access.data?.canShareToProject === true;
 	return {
 		canShareToProject,
 		emptyMessage: canShareToProject ? undefined : 'No other members in your groups',
@@ -20,14 +25,19 @@ export function useMemberPicker(currentUserId: string | undefined, initialIds: s
 	const [search, setSearch] = useState('');
 
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const projectId = project.data?.id;
+	const activeProjectId = getActiveProjectId();
+	const hasProject = projectId != null && (!activeProjectId || activeProjectId === projectId);
 	const membersQuery = useQuery({
 		...trpc.project.getProjectMembersByChatId.queryOptions({ chatId }),
-		enabled: project.data != null,
+		enabled: hasProject,
 	});
 
 	const otherMembers = useMemo(() => {
-		return (membersQuery.data ?? []).filter((m) => m.id !== currentUserId);
-	}, [membersQuery.data, currentUserId]);
+		return hasProject && !membersQuery.isFetching
+			? (membersQuery.data ?? []).filter((m) => m.id !== currentUserId)
+			: [];
+	}, [hasProject, membersQuery.data, membersQuery.isFetching, currentUserId]);
 
 	const filteredMembers = useMemo(() => {
 		if (!search.trim()) {

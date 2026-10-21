@@ -8,7 +8,7 @@ import { trpc } from '@/main';
 export function useModelSelection() {
 	const { selectedModel, usesDefaultModel, setSelectedModel } = useAgentContext();
 	const currentProjectQuery = useQuery(trpc.project.getCurrent.queryOptions());
-	const hasProject = currentProjectQuery.data != null;
+	const hasProject = currentProjectQuery.isError || currentProjectQuery.data != null;
 	const availableModelsQuery = useQuery({
 		...trpc.project.listAvailableTranscribeModels.queryOptions(),
 		enabled: hasProject,

@@ -155,12 +155,11 @@ export async function resolveProviderModel(
 		if (!isManagedAiEnabled() || !usageContext?.userId || !apiKey || !isKnownModel(provider, modelId)) {
 			return null;
 		}
-		const byokSources = await getProjectModelSources(projectId);
-		if (
-			usageContext.billingMode !== 'unbilled' &&
-			byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))
-		) {
-			return null;
+		if (usageContext.billingMode !== 'unbilled') {
+			const byokSources = await getProjectModelSources(projectId);
+			if (byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))) {
+				return null;
+			}
 		}
 		const model = createProviderModel(provider, { apiKey }, modelId);
 		const project = await projectQueries.getProjectById(projectId);

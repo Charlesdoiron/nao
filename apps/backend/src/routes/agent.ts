@@ -114,7 +114,7 @@ export const agentRoutes = async (app: App) => {
 			);
 			return createAgentStreamResponse(stream);
 		}
-		if (isExampleProject && !usesExampleAllowance) {
+		if (isExampleProject && !body.chatId && !usesExampleAllowance) {
 			return reply.status(403).send({ error: 'Example conversations are unavailable after project setup' });
 		}
 

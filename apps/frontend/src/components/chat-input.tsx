@@ -723,10 +723,6 @@ function BudgetBanner() {
 	const budgetLevel = budgetError ? 'exceeded' : (budgetStatus.data?.level ?? 'ok');
 	const budgetMessage = budgetError ?? (budgetLevel !== 'ok' ? budgetStatus.data?.message : null);
 
-	if (!hasProject) {
-		return null;
-	}
-
 	if (managedExhausted) {
 		return (
 			<ManagedCreditsBanner

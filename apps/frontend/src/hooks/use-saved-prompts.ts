@@ -4,10 +4,15 @@ import { trpc } from '@/main';
 
 export function useSavedPromptsQuery() {
 	const project = useQuery(trpc.project.getCurrent.queryOptions());
-	return useQuery({
+	const savedPromptsQuery = useQuery({
 		...trpc.project.getSavedPrompts.queryOptions(),
-		enabled: project.data != null,
+		enabled: project.isError || project.data != null,
 	});
+	return {
+		...savedPromptsQuery,
+		data: project.data === null ? undefined : savedPromptsQuery.data,
+		isLoading: project.isPending || savedPromptsQuery.isLoading,
+	};
 }
 
 /** CRUD mutations for saved prompts */

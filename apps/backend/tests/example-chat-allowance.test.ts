@@ -7,12 +7,9 @@ import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
 import { handleExampleAllowanceExhaustedRoute } from '../src/handlers/agent';
 import * as chatQueries from '../src/queries/chat.queries';
-import {
-	EXAMPLE_CHAT_RUN_CAP,
-	ONBOARDING_CHAT_RUN_CAP,
-	releaseExampleChatRun,
-} from '../src/queries/example-chat-allowance.queries';
-import { assertExampleChatAllowance } from '../src/routes/agent';
+import { EXAMPLE_CHAT_RUN_CAP, ONBOARDING_CHAT_RUN_CAP } from '../src/queries/example-chat-allowance.queries';
+import { agentRoutes, assertExampleChatAllowance } from '../src/routes/agent';
+import { agentService } from '../src/services/agent';
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '../src/services/example-project';
 import { ExampleAllowanceExhaustedError } from '../src/utils/error';
 
@@ -105,14 +102,30 @@ describe('example chat allowance', () => {
 	});
 
 	it('restores a reserved run when setup fails before streaming', async () => {
-		for (let run = 0; run < EXAMPLE_CHAT_RUN_CAP; run += 1) {
+		for (let run = 1; run < EXAMPLE_CHAT_RUN_CAP; run += 1) {
 			await assertExampleChatAllowance({
 				userId: RECOVERABLE_USER_ID,
 				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
 				isOnboarding: false,
 			});
 		}
-		await releaseExampleChatRun(RECOVERABLE_USER_ID, 'example');
+		const setupError = new Error('Agent setup failed');
+		vi.spyOn(agentService, 'assertBudget').mockRejectedValue(setupError);
+		const post = vi.fn();
+		await agentRoutes({ addHook: vi.fn(), post } as never);
+		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
+
+		await expect(
+			handler(
+				{
+					user: { id: RECOVERABLE_USER_ID },
+					project: undefined,
+					body: { message: { text: 'Reserved prompt' }, mode: 'example' },
+					headers: {},
+				},
+				{},
+			),
+		).rejects.toBe(setupError);
 		await expect(
 			assertExampleChatAllowance({
 				userId: RECOVERABLE_USER_ID,
@@ -172,7 +185,56 @@ describe('example chat allowance', () => {
 		expect(streamedText).toBe(responseText);
 	});
 
-	it('does not consume the allowance after the user has a real project', async () => {
+	it('creates and streams a new chat for a rejected project-less turn', async () => {
+		const chatId = 'new-rejected-example-chat';
+		const prompt = 'Rejected new example prompt';
+		const chat = {
+			id: chatId,
+			projectId: SYSTEM_EXAMPLE_PROJECT_ID,
+			userId: EXHAUSTED_USER_ID,
+			title: prompt,
+			isStarred: false,
+			createdAt: new Date(),
+			updatedAt: new Date(),
+		};
+		const createChat = vi
+			.spyOn(chatQueries, 'createChat')
+			.mockResolvedValue([chat as never, { id: 'new-user-message' } as never]);
+		vi.spyOn(chatQueries, 'getChat').mockResolvedValue([chat as never]);
+		vi.spyOn(chatQueries, 'upsertMessage').mockResolvedValue({ messageId: 'assistant-message' });
+
+		const result = await handleExampleAllowanceExhaustedRoute({
+			userId: EXHAUSTED_USER_ID,
+			projectId: SYSTEM_EXAMPLE_PROJECT_ID,
+			message: { text: prompt },
+			chatId: undefined,
+			isOnboarding: false,
+		});
+		const chunks = [];
+		const reader = result.stream.getReader();
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			chunks.push(value);
+		}
+
+		expect(createChat).toHaveBeenCalledWith(
+			expect.objectContaining({
+				userId: EXHAUSTED_USER_ID,
+				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
+			}),
+			expect.objectContaining({ text: prompt, source: 'web' }),
+			[],
+		);
+		expect(result.chatId).toBe(chatId);
+		expect(chunks.find((chunk) => chunk.type === 'data-newChat')).toMatchObject({
+			data: { id: chatId, projectId: SYSTEM_EXAMPLE_PROJECT_ID },
+		});
+	});
+
+	it('resumes an existing example chat without consuming allowance after project setup', async () => {
 		const orgId = 'project-org';
 		await db.insert(s.organization).values({ id: orgId, name: 'Project Org', slug: orgId });
 		await db.insert(s.orgMember).values({ orgId, userId: PROJECT_USER_ID, role: 'admin' });
@@ -199,5 +261,30 @@ describe('example chat allowance', () => {
 				and(eq(s.exampleChatAllowance.userId, PROJECT_USER_ID), eq(s.exampleChatAllowance.scope, 'example')),
 			);
 		expect(rows).toHaveLength(0);
+
+		const setupError = new Error('Existing example chat reached agent setup');
+		vi.spyOn(chatQueries, 'isOnboardingChat').mockResolvedValue(false);
+		vi.spyOn(chatQueries, 'getChatProjectId').mockResolvedValue(SYSTEM_EXAMPLE_PROJECT_ID);
+		vi.spyOn(chatQueries, 'getChatOwnerId').mockResolvedValue(PROJECT_USER_ID);
+		vi.spyOn(agentService, 'assertBudget').mockRejectedValue(setupError);
+		const post = vi.fn();
+		await agentRoutes({ addHook: vi.fn(), post } as never);
+		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
+
+		await expect(
+			handler(
+				{
+					user: { id: PROJECT_USER_ID },
+					project: { id: 'real-project' },
+					body: {
+						chatId: 'existing-example-chat',
+						message: { text: 'Continue the example conversation' },
+						mode: 'example',
+					},
+					headers: {},
+				},
+				{ status: vi.fn().mockReturnThis(), send: vi.fn() },
+			),
+		).rejects.toBe(setupError);
 	});
 });
