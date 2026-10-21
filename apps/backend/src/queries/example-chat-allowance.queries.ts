@@ -4,8 +4,8 @@ import s from '../db/abstractSchema';
 import { db } from '../db/db';
 import type { ExampleChatAllowanceScope } from '../types/example-chat-allowance';
 
-export const EXAMPLE_CHAT_RUN_CAP = 3;
-export const ONBOARDING_CHAT_RUN_CAP = 5;
+export const EXAMPLE_CHAT_RUN_CAP = 30;
+export const ONBOARDING_CHAT_RUN_CAP = 100;
 
 export async function consumeExampleChatRun(userId: string, scope: ExampleChatAllowanceScope): Promise<boolean> {
 	const cap = scope === 'example' ? EXAMPLE_CHAT_RUN_CAP : ONBOARDING_CHAT_RUN_CAP;
