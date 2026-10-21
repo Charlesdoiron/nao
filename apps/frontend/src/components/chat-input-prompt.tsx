@@ -103,8 +103,13 @@ export function ChatPrompt({
 	onChange,
 	onEnter,
 }: ChatPromptProps) {
-	const { data: skills } = useQuery(trpc.skill.list.queryOptions());
-	const { data: databaseObjects } = useQuery(trpc.project.getDatabaseObjects.queryOptions());
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const hasProject = project.data != null;
+	const { data: skills } = useQuery({ ...trpc.skill.list.queryOptions(), enabled: hasProject });
+	const { data: databaseObjects } = useQuery({
+		...trpc.project.getDatabaseObjects.queryOptions(),
+		enabled: hasProject,
+	});
 	const storyMentionOptions = useStoryMentionOptions(storyCreationEnabled);
 	const promptTheme = minHeight ? { ...theme, minHeight } : theme;
 

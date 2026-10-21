@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Settings, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,7 +11,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { isSameModel, useModelSelection } from '@/hooks/use-model-selection';
 import { usePermissions } from '@/hooks/use-permissions';
 import { getShortcutLabel } from '@/lib/keyboard-shortcuts';
-import { trpc } from '@/main';
 
 /** Listed as an option rather than a link, so that the keyboard reaches it like any other. */
 const MANAGE_MODELS_VALUE = 'manage-models';
@@ -31,10 +29,9 @@ export function ChatInputModelSelect() {
 		setSelectedModel,
 		isPending,
 		canCycleModels,
+		hasProject,
 	} = useModelSelection();
 	const { isTooltipOpen, onTooltipOpenChange, onSelectOpenChange } = useSelectTriggerTooltip();
-
-	const project = useQuery(trpc.project.getCurrent.queryOptions());
 
 	// Fall back to the nao default when the pinned model is no longer available
 	useEffect(() => {
@@ -74,11 +71,19 @@ export function ChatInputModelSelect() {
 	const selectedModelName = usesDefaultModel ? NAO_DEFAULT_LABEL : (resolvedModelName ?? 'Select model');
 	const selectValue = usesDefaultModel ? NAO_DEFAULT_VALUE : selectedModel ? modelValue(selectedModel) : undefined;
 
-	if (isPending || project.isPending) {
+	if (isPending) {
 		return null;
 	}
 
 	if (!availableModels?.length) {
+		if (!hasProject) {
+			return (
+				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
+					<LlmProviderIcon provider='nao' className='size-4' />
+					<span>{NAO_DEFAULT_LABEL}</span>
+				</div>
+			);
+		}
 		return (
 			<Link
 				to='/settings/project/models'

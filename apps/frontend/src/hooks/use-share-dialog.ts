@@ -3,7 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { trpc } from '@/main';
 
 export function useShareAudience() {
-	const access = useQuery(trpc.userGroup.projectSharingAccess.queryOptions());
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const access = useQuery({
+		...trpc.userGroup.projectSharingAccess.queryOptions(),
+		enabled: project.data != null,
+	});
 	const canShareToProject = access.data?.canShareToProject === true;
 	return {
 		canShareToProject,
@@ -15,7 +19,11 @@ export function useMemberPicker(currentUserId: string | undefined, initialIds: s
 	const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(() => new Set(initialIds));
 	const [search, setSearch] = useState('');
 
-	const membersQuery = useQuery(trpc.project.getProjectMembersByChatId.queryOptions({ chatId }));
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	const membersQuery = useQuery({
+		...trpc.project.getProjectMembersByChatId.queryOptions({ chatId }),
+		enabled: project.data != null,
+	});
 
 	const otherMembers = useMemo(() => {
 		return (membersQuery.data ?? []).filter((m) => m.id !== currentUserId);

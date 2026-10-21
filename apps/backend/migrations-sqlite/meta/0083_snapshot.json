@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2aab98cd-558e-4fd0-92db-f9b8c5c8c5aa",
+  "id": "12753e5d-15e3-42a7-9cc2-35f87301d6ce",
   "prevId": "36b8a337-4cc8-4566-988f-90e0fcdbf4cd",
   "tables": {
     "account": {
@@ -2790,6 +2790,68 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "example_chat_allowance": {
+      "name": "example_chat_allowance",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "used_runs": {
+          "name": "used_runs",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "example_chat_allowance_user_id_user_id_fk": {
+          "name": "example_chat_allowance_user_id_user_id_fk",
+          "tableFrom": "example_chat_allowance",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "example_chat_allowance_user_id_scope_pk": {
+          "columns": [
+            "user_id",
+            "scope"
+          ],
+          "name": "example_chat_allowance_user_id_scope_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

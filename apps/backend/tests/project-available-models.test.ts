@@ -104,6 +104,13 @@ describe('getProjectAvailableModels', () => {
 				category: 'chat',
 			}),
 		).resolves.toBeNull();
+		await expect(
+			resolveProviderModel('project-1', 'nao', 'gpt-5.6-sol', true, {
+				userId: 'user-1',
+				category: 'chat',
+				billingMode: 'unbilled',
+			}),
+		).resolves.not.toBeNull();
 	});
 
 	it('hides managed models when the wallet has no credits', async () => {

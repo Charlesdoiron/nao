@@ -3,7 +3,11 @@ import type { SavedPrompt } from '@nao/backend/saved-prompts';
 import { trpc } from '@/main';
 
 export function useSavedPromptsQuery() {
-	return useQuery(trpc.project.getSavedPrompts.queryOptions());
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
+	return useQuery({
+		...trpc.project.getSavedPrompts.queryOptions(),
+		enabled: project.data != null,
+	});
 }
 
 /** CRUD mutations for saved prompts */

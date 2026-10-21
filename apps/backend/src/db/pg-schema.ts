@@ -75,6 +75,7 @@ import {
 	RecommendationImpact,
 	RecommendationInsight,
 } from '../types/context-recommendation';
+import { EXAMPLE_CHAT_ALLOWANCE_SCOPES, type ExampleChatAllowanceScope } from '../types/example-chat-allowance';
 import { LLM_INFERENCE_TYPES, type ModelSettingsMap } from '../types/llm';
 import { LOG_LEVELS, LOG_SOURCES } from '../types/log';
 import {
@@ -1502,6 +1503,22 @@ export const llmInference = pgTable(
 		index('llm_inference_type_idx').on(t.type),
 		index('llm_inference_createdAt_idx').on(t.createdAt),
 	],
+);
+
+export const exampleChatAllowance = pgTable(
+	'example_chat_allowance',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id),
+		scope: text('scope', { enum: EXAMPLE_CHAT_ALLOWANCE_SCOPES }).$type<ExampleChatAllowanceScope>().notNull(),
+		usedRuns: integer('used_runs').notNull().default(0),
+		updatedAt: timestamp('updated_at')
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.scope] })],
 );
 
 export const creditWallet = pgTable(

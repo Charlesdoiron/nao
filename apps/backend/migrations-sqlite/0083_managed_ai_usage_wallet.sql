@@ -183,4 +183,12 @@ CREATE INDEX `managed_ai_usage_userId_runId_idx` ON `managed_ai_usage` (`user_id
 CREATE INDEX `managed_ai_usage_projectId_startedAt_idx` ON `managed_ai_usage` (`project_id`,`started_at`,`id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_chatId_idx` ON `managed_ai_usage` (`chat_id`);--> statement-breakpoint
 CREATE INDEX `managed_ai_usage_chatMessageId_idx` ON `managed_ai_usage` (`chat_message_id`);--> statement-breakpoint
-CREATE INDEX `managed_ai_usage_status_idx` ON `managed_ai_usage` (`status`);
+CREATE INDEX `managed_ai_usage_status_idx` ON `managed_ai_usage` (`status`);--> statement-breakpoint
+CREATE TABLE `example_chat_allowance` (
+	`user_id` text NOT NULL,
+	`scope` text NOT NULL,
+	`used_runs` integer DEFAULT 0 NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	PRIMARY KEY(`user_id`, `scope`),
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
+);

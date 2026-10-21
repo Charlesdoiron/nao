@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { McpServerStatus } from '@nao/shared';
-import { trpcClient } from '@/main';
+import { trpc, trpcClient } from '@/main';
 import { useMemoObject } from '@/hooks/useMemoObject';
 
 interface McpContextValue {
@@ -15,15 +16,21 @@ const McpContext = createContext<McpContextValue | null>(null);
 export function McpProvider({ children }: { children: ReactNode }) {
 	const [servers, setServers] = useState<McpServerStatus[] | undefined>(undefined);
 	const [configError, setConfigError] = useState<string | null>(null);
+	const project = useQuery(trpc.project.getCurrent.queryOptions());
 
 	const refresh = useCallback(async () => {
+		if (!project.data) {
+			setServers(undefined);
+			setConfigError(null);
+			return;
+		}
 		const [data, error] = await Promise.all([
 			trpcClient.mcp.getServers.query(),
 			trpcClient.mcp.getConfigError.query(),
 		]);
 		setServers(data);
 		setConfigError(error);
-	}, []);
+	}, [project.data]);
 
 	useEffect(() => {
 		refresh();

@@ -156,7 +156,10 @@ export async function resolveProviderModel(
 			return null;
 		}
 		const byokSources = await getProjectModelSources(projectId);
-		if (byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))) {
+		if (
+			usageContext.billingMode !== 'unbilled' &&
+			byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))
+		) {
 			return null;
 		}
 		const model = createProviderModel(provider, { apiKey }, modelId);
