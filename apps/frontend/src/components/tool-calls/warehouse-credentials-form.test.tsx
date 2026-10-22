@@ -68,7 +68,7 @@ describe('WarehouseCredentialsForm', () => {
 		);
 
 		expect((screen.getByLabelText(/Access Token/).closest('fieldset') as HTMLFieldSetElement).disabled).toBe(true);
-		expect(screen.getByText('Credentials are locked while the connection is being set up.')).toBeTruthy();
+		expect(screen.getByText('Credentials are locked once the connection setup has started.')).toBeTruthy();
 		expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
 	});
 });
