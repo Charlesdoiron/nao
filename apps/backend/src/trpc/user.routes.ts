@@ -129,7 +129,8 @@ export const userRoutes = {
 		}),
 
 	getPreferences: protectedProcedure.query(async ({ ctx }) => {
-		return userPreferenceQueries.getUserPreferences(ctx.user.id);
+		const { supportRequestSentAt: _, ...preferences } = await userPreferenceQueries.getUserPreferences(ctx.user.id);
+		return preferences;
 	}),
 
 	updatePreferences: protectedProcedure

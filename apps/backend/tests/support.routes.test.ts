@@ -1,11 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { StoredUserPreferences } from '../src/types/usage';
+
+type MutateUserPreferences = (
+	userId: string,
+	transform: (preferences: StoredUserPreferences) => StoredUserPreferences,
+) => Promise<StoredUserPreferences>;
+
 const mocks = vi.hoisted(() => ({
 	isEmailEnabled: vi.fn(),
 	sendEmail: vi.fn(),
+	mutateUserPreferences: vi.fn<MutateUserPreferences>(),
+	preferences: {} as StoredUserPreferences,
 }));
 
 vi.mock('../src/auth', () => ({ getSession: vi.fn() }));
+vi.mock('../src/queries/user-preference.queries', () => ({
+	mutateUserPreferences: mocks.mutateUserPreferences,
+}));
 vi.mock('../src/services/email', () => ({
 	emailService: {
 		isEnabled: mocks.isEmailEnabled,
@@ -23,6 +35,11 @@ describe('support.submit', () => {
 		vi.clearAllMocks();
 		mocks.isEmailEnabled.mockReturnValue(true);
 		mocks.sendEmail.mockResolvedValue(undefined);
+		mocks.preferences = {};
+		mocks.mutateUserPreferences.mockImplementation(async (_, transform) => {
+			mocks.preferences = transform(mocks.preferences);
+			return mocks.preferences;
+		});
 	});
 
 	it('emails the authenticated user’s request to support', async () => {
@@ -48,6 +65,25 @@ describe('support.submit', () => {
 			code: 'PRECONDITION_FAILED',
 		});
 		expect(mocks.sendEmail).not.toHaveBeenCalled();
+	});
+
+	it('rate limits repeated requests from the same user', async () => {
+		const caller = createCaller();
+		await caller.support.submit({ request: 'First request' });
+
+		await expect(caller.support.submit({ request: 'Second request' })).rejects.toMatchObject({
+			code: 'TOO_MANY_REQUESTS',
+		});
+		expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
+	});
+
+	it('releases the rate limit reservation when email delivery fails', async () => {
+		mocks.sendEmail.mockRejectedValueOnce(new Error('SMTP unavailable')).mockResolvedValueOnce(undefined);
+		const caller = createCaller();
+
+		await expect(caller.support.submit({ request: 'First request' })).rejects.toThrow('SMTP unavailable');
+		await expect(caller.support.submit({ request: 'Retry request' })).resolves.toEqual({ success: true });
+		expect(mocks.sendEmail).toHaveBeenCalledTimes(2);
 	});
 });
 

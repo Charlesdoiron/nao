@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { TRPCClientError } from '@trpc/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantTextWithCitation } from './citation-text';
+import type { TrpcRouter } from '@nao/backend/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
@@ -32,7 +34,7 @@ const renderAnswer = (text: string, isStreaming = false) => {
 describe('AssistantTextWithCitation', () => {
 	afterEach(() => {
 		cleanup();
-		vi.clearAllMocks();
+		mocks.submitSupportRequest.mockReset();
 	});
 
 	it('suppresses a backticked saved file throughout streaming', () => {
@@ -156,6 +158,11 @@ describe('AssistantTextWithCitation', () => {
 		fireEvent.change(screen.getByRole('textbox', { name: 'Support request' }), {
 			target: { value: 'Please help me connect my warehouse.' },
 		});
+		fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Contact support' }));
+		expect((screen.getByRole('textbox', { name: 'Support request' }) as HTMLTextAreaElement).value).toBe(
+			'Please help me connect my warehouse.',
+		);
 		fireEvent.click(screen.getByRole('button', { name: 'Send to support' }));
 
 		await waitFor(() => {
@@ -164,6 +171,35 @@ describe('AssistantTextWithCitation', () => {
 			});
 			expect(screen.getByRole('heading', { name: 'Request sent' })).toBeDefined();
 		});
+		fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Contact support' }));
+		expect((screen.getByRole('textbox', { name: 'Support request' }) as HTMLTextAreaElement).value).toBe('');
+	});
+
+	it('offers an email fallback when in-app support is unavailable', async () => {
+		mocks.submitSupportRequest.mockRejectedValue(
+			TRPCClientError.from<TrpcRouter>({
+				error: {
+					code: -32012,
+					message: 'In-app support is not available on this deployment.',
+					data: { code: 'PRECONDITION_FAILED', httpStatus: 412 },
+				},
+			}),
+		);
+		renderAnswer('[Contact support](mailto:support@getnao.io)');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Contact support' }));
+		fireEvent.change(screen.getByRole('textbox', { name: 'Support request' }), {
+			target: { value: 'Please help me connect my warehouse.' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'Send to support' }));
+
+		expect((await screen.findByRole('alert')).textContent).toBe(
+			'In-app support is not available on this deployment.',
+		);
+		expect(screen.getByRole('link', { name: 'Open email app' }).getAttribute('href')).toBe(
+			'mailto:support@getnao.io?subject=nao%20support%20request&body=Please%20help%20me%20connect%20my%20warehouse.',
+		);
 	});
 
 	it.each([

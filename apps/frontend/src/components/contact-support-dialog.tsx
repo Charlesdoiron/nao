@@ -1,6 +1,8 @@
+import { TRPCClientError } from '@trpc/client';
 import { ArrowRight, Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import type { TrpcRouter } from '@nao/backend/trpc';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,12 +22,13 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 	const [isPending, setIsPending] = useState(false);
 	const [isSent, setIsSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [useMailFallback, setUseMailFallback] = useState(false);
 
 	const handleOpenChange = (nextOpen: boolean) => {
 		if (nextOpen) {
-			setRequest('');
 			setIsSent(false);
 			setError(null);
+			setUseMailFallback(false);
 		}
 		setOpen(nextOpen);
 	};
@@ -39,11 +42,21 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 
 		setIsPending(true);
 		setError(null);
+		setUseMailFallback(false);
 		try {
 			await trpcClient.support.submit.mutate({ request: trimmedRequest });
+			setRequest('');
 			setIsSent(true);
-		} catch {
-			setError('We couldn’t send your request. Please try again.');
+		} catch (cause) {
+			if (
+				isTrpcClientError(cause) &&
+				(cause.data?.code === 'PRECONDITION_FAILED' || cause.data?.code === 'TOO_MANY_REQUESTS')
+			) {
+				setError(cause.message);
+				setUseMailFallback(cause.data.code === 'PRECONDITION_FAILED');
+			} else {
+				setError('We couldn’t send your request. Please try again.');
+			}
 		} finally {
 			setIsPending(false);
 		}
@@ -119,21 +132,45 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 									{error}
 								</p>
 							)}
-							<Button
-								variant='primary-gradient'
-								size='lg'
-								className='self-end rounded-full px-7'
-								type='submit'
-								disabled={isPending || !request.trim()}
-							>
-								{isPending && <Loader2 className='animate-spin' />}
-								{isPending ? 'Sending…' : 'Send to support'}
-								{!isPending && <ArrowRight className='size-4' />}
-							</Button>
+							{useMailFallback ? (
+								<Button
+									asChild
+									variant='primary-gradient'
+									size='lg'
+									className='self-end rounded-full px-7'
+								>
+									<a href={buildSupportMailto(request)}>
+										Open email app
+										<ArrowRight className='size-4' />
+									</a>
+								</Button>
+							) : (
+								<Button
+									variant='primary-gradient'
+									size='lg'
+									className='self-end rounded-full px-7'
+									type='submit'
+									disabled={isPending || !request.trim()}
+								>
+									{isPending && <Loader2 className='animate-spin' />}
+									{isPending ? 'Sending…' : 'Send to support'}
+									{!isPending && <ArrowRight className='size-4' />}
+								</Button>
+							)}
 						</form>
 					</>
 				)}
 			</DialogContent>
 		</Dialog>
 	);
+}
+
+function isTrpcClientError(error: unknown): error is TRPCClientError<TrpcRouter> {
+	return error instanceof TRPCClientError;
+}
+
+function buildSupportMailto(request: string): string {
+	const subject = encodeURIComponent('nao support request');
+	const body = encodeURIComponent(request.trim());
+	return `mailto:support@getnao.io?subject=${subject}&body=${body}`;
 }
