@@ -94,7 +94,7 @@ export function WarehouseCommandProgress({
 	const label = WAREHOUSE_PROGRESS_LABELS[status];
 	const isReady = status === 'ready';
 	const isStopped = status === 'failed' || status === 'cancelled';
-	const showLogs = (status === 'debugging' || status === 'syncing') && Boolean(logs?.trim());
+	const showLogs = Boolean(logs?.trim());
 
 	return (
 		<div className='rounded-xl border border-violet/20 bg-background/95 px-4 py-3 shadow-sm backdrop-blur'>
@@ -124,7 +124,9 @@ export function WarehouseCommandProgress({
 				aria-label={label}
 				aria-valuemin={0}
 				aria-valuemax={100}
-				aria-valuenow={isReady ? 100 : (syncProgress ?? undefined)}
+				aria-valuenow={
+					status === 'debugging' || (status === 'syncing' && syncProgress === null) ? undefined : progress
+				}
 				className='mt-2 h-1.5 overflow-hidden rounded-full bg-muted'
 			>
 				<div
@@ -197,6 +199,10 @@ export type OnboardingProgressState = {
 	step: number;
 };
 
+export function isDeployStepReached(progress: OnboardingProgressState | null): boolean {
+	return (progress?.flow === 'new' || progress?.flow === 'local') && progress.step >= 3;
+}
+
 export function getCompletedSteps(
 	progress: OnboardingProgressState | null,
 	stepCount: number,
@@ -220,9 +226,7 @@ export function isOnboardingComplete(
 	progress: OnboardingProgressState | null,
 	warehouseReady: boolean,
 ): boolean {
-	const progressComplete =
-		((progress?.flow === 'new' || progress?.flow === 'local') && progress.step >= 3) ||
-		(progress?.flow === 'github' && progress.step === 2);
+	const progressComplete = isDeployStepReached(progress) || (progress?.flow === 'github' && progress.step === 2);
 	return hasProject && (warehouseReady || progressComplete);
 }
 

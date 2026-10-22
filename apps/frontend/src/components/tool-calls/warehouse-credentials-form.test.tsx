@@ -52,7 +52,7 @@ describe('WarehouseCredentialsForm', () => {
 		expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
 	});
 
-	it('shows accepted credentials in a locked state', () => {
+	it('shows credentials in a locked state', () => {
 		render(
 			<WarehouseCredentialsForm
 				provider='motherduck'

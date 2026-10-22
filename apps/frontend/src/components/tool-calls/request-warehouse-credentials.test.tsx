@@ -9,6 +9,7 @@ import type { ToolCallComponentProps } from '.';
 const mocks = vi.hoisted(() => ({
 	isRunning: true,
 	jobStatus: 'awaiting_context',
+	jobError: null as Error | null,
 	activeJobId: 'job-1' as string | undefined,
 	activeJobIsFetched: true,
 	messages: [] as never[],
@@ -28,7 +29,14 @@ vi.mock('@tanstack/react-query', () => ({
 					data: mocks.activeJobId ? { id: mocks.activeJobId, provider: 'postgres' } : undefined,
 					isFetched: mocks.activeJobIsFetched,
 				}
-			: { data: { provider: 'postgres', status: mocks.jobStatus }, isError: false },
+			: {
+					data:
+						options.queryKey[1] && !mocks.jobError
+							? { provider: 'postgres', status: mocks.jobStatus }
+							: undefined,
+					isError: Boolean(options.queryKey[1] && mocks.jobError),
+					error: options.queryKey[1] ? mocks.jobError : null,
+				},
 	useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
@@ -51,7 +59,7 @@ vi.mock('@/main', () => ({
 				queryOptions: () => ({ queryKey: ['active-job'] }),
 			},
 			getWarehouseProvisioningStatus: {
-				queryOptions: () => ({ queryKey: ['job'] }),
+				queryOptions: ({ jobId }: { jobId: string }) => ({ queryKey: ['job', jobId] }),
 			},
 			startWarehouseProvisioning: {
 				mutationOptions: () => ({}),
@@ -87,6 +95,7 @@ afterEach(() => {
 	cleanup();
 	mocks.isRunning = true;
 	mocks.jobStatus = 'awaiting_context';
+	mocks.jobError = null;
 	mocks.activeJobId = 'job-1';
 	mocks.activeJobIsFetched = true;
 	mocks.messages = [];
@@ -203,5 +212,24 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 				text: '[internal:onboarding-context-request] jobId=new-job',
 			}),
 		);
+	});
+
+	it('allows retrying when a restored provisioning job cannot be loaded', async () => {
+		mocks.jobError = new Error('Warehouse setup job not found');
+		const toolPart = {
+			type: 'tool-request_warehouse_credentials',
+			toolCallId: 'tool-1',
+			state: 'output-available',
+			input: { provider: 'postgres' },
+			output: { provider: 'postgres', status: 'credentials-required' },
+		} as ToolCallComponentProps<'request_warehouse_credentials'>['toolPart'];
+		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
+
+		expect(await screen.findByText('Postgres setup needs attention')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Review setup' }));
+		expect(await screen.findByText('Warehouse setup job not found')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+		expect(await screen.findByRole('button', { name: 'Verify credentials' })).toBeTruthy();
 	});
 });

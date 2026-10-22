@@ -103,11 +103,22 @@ describe('storyShare.getLiveQueryData', () => {
 	});
 
 	it('refuses a projectless user who is not eligible for the example project', async () => {
+		mocks.getSharedStoryByStoryId.mockResolvedValue({
+			id: 'share-1',
+			projectId: 'system-example-project',
+			userId: 'system-example-user',
+			visibility: 'project',
+			storyId: 'story-1',
+			chatId: 'chat-1',
+			slug: 'customers',
+			code: STORY_CODE,
+		});
 		mocks.getUserRoleInProject.mockResolvedValue(null);
 
 		await expect(
 			createCaller('member-1').storyShare.getLiveQueryData({ storyId: 'story-1', queryId: 'q_customers' }),
 		).rejects.toMatchObject({ code: 'FORBIDDEN' });
+		expect(mocks.canUserAccessSystemExampleProject).toHaveBeenCalledWith('member-1', 'system-example-project');
 	});
 });
 

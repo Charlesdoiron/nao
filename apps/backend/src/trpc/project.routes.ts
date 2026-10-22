@@ -38,7 +38,7 @@ import {
 } from '../services/default-models.service';
 import { discordService } from '../services/discord';
 import { canUseDiscordInProject, DiscordConnectionError, validateDiscordConnection } from '../services/discord-helpers';
-import { getExampleProjectForUser } from '../services/example-project';
+import { getSystemExampleProject } from '../services/example-project';
 import { mattermostService } from '../services/mattermost';
 import { MattermostConnectionError, validateMattermostConnection } from '../services/mattermost-helpers';
 import { mcpService } from '../services/mcp';
@@ -960,7 +960,7 @@ export const projectRoutes = {
 	getSavedPrompts: protectedProcedure.query(async ({ ctx }) => {
 		const project =
 			(await projectQueries.getProjectByUserId(ctx.user.id, ctx.selectedProjectId)) ??
-			(await getExampleProjectForUser(ctx.user.id));
+			(await getSystemExampleProject());
 		return project ? savedPromptQueries.listSavedPrompts(project.id) : [];
 	}),
 

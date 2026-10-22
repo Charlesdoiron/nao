@@ -1,3 +1,4 @@
+import { LOCAL_DATABASE_ID } from '@nao/shared/tools';
 import { eq } from 'drizzle-orm';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -69,7 +70,7 @@ describe('system example project', () => {
 			db.select().from(s.storyVersion).where(eq(s.storyVersion.storyId, SYSTEM_EXAMPLE_STORY_ID)),
 			db.select().from(s.sharedStory).where(eq(s.sharedStory.storyId, SYSTEM_EXAMPLE_STORY_ID)),
 			db
-				.select({ toolOutput: s.messagePart.toolOutput })
+				.select({ toolInput: s.messagePart.toolInput, toolOutput: s.messagePart.toolOutput })
 				.from(s.messagePart)
 				.innerJoin(s.chatMessage, eq(s.chatMessage.id, s.messagePart.messageId))
 				.where(eq(s.chatMessage.chatId, SYSTEM_EXAMPLE_CHAT_ID)),
@@ -90,6 +91,9 @@ describe('system example project', () => {
 		expect(parts.map(({ toolOutput }) => (toolOutput as { id: string }).id).sort()).toEqual(
 			Object.keys(JAFFLE_SHOP_STORY.queries).sort(),
 		);
+		expect(
+			parts.every(({ toolInput }) => (toolInput as { database_id?: string }).database_id === LOCAL_DATABASE_ID),
+		).toBe(true);
 
 		const queryData = await getLatestSqlQueryDataByIds(
 			SYSTEM_EXAMPLE_CHAT_ID,

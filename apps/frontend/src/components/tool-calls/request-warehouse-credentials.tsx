@@ -138,7 +138,7 @@ export function RequestWarehouseCredentialsToolCall({
 	}
 
 	const setupReady = job.data?.status === 'ready';
-	const setupFailed = job.data?.status === 'failed' || job.data?.status === 'cancelled';
+	const setupFailed = job.isError || job.data?.status === 'failed' || job.data?.status === 'cancelled';
 	const setupInProgress = startProvisioning.isPending || (jobId !== null && !setupReady && !setupFailed);
 	const credentialsVerified =
 		validatedCredentialFingerprint !== null &&
@@ -299,14 +299,15 @@ function WarehouseProvisioningProgress({
 	job: ReturnType<typeof useWarehouseProvisioningJob>;
 	onRetry: () => void;
 }) {
-	if (job.isError) {
-		return <FormError error={job.error.message} />;
-	}
-
-	if (job.data?.status === 'failed' || job.data?.status === 'cancelled') {
+	const setupError = job.isError
+		? job.error.message
+		: job.data?.status === 'failed' || job.data?.status === 'cancelled'
+			? (job.data.error ?? 'Warehouse setup failed.')
+			: null;
+	if (setupError) {
 		return (
 			<div className='flex flex-col gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4'>
-				<FormError error={job.data.error ?? 'Warehouse setup failed.'} />
+				<FormError error={setupError} />
 				<Button variant='outline' size='sm' onClick={onRetry}>
 					Try again
 				</Button>

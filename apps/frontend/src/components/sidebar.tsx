@@ -18,6 +18,7 @@ import type { LucideIcon } from 'lucide-react';
 import NaoLogo from '@/components/icons/nao-logo.svg';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { TrialOnboardingBanner } from '@/components/trial-onboarding-banner';
 import { useCommandMenuCallback } from '@/contexts/command-menu-callback';
 import { useSidebar } from '@/contexts/sidebar';
 import { brandingAssetUrl, useBranding } from '@/hooks/use-branding';
@@ -36,7 +37,6 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useCanSeeAdvancedSettings } from '@/hooks/use-can-see-advanced-settings';
 import { useUnreadAutomationRunCount, useUnreadCount } from '@/queries/use-notifications';
 import { useSession } from '@/lib/auth-client';
-import { TrialOnboardingBanner } from '@/routes/_sidebar-layout._chat-layout.$chatId';
 
 export function Sidebar() {
 	const navigate = useNavigate();

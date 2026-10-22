@@ -1,4 +1,5 @@
 import { SYSTEM_EXAMPLE_PROJECT_ID } from '@nao/shared';
+import { LOCAL_DATABASE_ID } from '@nao/shared/tools';
 
 import s from '../db/abstractSchema';
 import { db, type DBExecutor, type DBTransaction } from '../db/db';
@@ -140,6 +141,7 @@ function buildSeedStatements(executor: DBExecutor) {
 					toolState: 'output-available',
 					toolInput: {
 						sql_query: query.sql,
+						database_id: LOCAL_DATABASE_ID,
 						name: query.name,
 					},
 					toolOutput: {
@@ -162,6 +164,7 @@ function buildSeedStatements(executor: DBExecutor) {
 						toolState: 'output-available',
 						toolInput: {
 							sql_query: query.sql,
+							database_id: LOCAL_DATABASE_ID,
 							name: query.name,
 						},
 						toolOutput: {

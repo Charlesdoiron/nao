@@ -60,6 +60,7 @@ function usePromptRotation(savedPrompts: SavedPrompt[] | undefined, n: number) {
 
 	useEffect(() => {
 		if (!savedPrompts || savedPrompts.length <= n) {
+			setHidePrompts(false);
 			return setDisplayedPrompts(savedPrompts ?? []);
 		}
 

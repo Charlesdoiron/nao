@@ -8,6 +8,7 @@ import { ChatMessages } from '@/components/chat-messages/chat-messages';
 import { MobileHeader } from '@/components/mobile-header';
 import {
 	findWarehouseJobId,
+	isDeployStepReached,
 	isOnboardingComplete,
 	OnboardingProgress,
 	useOnboardingProgress,
@@ -42,6 +43,8 @@ interface OnboardingSearch {
 	chatId?: string;
 	github?: 'connected';
 }
+
+const DEPLOYMENT_POLL_INTERVALS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
 
 export const Route = createFileRoute('/_sidebar-layout/onboarding')({
 	validateSearch: (search: Record<string, unknown>): OnboardingSearch => ({
@@ -89,10 +92,17 @@ function OnboardingPage() {
 	const { isOrgAdmin } = usePermissions();
 	const { data: session } = useSession();
 	const queryClient = useQueryClient();
-	const waitingForDeployment = (progress?.flow === 'new' || progress?.flow === 'local') && progress.step >= 3;
+	const waitingForDeployment = isDeployStepReached(progress);
 	const currentProject = useQuery({
 		...trpc.project.getCurrent.queryOptions(),
-		refetchInterval: (query) => (waitingForDeployment && query.state.data == null ? 2_000 : false),
+		refetchInterval: (query) => {
+			if (!waitingForDeployment || query.state.data != null || query.state.status === 'error') {
+				return false;
+			}
+			return DEPLOYMENT_POLL_INTERVALS[
+				Math.min(query.state.dataUpdateCount, DEPLOYMENT_POLL_INTERVALS.length - 1)
+			];
+		},
 		refetchOnWindowFocus: 'always',
 	});
 	const search = Route.useSearch();

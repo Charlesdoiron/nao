@@ -410,7 +410,7 @@ export function WarehouseCredentialsForm({
 			{locked ? (
 				<div className='flex items-center gap-2 text-sm text-muted-foreground'>
 					<Lock className='size-4' />
-					<span>Credentials are locked while the connection is being set up.</span>
+					<span>Credentials are locked once the connection setup has started.</span>
 				</div>
 			) : (
 				<form.Subscribe selector={(state) => [state.canSubmit, state.values] as const}>

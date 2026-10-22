@@ -65,8 +65,7 @@ function HomePage() {
 	const isCloud = useIsCloud();
 	const showProjectSetupCue = project.isSuccess && project.data === null;
 	const showExampleProject = isCloud && (showProjectSetupCue || exampleSearch === true);
-	const storiesProjectId =
-		project.data?.id ?? (isCloud && showProjectSetupCue ? SYSTEM_EXAMPLE_PROJECT_ID : undefined);
+	const storiesProjectId = showExampleProject ? SYSTEM_EXAMPLE_PROJECT_ID : project.data?.id;
 	const stateTitle = `${username ? capitalize(username) : ''}, what do you want to analyze?`;
 	const isDark = useIsDarkMode();
 	const stories = useQuery({
@@ -137,6 +136,41 @@ function HomePage() {
 	]);
 	const storyGroups = useMemo(() => buildStoryGroups(latestStoryItems), [latestStoryItems]);
 	const hasMoreStories = storyCount > storyCols;
+	const storiesGrid =
+		latestStoryItems.length > 0 ? (
+			<div className='flex flex-col gap-3 w-full px-4 py-6 max-w-3xl mx-auto'>
+				<div
+					ref={storiesGridRef}
+					className='grid gap-x-5 gap-y-2'
+					style={{
+						gridTemplateColumns: `repeat(${storyCols}, minmax(0, 1fr))`,
+					}}
+				>
+					{renderStoryGroupHeaders(storyGroups)}
+					{latestStoryItems.map((item, index) => (
+						<div key={item.storyId} style={{ gridColumn: index + 1, gridRow: 2 }}>
+							<StoryCard item={item} displayMode='grid' showArchived={false} />
+						</div>
+					))}
+				</div>
+				{!showExampleProject && hasMoreStories && (
+					<button
+						type='button'
+						onClick={() => navigate({ to: '/stories', search: { folderId: null } })}
+						className={cn(
+							'h-9 rounded-lg border border-dashed border-muted-foreground/20 px-3',
+							'flex items-center gap-2 text-muted-foreground/50 bg-sidebar dark:bg-background',
+							'hover:border-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-pointer',
+						)}
+					>
+						<div className='flex items-center justify-center gap-2 flex-1 min-w-0 pl-1.5'>
+							<PlusIcon className='size-3 shrink-0' />
+							<span className='text-xs truncate'>Show more</span>
+						</div>
+					</button>
+				)}
+			</div>
+		) : null;
 
 	const logoSrc = isDark ? '/darkLogo.svg' : '/lightLogo.svg';
 	const cardLogoSrc = isDark ? '/dark-card-logo.svg' : '/light-card-logo.svg';
@@ -190,24 +224,7 @@ function HomePage() {
 									<ChatInput />
 									<SavedPromptSuggestions />
 								</div>
-								{latestStoryItems.length > 0 && (
-									<div className='flex flex-col gap-3 w-full px-4 py-6 max-w-3xl mx-auto'>
-										<div
-											ref={storiesGridRef}
-											className='grid gap-x-5 gap-y-2'
-											style={{
-												gridTemplateColumns: `repeat(${storyCols}, minmax(0, 1fr))`,
-											}}
-										>
-											{renderStoryGroupHeaders(storyGroups)}
-											{latestStoryItems.map((item, index) => (
-												<div key={item.storyId} style={{ gridColumn: index + 1, gridRow: 2 }}>
-													<StoryCard item={item} displayMode='grid' showArchived={false} />
-												</div>
-											))}
-										</div>
-									</div>
-								)}
+								{storiesGrid}
 							</>
 						) : showProjectSetupCue ? (
 							<div className='flex w-full max-w-3xl justify-center px-4 py-6'>
@@ -234,40 +251,7 @@ function HomePage() {
 									<ChatInput />
 									<SavedPromptSuggestions />
 								</div>
-								{latestStoryItems.length > 0 && (
-									<div className='flex flex-col gap-3 w-full px-4 py-6 max-w-3xl mx-auto'>
-										<div
-											ref={storiesGridRef}
-											className='grid gap-x-5 gap-y-2'
-											style={{
-												gridTemplateColumns: `repeat(${storyCols}, minmax(0, 1fr))`,
-											}}
-										>
-											{renderStoryGroupHeaders(storyGroups)}
-											{latestStoryItems.map((item, index) => (
-												<div key={item.storyId} style={{ gridColumn: index + 1, gridRow: 2 }}>
-													<StoryCard item={item} displayMode='grid' showArchived={false} />
-												</div>
-											))}
-										</div>
-										{hasMoreStories && (
-											<button
-												type='button'
-												onClick={() => navigate({ to: '/stories', search: { folderId: null } })}
-												className={cn(
-													'h-9 rounded-lg border border-dashed border-muted-foreground/20 px-3',
-													'flex items-center gap-2 text-muted-foreground/50 bg-sidebar dark:bg-background',
-													'hover:border-muted-foreground/40 hover:text-muted-foreground transition-colors cursor-pointer',
-												)}
-											>
-												<div className='flex items-center justify-center gap-2 flex-1 min-w-0 pl-1.5'>
-													<PlusIcon className='size-3 shrink-0' />
-													<span className='text-xs truncate'>Show more</span>
-												</div>
-											</button>
-										)}
-									</div>
-								)}
+								{storiesGrid}
 							</>
 						)}
 					</div>

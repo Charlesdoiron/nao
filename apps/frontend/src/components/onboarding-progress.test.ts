@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getCompletedSteps, isOnboardingComplete } from './onboarding-progress';
+import { getCompletedSteps, isDeployStepReached, isOnboardingComplete } from './onboarding-progress';
 
 vi.mock('@/main', () => ({ trpc: {} }));
+
+describe('isDeployStepReached', () => {
+	it.each([
+		[null, false],
+		[{ flow: 'new', step: 2 }, false],
+		[{ flow: 'new', step: 3 }, true],
+		[{ flow: 'local', step: 3 }, true],
+		[{ flow: 'github', step: 3 }, false],
+		[{ flow: 'database', step: 3 }, false],
+	] as const)('detects the new and local deployment milestone', (progress, expected) => {
+		expect(isDeployStepReached(progress)).toBe(expected);
+	});
+});
 
 describe('isOnboardingComplete', () => {
 	it.each([
