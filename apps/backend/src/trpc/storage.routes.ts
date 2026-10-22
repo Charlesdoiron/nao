@@ -2,7 +2,7 @@ import { env } from '../env';
 import * as projectQueries from '../queries/project.queries';
 import { getStorageConfig, getStorageHealth, isStorageEnabled } from '../services/storage';
 import { getProjectUsageByUser, getScopeUsage } from '../services/storage/usage';
-import { adminProtectedProcedure, advancedSettingsProtectedProcedure, projectProtectedProcedure, protectedProcedure } from './trpc';
+import { adminProtectedProcedure, advancedSettingsProtectedProcedure, protectedProcedure } from './trpc';
 
 export const storageRoutes = {
 	getConfig: adminProtectedProcedure.query(() => getStorageConfig()),
