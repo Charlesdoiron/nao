@@ -1,8 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, PencilRuler, Database, Library, Paperclip, AlertTriangle, Shield, Check } from 'lucide-react';
 import { ATTACHMENT_ACCEPT } from '@nao/shared/attachments';
+import { toStoryReferenceMentionId } from '@nao/shared';
 import { story } from '@nao/shared/tools';
 import { Button, ChatButton, MicButton } from './ui/button';
 import { SlidingWaveform } from './chat-input-sliding-waveform';
@@ -12,6 +13,7 @@ import {
 	openMentionMenuAtEnd,
 	openReferenceMenuAtEnd,
 	SKILL_MENTION_TRIGGER,
+	STORY_REFERENCE_MENTION_TRIGGER,
 	useStoryMentionOptions,
 	useStoryReferenceOptions,
 } from './chat-input-prompt';
@@ -28,6 +30,7 @@ import {
 import type { MentionOption, PromptHandle, SelectedMention } from 'prompt-mentions';
 import type { FormEvent } from 'react';
 import type { AgentHelpers } from '@/hooks/use-agent';
+import type { StoryReferences } from '@/lib/story-reference';
 import { ContextWindowRing } from '@/components/ui/chat-input-context-window-ring';
 import { SimpleTooltip } from '@/components/ui/tooltip';
 
@@ -44,7 +47,14 @@ import { useModelSelection } from '@/hooks/use-model-selection';
 import { usePermissions } from '@/hooks/use-permissions';
 import { getShortcut } from '@/lib/keyboard-shortcuts';
 import { matchesShortcut } from '@/lib/platform';
-import { STORIES_ROOT_ID, TABLES_ROOT_ID } from '@/lib/reference-mention-menu';
+import {
+	STORIES_ROOT_ID,
+	TABLES_ROOT_ID,
+	toStoryFolderReferenceOption,
+	toStoryReferenceOption,
+} from '@/lib/reference-mention-menu';
+import { hasAnyStoryReference, isStoryDrag, readDroppedReferences } from '@/lib/story-reference';
+import { takePendingStoryReferences, usePendingStoryReferences } from '@/stores/story-references';
 import { messageQueueStore } from '@/stores/chat-message-queue';
 import { chatInputRestoreStore, useChatInputRestore } from '@/stores/chat-input-restore';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
@@ -68,6 +78,7 @@ type ChatInputBaseProps = {
 	onCancel?: () => void;
 	onSubmitMessage: AgentHelpers['queueOrSendMessage'];
 	allowQueueing?: boolean;
+	acceptsPendingStoryReferences?: boolean;
 };
 
 type ChatInputInlineProps = {
@@ -77,7 +88,13 @@ type ChatInputInlineProps = {
 	onSubmitMessage: AgentHelpers['queueOrSendMessage'];
 };
 
-export function ChatInput({ variant = 'default' }: { variant?: ChatInputVariant }) {
+export function ChatInput({
+	variant = 'default',
+	acceptsPendingStoryReferences = false,
+}: {
+	variant?: ChatInputVariant;
+	acceptsPendingStoryReferences?: boolean;
+}) {
 	const promptRef = useRef<PromptHandle>(null);
 	const { queueOrSendMessage } = useAgentContext();
 
@@ -89,7 +106,15 @@ export function ChatInput({ variant = 'default' }: { variant?: ChatInputVariant 
 		requestAnimationFrame(() => promptRef.current?.focus());
 	});
 
-	return <ChatInputBase promptRef={promptRef} variant={variant} onSubmitMessage={queueOrSendMessage} allowQueueing />;
+	return (
+		<ChatInputBase
+			promptRef={promptRef}
+			variant={variant}
+			onSubmitMessage={queueOrSendMessage}
+			allowQueueing
+			acceptsPendingStoryReferences={acceptsPendingStoryReferences}
+		/>
+	);
 }
 
 export function ChatInputInline({ className, initialText, onCancel, onSubmitMessage }: ChatInputInlineProps) {
@@ -115,6 +140,7 @@ function ChatInputBase({
 	onCancel,
 	onSubmitMessage,
 	allowQueueing,
+	acceptsPendingStoryReferences = false,
 }: ChatInputBaseProps) {
 	const [inputText, setInputText] = useState('');
 	const {
@@ -133,7 +159,9 @@ function ChatInputBase({
 	const { canChatWithNaoData } = usePermissions();
 	const { storyCreationEnabled } = useEffectiveUserGroupFeatures();
 	const storyMentionOptions = useStoryMentionOptions(storyCreationEnabled);
-	const { options: storyReferenceOptions } = useStoryReferenceOptions({ excludeCurrentChat: true });
+	const { options: storyReferenceOptions, isLoaded: areReferenceableStoriesLoaded } = useStoryReferenceOptions({
+		excludeCurrentChat: true,
+	});
 	const chatId = useChatId();
 	const storyBeforeAgentSend = useStoryBeforeAgentSend();
 
@@ -180,6 +208,64 @@ function ChatInputBase({
 
 	useEffect(() => promptRef.current?.focus(), [chatId, promptRef]);
 
+	const queryClient = useQueryClient();
+
+	/** Stories past the referenceable list, such as older ones in a large project, are resolved one by one. */
+	const findStoryReferenceOption = useCallback(
+		async (storyId: string): Promise<MentionOption | null> => {
+			const option = storyReferenceOptions.find(
+				(storyOption) => storyOption.id === toStoryReferenceMentionId(storyId),
+			);
+			if (option) {
+				return option;
+			}
+			const resolved = await queryClient
+				.fetchQuery(trpc.story.resolve.queryOptions({ storyId }))
+				.catch(() => null);
+			return resolved && !resolved.isArchived && resolved.chatId !== chatId
+				? toStoryReferenceOption(resolved)
+				: null;
+		},
+		[storyReferenceOptions, queryClient, chatId],
+	);
+
+	const storyFolders = useQuery(trpc.storyFolder.listTree.queryOptions({ archived: false }));
+
+	const findFolderReferenceOption = useCallback(
+		(folderId: string): MentionOption | null => {
+			const folder = storyFolders.data?.find((storyFolder) => storyFolder.id === folderId);
+			return folder ? toStoryFolderReferenceOption(folder) : null;
+		},
+		[storyFolders.data],
+	);
+
+	const addStoryReferences = useCallback(
+		async ({ storyIds, folderIds }: StoryReferences) => {
+			const storyOptions = await Promise.all(storyIds.map(findStoryReferenceOption));
+			for (const option of [...storyOptions, ...folderIds.map(findFolderReferenceOption)]) {
+				if (option) {
+					promptRef.current?.appendMention(option, STORY_REFERENCE_MENTION_TRIGGER);
+				}
+			}
+			requestAnimationFrame(() => promptRef.current?.focus());
+		},
+		[findStoryReferenceOption, findFolderReferenceOption, promptRef],
+	);
+
+	const pendingStoryReferences = usePendingStoryReferences();
+
+	const areReferencesLoaded = areReferenceableStoriesLoaded && storyFolders.isSuccess;
+
+	useEffect(() => {
+		if (!acceptsPendingStoryReferences || !hasAnyStoryReference(pendingStoryReferences) || !areReferencesLoaded) {
+			return;
+		}
+		const references = takePendingStoryReferences();
+		if (hasAnyStoryReference(references)) {
+			addStoryReferences(references);
+		}
+	}, [acceptsPendingStoryReferences, pendingStoryReferences, areReferencesLoaded, addStoryReferences]);
+
 	useEffect(() => {
 		if (!allowQueueing || !chatInputRestore) {
 			return;
@@ -219,7 +305,7 @@ function ChatInputBase({
 		const handleDragEnter = (e: DragEvent) => {
 			e.preventDefault();
 			dragCounter++;
-			if (e.dataTransfer?.types.includes('Files')) {
+			if (e.dataTransfer?.types.includes('Files') || isStoryDrag(e.dataTransfer)) {
 				setIsDragging(true);
 			}
 		};
@@ -240,6 +326,11 @@ function ChatInputBase({
 			e.preventDefault();
 			dragCounter = 0;
 			setIsDragging(false);
+			const references = readDroppedReferences(e.dataTransfer);
+			if (hasAnyStoryReference(references)) {
+				addStoryReferences(references);
+				return;
+			}
 			if (e.dataTransfer?.files) {
 				attachmentUpload.addFiles(e.dataTransfer.files);
 			}
@@ -255,7 +346,7 @@ function ChatInputBase({
 			el.removeEventListener('dragover', handleDragOver);
 			el.removeEventListener('drop', handleDrop);
 		};
-	}, [attachmentUpload.addFiles]); // eslint-disable-line
+	}, [attachmentUpload.addFiles, addStoryReferences]); // eslint-disable-line
 
 	useEffect(() => {
 		const handler = (e: ClipboardEvent) => {
