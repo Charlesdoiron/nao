@@ -10,7 +10,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod/v4';
 
-import { getProviderAuth, KNOWN_MODELS } from '../agents/providers';
+import { getProviderAuth, isManagedProvider, KNOWN_MODELS } from '../agents/providers';
 import { getDatabaseObjects } from '../agents/user-rules';
 import { env } from '../env';
 import * as chatQueries from '../queries/chat.queries';
@@ -73,7 +73,7 @@ import { extractConfiguredSemanticLayer, extractRequiredEnvVars } from '../utils
 import { findConfigLlmProvider } from '../utils/nao-config-llm';
 import { withQueryResultPreviewsInChat } from '../utils/query-result-preview';
 import { parseAndValidateGeoJson, safeFetch } from '../utils/safe-fetch';
-import { buildCredentialPreviews, previewApiKey } from '../utils/utils';
+import { buildCredentialPreviews, getProcessEnvSourcedVarNames, previewApiKey } from '../utils/utils';
 import {
 	adminProtectedProcedure,
 	advancedSettingsProtectedProcedure,
@@ -281,7 +281,7 @@ export const projectRoutes = {
 		)
 		.output(llmConfigSchema.omit({ createdAt: true, updatedAt: true }))
 		.mutation(async ({ ctx, input }) => {
-			if (input.provider === 'nao') {
+			if (isManagedProvider(input.provider)) {
 				throw new TRPCError({ code: 'BAD_REQUEST', message: 'The nao-managed provider is configured by nao.' });
 			}
 			const existingConfig = await llmConfigQueries.getProjectLlmConfigByProvider(ctx.project.id, input.provider);
@@ -1307,6 +1307,7 @@ export const projectRoutes = {
 		return {
 			required: requiredVars,
 			values: storedVars,
+			setFromProcessEnv: getProcessEnvSourcedVarNames(requiredVars, storedVars),
 		};
 	}),
 

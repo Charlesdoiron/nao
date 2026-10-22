@@ -359,6 +359,7 @@ const OPENAI_COMPATIBLE_CUSTOM: ModelCapabilities = {
 export const PROVIDER_META: ProviderMetaMap = {
 	nao: {
 		auth: { apiKey: 'none' },
+		managed: true,
 		extractorModelId: 'gpt-5.6-luna',
 		summaryModelId: 'gpt-5.6-luna',
 		models: [
@@ -1129,6 +1130,10 @@ export const PROVIDER_META: ProviderMetaMap = {
 /** The metadata of the integration behind a provider, shared by every instance of that kind. */
 export function getProviderMeta(provider: LlmProvider): ProviderMetaMap[LlmProviderKind] {
 	return PROVIDER_META[providerKind(provider)];
+}
+
+export function isManagedProvider(provider: LlmProvider): boolean {
+	return getProviderMeta(provider).managed === true;
 }
 
 export function getDefaultModelId(provider: LlmProvider): string {
