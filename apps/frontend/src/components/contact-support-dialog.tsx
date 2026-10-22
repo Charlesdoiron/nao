@@ -1,5 +1,5 @@
 import { TRPCClientError } from '@trpc/client';
-import { ArrowRight, Check, Loader2 } from 'lucide-react';
+import { ArrowRight, Check, Copy, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type { TrpcRouter } from '@nao/backend/trpc';
@@ -14,20 +14,24 @@ import {
 	DialogTrigger,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { trpcClient } from '@/main';
 
 export function ContactSupportButton({ children }: { children: ReactNode }) {
+	const { isCopied, copy } = useCopyToClipboard();
 	const [open, setOpen] = useState(false);
 	const [request, setRequest] = useState('');
 	const [isPending, setIsPending] = useState(false);
 	const [isSent, setIsSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [copyFailed, setCopyFailed] = useState(false);
 	const [useMailFallback, setUseMailFallback] = useState(false);
 
 	const handleOpenChange = (nextOpen: boolean) => {
 		if (nextOpen) {
 			setIsSent(false);
 			setError(null);
+			setCopyFailed(false);
 			setUseMailFallback(false);
 		}
 		setOpen(nextOpen);
@@ -60,6 +64,11 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 		} finally {
 			setIsPending(false);
 		}
+	};
+
+	const handleCopyRequest = () => {
+		setCopyFailed(false);
+		copy(request.trim()).catch(() => setCopyFailed(true));
 	};
 
 	return (
@@ -133,17 +142,36 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 								</p>
 							)}
 							{useMailFallback ? (
-								<Button
-									asChild
-									variant='primary-gradient'
-									size='lg'
-									className='self-end rounded-full px-7'
-								>
-									<a href={buildSupportMailto(request)}>
-										Open email app
-										<ArrowRight className='size-4' />
-									</a>
-								</Button>
+								<div className='flex flex-col items-end gap-2'>
+									{copyFailed && (
+										<p className='text-sm text-destructive' role='alert'>
+											We couldn’t copy your request. Select the text above and copy it manually.
+										</p>
+									)}
+									<div className='flex flex-wrap justify-end gap-2'>
+										<Button
+											variant='outline'
+											size='lg'
+											className='rounded-full px-7'
+											type='button'
+											onClick={handleCopyRequest}
+										>
+											{isCopied ? <Check className='size-4' /> : <Copy className='size-4' />}
+											{isCopied ? 'Copied' : 'Copy request'}
+										</Button>
+										<Button
+											asChild
+											variant='primary-gradient'
+											size='lg'
+											className='rounded-full px-7'
+										>
+											<a href={buildSupportMailto()}>
+												Open email app
+												<ArrowRight className='size-4' />
+											</a>
+										</Button>
+									</div>
+								</div>
 							) : (
 								<Button
 									variant='primary-gradient'
@@ -169,8 +197,7 @@ function isTrpcClientError(error: unknown): error is TRPCClientError<TrpcRouter>
 	return error instanceof TRPCClientError;
 }
 
-function buildSupportMailto(request: string): string {
+function buildSupportMailto(): string {
 	const subject = encodeURIComponent('nao support request');
-	const body = encodeURIComponent(request.trim());
-	return `mailto:support@getnao.io?subject=${subject}&body=${body}`;
+	return `mailto:support@getnao.io?subject=${subject}`;
 }

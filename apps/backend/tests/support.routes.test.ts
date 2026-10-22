@@ -9,6 +9,7 @@ type MutateUserPreferences = (
 
 const mocks = vi.hoisted(() => ({
 	isEmailEnabled: vi.fn(),
+	logError: vi.fn(),
 	sendEmail: vi.fn(),
 	mutateUserPreferences: vi.fn<MutateUserPreferences>(),
 	preferences: {} as StoredUserPreferences,
@@ -23,6 +24,10 @@ vi.mock('../src/services/email', () => ({
 		isEnabled: mocks.isEmailEnabled,
 		sendEmail: mocks.sendEmail,
 	},
+}));
+vi.mock('../src/utils/logger', () => ({
+	logger: { error: mocks.logError },
+	serializeError: (error: unknown) => ({ message: error instanceof Error ? error.message : String(error) }),
 }));
 
 import { supportRoutes } from '../src/trpc/support.routes';
@@ -84,6 +89,28 @@ describe('support.submit', () => {
 		await expect(caller.support.submit({ request: 'First request' })).rejects.toThrow('SMTP unavailable');
 		await expect(caller.support.submit({ request: 'Retry request' })).resolves.toEqual({ success: true });
 		expect(mocks.sendEmail).toHaveBeenCalledTimes(2);
+	});
+
+	it('preserves the delivery error when releasing the reservation fails', async () => {
+		mocks.sendEmail.mockRejectedValueOnce(new Error('SMTP unavailable'));
+		mocks.mutateUserPreferences
+			.mockImplementationOnce(async (_, transform) => {
+				mocks.preferences = transform(mocks.preferences);
+				return mocks.preferences;
+			})
+			.mockRejectedValueOnce(new Error('Database unavailable'));
+
+		await expect(createCaller().support.submit({ request: 'First request' })).rejects.toThrow('SMTP unavailable');
+		expect(mocks.logError).toHaveBeenCalledWith(
+			'Failed to release support request rate limit reservation.',
+			expect.objectContaining({
+				source: 'system',
+				context: expect.objectContaining({
+					userId: 'user-id',
+					error: { message: 'Database unavailable' },
+				}),
+			}),
+		);
 	});
 });
 

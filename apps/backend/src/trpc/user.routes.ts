@@ -17,6 +17,7 @@ import { canUseDiscordInProject } from '../services/discord-helpers';
 import { addProjectMemberWithUserGroups } from '../services/project-user-group-membership.service';
 import { addTeamMember } from '../services/team-member';
 import { validateAssignableUserGroupIds } from '../services/user-group-availability.service';
+import type { StoredUserPreferences } from '../types/usage';
 import { type DiscordLinkTokenPayload, verifyDiscordLinkToken } from '../utils/discord-link-token';
 import { buildUserAddedEmail } from '../utils/email-builders';
 import {
@@ -129,8 +130,7 @@ export const userRoutes = {
 		}),
 
 	getPreferences: protectedProcedure.query(async ({ ctx }) => {
-		const { supportRequestSentAt: _, ...preferences } = await userPreferenceQueries.getUserPreferences(ctx.user.id);
-		return preferences;
+		return toPublicUserPreferences(await userPreferenceQueries.getUserPreferences(ctx.user.id));
 	}),
 
 	updatePreferences: protectedProcedure
@@ -140,7 +140,7 @@ export const userRoutes = {
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
-			return userPreferenceQueries.updateUserPreferences(ctx.user.id, input);
+			return toPublicUserPreferences(await userPreferenceQueries.updateUserPreferences(ctx.user.id, input));
 		}),
 
 	getMemorySettings: protectedProcedure.query(async ({ ctx }) => {
@@ -173,6 +173,13 @@ export const userRoutes = {
 		return { email: ctx.user.email };
 	}),
 };
+
+function toPublicUserPreferences(
+	preferences: StoredUserPreferences,
+): Omit<StoredUserPreferences, 'supportRequestSentAt'> {
+	const { supportRequestSentAt: _, ...publicPreferences } = preferences;
+	return publicPreferences;
+}
 
 async function resolveDiscordLinkRequest(token: string): Promise<DiscordLinkTokenPayload> {
 	const request = verifyDiscordLinkToken(token);

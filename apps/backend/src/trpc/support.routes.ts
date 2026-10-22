@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import * as userPreferenceQueries from '../queries/user-preference.queries';
 import { emailService } from '../services/email';
 import type { StoredUserPreferences } from '../types/usage';
+import { logger, serializeError } from '../utils/logger';
 import { protectedProcedure } from './trpc';
 
 const SUPPORT_EMAIL = 'support@getnao.io';
@@ -32,7 +33,14 @@ export const supportRoutes = {
 					{ throwOnError: true },
 				);
 			} catch (error) {
-				await releaseSupportRequest(ctx.user.id, reservation);
+				try {
+					await releaseSupportRequest(ctx.user.id, reservation);
+				} catch (releaseError) {
+					logger.error('Failed to release support request rate limit reservation.', {
+						source: 'system',
+						context: { userId: ctx.user.id, error: serializeError(releaseError) },
+					});
+				}
 				throw error;
 			}
 

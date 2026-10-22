@@ -9,6 +9,7 @@ import type { TrpcRouter } from '@nao/backend/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
+	copySupportRequest: vi.fn(),
 	submitSupportRequest: vi.fn(),
 }));
 
@@ -19,6 +20,9 @@ vi.mock('@/main', () => ({
 
 vi.mock('@/hooks/use-attachment-download', () => ({
 	useAttachmentDownload: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+}));
+vi.mock('@/hooks/use-copy-to-clipboard', () => ({
+	useCopyToClipboard: () => ({ copy: mocks.copySupportRequest, isCopied: false }),
 }));
 
 const answer = (text: string, isStreaming = false) => (
@@ -34,6 +38,7 @@ const renderAnswer = (text: string, isStreaming = false) => {
 describe('AssistantTextWithCitation', () => {
 	afterEach(() => {
 		cleanup();
+		mocks.copySupportRequest.mockReset();
 		mocks.submitSupportRequest.mockReset();
 	});
 
@@ -177,6 +182,7 @@ describe('AssistantTextWithCitation', () => {
 	});
 
 	it('offers an email fallback when in-app support is unavailable', async () => {
+		mocks.copySupportRequest.mockResolvedValue(undefined);
 		mocks.submitSupportRequest.mockRejectedValue(
 			TRPCClientError.from<TrpcRouter>({
 				error: {
@@ -197,8 +203,10 @@ describe('AssistantTextWithCitation', () => {
 		expect((await screen.findByRole('alert')).textContent).toBe(
 			'In-app support is not available on this deployment.',
 		);
+		fireEvent.click(screen.getByRole('button', { name: 'Copy request' }));
+		expect(mocks.copySupportRequest).toHaveBeenCalledWith('Please help me connect my warehouse.');
 		expect(screen.getByRole('link', { name: 'Open email app' }).getAttribute('href')).toBe(
-			'mailto:support@getnao.io?subject=nao%20support%20request&body=Please%20help%20me%20connect%20my%20warehouse.',
+			'mailto:support@getnao.io?subject=nao%20support%20request',
 		);
 	});
 
