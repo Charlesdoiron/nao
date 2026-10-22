@@ -8,11 +8,13 @@ import type { LlmProvider } from '@nao/shared/types';
 import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai';
 
 import { env } from '../env';
+import * as creditWalletQueries from '../queries/credit-wallet.queries';
+import * as projectQueries from '../queries/project.queries';
 import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
-import type { ModelCosts } from '../types/llm';
+import type { ModelCosts, ModelSource } from '../types/llm';
 import type { ManagedAiUsageCategory, ManagedAiUsageCostSource, ManagedAiUsageStatus } from '../types/managed-ai-usage';
-import { getProviderMeta } from './providers';
+import { createProviderModel, getProviderMeta } from './providers';
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
@@ -34,6 +36,35 @@ export function isManagedAiEnabled(): boolean {
 		!env.DISABLED_PROVIDERS.includes('nao')
 	);
 }
+
+/** Serves the `nao` models on nao's own OpenAI key and bills every call to the organization's credit wallet. */
+export const managedAiSource: ModelSource = {
+	managed: true,
+
+	async listProviders(projectId) {
+		if (!isManagedAiEnabled() || !(await hasWalletBalance(projectId))) {
+			return [];
+		}
+		const enabledModels = getProviderMeta('nao').models.map((model) => model.id);
+		return [{ provider: 'nao', enabledModels, customModels: [], baseUrl: null }];
+	},
+
+	async resolveModel({ projectId, provider, modelId, usageContext, hasOwnModels }) {
+		const apiKey = process.env.NAO_MANAGED_OPENAI_API_KEY;
+		if (!isManagedAiEnabled() || !apiKey || !usageContext?.userId || !isManagedModel(provider, modelId)) {
+			return null;
+		}
+		if (usageContext.billingMode !== 'unbilled' && (await hasOwnModels())) {
+			return null;
+		}
+		const orgId = usageContext.orgId ?? (await projectQueries.getProjectById(projectId))?.orgId ?? undefined;
+		const result = createProviderModel(provider, { apiKey }, modelId);
+		return {
+			...result,
+			model: withManagedAiUsageMetering(result.model, provider, modelId, { ...usageContext, projectId, orgId }),
+		};
+	},
+};
 
 export function withManagedAiUsageMetering(
 	model: LanguageModelV3,
@@ -335,4 +366,14 @@ function toTokenUsage(usage: LanguageModelV3Usage): TokenUsage {
 		outputReasoningTokens: usage.outputTokens.reasoning,
 		totalTokens: (usage.inputTokens.total ?? 0) + outputTotalTokens,
 	};
+}
+
+async function hasWalletBalance(projectId: string): Promise<boolean> {
+	const project = await projectQueries.getProjectById(projectId);
+	const summary = project?.orgId ? await creditWalletQueries.getCreditSummary(project.orgId) : null;
+	return (summary?.balanceMicroUsd ?? 0) > 0;
+}
+
+function isManagedModel(provider: LlmProvider, modelId: string): boolean {
+	return getProviderMeta(provider).models.some((model) => model.id === modelId);
 }
