@@ -11,7 +11,14 @@ import {
 import { env } from '../env';
 import * as projectQueries from '../queries/project.queries';
 import * as projectLlmConfigQueries from '../queries/project-llm-config.queries';
-import type { CustomModelMetadata, ProviderSettings } from '../types/llm';
+import type {
+	CustomModelMetadata,
+	ModelRequest,
+	ModelSettingsMap,
+	ModelSource,
+	ProviderModelSource,
+	ProviderSettings,
+} from '../types/llm';
 import { type ConfigLlm, type ConfigLlmProvider, findConfigLlmProvider, readProjectConfigLlm } from './nao-config-llm';
 
 export { getDefaultModelId };
@@ -94,7 +101,7 @@ export function getEnvModelSelections(): LlmSelectedModel[] {
 	}));
 }
 
-/** Resolve API key + base URL for a provider from DB config, nao_config.yaml or env vars. */
+/** Resolve API key + base URL for a provider from the first model source that hands out credentials for it. */
 export async function resolveProviderSettings(
 	projectId: string,
 	provider: LlmProvider,
@@ -102,37 +109,18 @@ export async function resolveProviderSettings(
 	if (isProviderDisabled(provider)) {
 		return null;
 	}
-	const config = await projectLlmConfigQueries.getProjectLlmConfigByProvider(projectId, provider);
-	if (config) {
-		return {
-			apiKey: config.apiKey,
-			...(config.baseUrl && { baseURL: config.baseUrl }),
-			...(config.credentials && { credentials: config.credentials }),
-		};
+	for (const source of MODEL_SOURCES) {
+		const settings = await source.resolveSettings?.(projectId, provider);
+		if (settings) {
+			return settings;
+		}
 	}
-
-	const configured = findConfigLlmProvider(await getProjectConfigLlm(projectId), provider);
-	if (configured) {
-		return toProviderSettings(configured);
-	}
-
-	const envApiKey = getEnvApiKey(provider);
-	if (envApiKey) {
-		const envBaseUrl = getEnvBaseUrl(provider);
-		return { apiKey: envApiKey, ...(envBaseUrl && { baseURL: envBaseUrl }) };
-	}
-
-	if (hasEnvApiKey(provider)) {
-		const envBaseUrl = getEnvBaseUrl(provider);
-		return { apiKey: '', ...(envBaseUrl && { baseURL: envBaseUrl }) };
-	}
-
 	return null;
 }
 
 /**
- * Resolve a provider model from DB config, falling back to nao_config.yaml then env vars.
- * Returns null when no source has credentials for the provider.
+ * Resolve a provider model from the first model source that has credentials for it: DB config,
+ * then nao_config.yaml, then env vars. Returns null when no source has credentials for the provider.
  */
 export async function resolveProviderModel(
 	projectId: string,
@@ -143,45 +131,13 @@ export async function resolveProviderModel(
 	if (isProviderDisabled(provider)) {
 		return null;
 	}
-	const config = await projectLlmConfigQueries.getProjectLlmConfigByProvider(projectId, provider);
-	if (config) {
-		return createProviderModel(
-			provider,
-			{
-				apiKey: config.apiKey,
-				...(config.baseUrl && { baseURL: config.baseUrl }),
-				...(config.credentials && { credentials: config.credentials }),
-			},
-			modelId,
-			applyUserSettings ? config.modelSettings?.[modelId] : undefined,
-		);
+	const request: ModelRequest = { projectId, provider, modelId, applyUserSettings };
+	for (const source of MODEL_SOURCES) {
+		const result = await source.resolveModel(request);
+		if (result) {
+			return result;
+		}
 	}
-
-	const configured = findConfigLlmProvider(await getProjectConfigLlm(projectId), provider);
-	if (configured) {
-		return createProviderModel(
-			provider,
-			toProviderSettings(configured),
-			modelId,
-			applyUserSettings ? configured.modelSettings[modelId] : undefined,
-		);
-	}
-
-	const envApiKey = getEnvApiKey(provider);
-	if (envApiKey) {
-		const envBaseUrl = getEnvBaseUrl(provider);
-		return createProviderModel(
-			provider,
-			{ apiKey: envApiKey, ...(envBaseUrl && { baseURL: envBaseUrl }) },
-			modelId,
-		);
-	}
-
-	if (hasEnvApiKey(provider)) {
-		const envBaseUrl = getEnvBaseUrl(provider);
-		return createProviderModel(provider, { apiKey: '', ...(envBaseUrl && { baseURL: envBaseUrl }) }, modelId);
-	}
-
 	return null;
 }
 
@@ -460,53 +416,110 @@ export const getProjectModelNameResolver = async (
 	};
 };
 
-type ProviderModelSource = {
-	provider: LlmProvider;
-	enabledModels: string[];
-	customModels: CustomModelMetadata[];
-	baseUrl: string | null;
-};
-
 /**
  * The model list of every provider available to a project, taking each provider from the first
  * source that declares it: the database, then nao_config.yaml, then the environment.
  */
 async function getProjectModelSources(projectId: string): Promise<ProviderModelSource[]> {
-	const configs = await projectLlmConfigQueries.getProjectLlmConfigs(projectId);
-	const sources: ProviderModelSource[] = configs.map((config) => ({
-		provider: config.provider as LlmProvider,
-		enabledModels: config.enabledModels ?? [],
-		customModels: config.customModels ?? [],
-		baseUrl: config.baseUrl ?? getEnvBaseUrl(config.provider as LlmProvider) ?? null,
-	}));
-
-	const declares = (provider: LlmProvider) => sources.some((source) => source.provider === provider);
-
-	const configLlm = await getProjectConfigLlm(projectId);
-	for (const configured of configLlm?.providers ?? []) {
-		if (!declares(configured.provider)) {
-			sources.push({
-				provider: configured.provider,
-				enabledModels: configured.enabledModels,
-				customModels: configured.customModels,
-				baseUrl: configured.baseUrl ?? getEnvBaseUrl(configured.provider) ?? null,
-			});
+	const collected: ProviderModelSource[] = [];
+	for (const source of MODEL_SOURCES) {
+		for (const entry of await source.listProviders(projectId)) {
+			const isFirstDeclaration = !collected.some((existing) => existing.provider === entry.provider);
+			if (isFirstDeclaration && !isProviderDisabled(entry.provider)) {
+				collected.push(entry);
+			}
 		}
 	}
-
-	for (const provider of getEnvProviders()) {
-		if (!declares(provider)) {
-			sources.push({
-				provider,
-				enabledModels: [],
-				customModels: [],
-				baseUrl: getEnvBaseUrl(provider) ?? null,
-			});
-		}
-	}
-
-	return sources.filter((source) => !isProviderDisabled(source.provider));
+	return collected;
 }
 
 const getModelName = (provider: LlmProvider, modelId: string): string =>
 	getProviderMeta(provider).models.find((m) => m.id === modelId)?.name ?? modelId;
+
+type ProviderAccess = { settings: ProviderSettings; modelSettings?: ModelSettingsMap | null };
+
+type CredentialSource = {
+	listProviders(projectId: string): Promise<ProviderModelSource[]>;
+	findAccess(projectId: string, provider: LlmProvider): Promise<ProviderAccess | null>;
+};
+
+/** A source holding the project's own credentials, which can also be handed out for direct provider calls. */
+function credentialSource(source: CredentialSource): ModelSource {
+	return {
+		listProviders: source.listProviders,
+		async resolveSettings(projectId, provider) {
+			return (await source.findAccess(projectId, provider))?.settings ?? null;
+		},
+		async resolveModel({ projectId, provider, modelId, applyUserSettings }) {
+			const access = await source.findAccess(projectId, provider);
+			if (!access) {
+				return null;
+			}
+			const inferenceSettings = applyUserSettings ? access.modelSettings?.[modelId] : undefined;
+			return createProviderModel(provider, access.settings, modelId, inferenceSettings);
+		},
+	};
+}
+
+const projectConfigSource = credentialSource({
+	async listProviders(projectId) {
+		const configs = await projectLlmConfigQueries.getProjectLlmConfigs(projectId);
+		return configs.map((config) => ({
+			provider: config.provider as LlmProvider,
+			enabledModels: config.enabledModels ?? [],
+			customModels: config.customModels ?? [],
+			baseUrl: config.baseUrl ?? getEnvBaseUrl(config.provider as LlmProvider) ?? null,
+		}));
+	},
+	async findAccess(projectId, provider) {
+		const config = await projectLlmConfigQueries.getProjectLlmConfigByProvider(projectId, provider);
+		if (!config) {
+			return null;
+		}
+		const settings = {
+			apiKey: config.apiKey,
+			...(config.baseUrl && { baseURL: config.baseUrl }),
+			...(config.credentials && { credentials: config.credentials }),
+		};
+		return { settings, modelSettings: config.modelSettings };
+	},
+});
+
+const naoConfigFileSource = credentialSource({
+	async listProviders(projectId) {
+		const configLlm = await getProjectConfigLlm(projectId);
+		return (configLlm?.providers ?? []).map((configured) => ({
+			provider: configured.provider,
+			enabledModels: configured.enabledModels,
+			customModels: configured.customModels,
+			baseUrl: configured.baseUrl ?? getEnvBaseUrl(configured.provider) ?? null,
+		}));
+	},
+	async findAccess(projectId, provider) {
+		const configured = findConfigLlmProvider(await getProjectConfigLlm(projectId), provider);
+		if (!configured) {
+			return null;
+		}
+		return { settings: toProviderSettings(configured), modelSettings: configured.modelSettings };
+	},
+});
+
+const envSource = credentialSource({
+	async listProviders() {
+		return getEnvProviders().map((provider) => ({
+			provider,
+			enabledModels: [],
+			customModels: [],
+			baseUrl: getEnvBaseUrl(provider) ?? null,
+		}));
+	},
+	async findAccess(_projectId, provider) {
+		if (!hasEnvApiKey(provider)) {
+			return null;
+		}
+		const baseURL = getEnvBaseUrl(provider);
+		return { settings: { apiKey: getEnvApiKey(provider) ?? '', ...(baseURL && { baseURL }) } };
+	},
+});
+
+const MODEL_SOURCES: ModelSource[] = [projectConfigSource, naoConfigFileSource, envSource];

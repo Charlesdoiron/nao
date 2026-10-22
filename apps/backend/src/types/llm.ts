@@ -11,6 +11,7 @@ import type { JSONValue } from 'ai';
 import type { OllamaChatProviderOptions } from 'ai-sdk-ollama';
 import { z } from 'zod/v4';
 
+import type { ProviderModelResult } from '../agents/providers';
 import { TokenCost } from './chat';
 
 export const llmProviderSchema = z.custom<LlmProvider>((value) => typeof value === 'string' && isLlmProvider(value), {
@@ -101,6 +102,28 @@ export type ModelInferenceSettings = z.infer<typeof modelInferenceSettingsSchema
 
 export const modelSettingsMapSchema = z.record(z.string(), modelInferenceSettingsSchema);
 export type ModelSettingsMap = z.infer<typeof modelSettingsMapSchema>;
+
+/** Where a project's models and their credentials come from: its database config, nao_config.yaml or the environment. */
+export type ModelSource = {
+	listProviders(projectId: string): Promise<ProviderModelSource[]>;
+	resolveModel(request: ModelRequest): Promise<ProviderModelResult | null>;
+	/** Credentials for calling the provider directly. A source that must wrap every call leaves it out. */
+	resolveSettings?(projectId: string, provider: LlmProvider): Promise<ProviderSettings | null>;
+};
+
+export type ProviderModelSource = {
+	provider: LlmProvider;
+	enabledModels: string[];
+	customModels: CustomModelMetadata[];
+	baseUrl: string | null;
+};
+
+export type ModelRequest = {
+	projectId: string;
+	provider: LlmProvider;
+	modelId: string;
+	applyUserSettings: boolean;
+};
 
 /** How a model exposes "thinking"/reasoning control, if at all. */
 export type ModelThinkingMode = 'adaptive' | 'budget' | 'none';
