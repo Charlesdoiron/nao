@@ -9,7 +9,13 @@ import {
 	settleInterruptedToolParts,
 } from '../src/utils/ai';
 import { ManagedCreditsExhaustedError } from '../src/utils/error';
-import { buildUsernameAllowlist, formatErrorMessageForUI, replaceEnvVars, truncateMiddle } from '../src/utils/utils';
+import {
+	buildUsernameAllowlist,
+	formatErrorMessageForUI,
+	getProcessEnvSourcedVarNames,
+	replaceEnvVars,
+	truncateMiddle,
+} from '../src/utils/utils';
 
 describe('buildUsernameAllowlist', () => {
 	it('returns an empty set when unset', () => {
@@ -134,6 +140,27 @@ describe('replaceEnvVars', () => {
 
 	it('keeps the placeholder when no value exists', () => {
 		expect(replaceEnvVars('${MISSING_TOKEN}')).toBe('${MISSING_TOKEN}');
+	});
+});
+
+describe('getProcessEnvSourcedVarNames', () => {
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	it('returns names resolved from process env without a project override', () => {
+		vi.stubEnv('DB_PASSWORD', 'from-process');
+		vi.stubEnv('DBT_TOKEN', 'from-process');
+
+		expect(
+			getProcessEnvSourcedVarNames(['DB_PASSWORD', 'DBT_TOKEN', 'MISSING_TOKEN'], { DBT_TOKEN: 'from-project' }),
+		).toEqual(['DB_PASSWORD']);
+	});
+
+	it('ignores empty process env values', () => {
+		vi.stubEnv('DB_PASSWORD', '');
+
+		expect(getProcessEnvSourcedVarNames(['DB_PASSWORD'], {})).toEqual([]);
 	});
 });
 

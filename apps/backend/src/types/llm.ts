@@ -11,6 +11,8 @@ import type { JSONValue } from 'ai';
 import type { OllamaChatProviderOptions } from 'ai-sdk-ollama';
 import { z } from 'zod/v4';
 
+import type { ManagedAiUsageContext } from '../agents/managed-ai';
+import type { ProviderModelResult } from '../agents/providers';
 import { TokenCost } from './chat';
 
 export const llmProviderSchema = z.custom<LlmProvider>((value) => typeof value === 'string' && isLlmProvider(value), {
@@ -101,6 +103,36 @@ export type ModelInferenceSettings = z.infer<typeof modelInferenceSettingsSchema
 
 export const modelSettingsMapSchema = z.record(z.string(), modelInferenceSettingsSchema);
 export type ModelSettingsMap = z.infer<typeof modelSettingsMapSchema>;
+
+/** Where a project's models and their credentials come from: its database config, nao_config.yaml, the environment, or nao. */
+export type ModelSource = {
+	/**
+	 * Serves the providers nao runs on its own keys. A managed source is only listed when no other
+	 * source offers a selectable model.
+	 */
+	readonly managed?: boolean;
+	listProviders(projectId: string): Promise<ProviderModelSource[]>;
+	resolveModel(request: ModelRequest): Promise<ProviderModelResult | null>;
+	/** Credentials for calling the provider directly. A source that must wrap every call leaves it out. */
+	resolveSettings?(projectId: string, provider: LlmProvider): Promise<ProviderSettings | null>;
+};
+
+export type ProviderModelSource = {
+	provider: LlmProvider;
+	enabledModels: string[];
+	customModels: CustomModelMetadata[];
+	baseUrl: string | null;
+};
+
+export type ModelRequest = {
+	projectId: string;
+	provider: LlmProvider;
+	modelId: string;
+	applyUserSettings: boolean;
+	usageContext?: ManagedAiUsageContext;
+	/** Whether a source that isn't managed offers the project a selectable model. */
+	hasOwnModels(): Promise<boolean>;
+};
 
 /** How a model exposes "thinking"/reasoning control, if at all. */
 export type ModelThinkingMode = 'adaptive' | 'budget' | 'none';
@@ -278,6 +310,8 @@ export type ProviderMeta<P extends LlmProviderKind> = {
 	defaultBaseUrl?: string;
 	/** Set when the provider has no vendor endpoint to fall back on, so a base URL must be supplied. */
 	requiresBaseUrl?: boolean;
+	/** Set when nao runs the provider on its own keys and bills it through credits, so projects cannot configure it. */
+	managed?: boolean;
 	models: readonly ProviderModel<P>[];
 	extractorModelId: string;
 	summaryModelId: string;
@@ -304,5 +338,6 @@ export const LLM_INFERENCE_TYPES = [
 	'title_generation',
 	'live_story_refresh',
 	'subagent',
+	'story_theme_generation',
 ] as const;
 export type LlmInferenceType = (typeof LLM_INFERENCE_TYPES)[number];

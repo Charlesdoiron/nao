@@ -49,6 +49,7 @@ export {
 	getProviderApiKeyRequirement,
 	getProviderAuth,
 	getProviderMeta,
+	isManagedProvider,
 	KNOWN_MODELS,
 	PROVIDER_META,
 } from './provider-meta';
