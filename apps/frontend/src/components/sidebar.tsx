@@ -70,11 +70,7 @@ export function Sidebar() {
 	const isInSettings = !!isSettingsRoute && !isViewer;
 	const effectiveIsCollapsed = isMobile ? false : isCollapsed;
 	const showTrialOnboarding =
-		isCloud &&
-		project.isSuccess &&
-		project.data === null &&
-		locationPath !== '/onboarding' &&
-		!effectiveIsCollapsed;
+		isCloud && project.isSuccess && project.data === null && locationPath === '/' && !effectiveIsCollapsed;
 
 	useEffect(() => {
 		setToggleHintOpen(false);
