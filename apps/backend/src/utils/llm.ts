@@ -1,16 +1,16 @@
 import { type BackgroundModelCategory, type DefaultModelSettings, selectBackgroundModel } from '@nao/shared';
 import { type LlmProvider, type LlmSelectedModel, providerKind } from '@nao/shared/types';
 
-import { isManagedAiEnabled, type ManagedAiUsageContext, withManagedAiUsageMetering } from '../agents/managed-ai';
+import { managedAiSource, type ManagedAiUsageContext } from '../agents/managed-ai';
 import {
 	createProviderModel,
 	getDefaultModelId,
 	getProviderMeta,
+	isManagedProvider,
 	LLM_PROVIDERS,
 	type ProviderModelResult,
 } from '../agents/providers';
 import { env } from '../env';
-import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as projectLlmConfigQueries from '../queries/project-llm-config.queries';
 import type {
@@ -112,10 +112,7 @@ export async function resolveProviderSettings(
 	if (isProviderDisabled(provider)) {
 		return null;
 	}
-	if (provider === 'nao') {
-		return null;
-	}
-	for (const source of MODEL_SOURCES) {
+	for (const source of getSourcesServing(provider)) {
 		const settings = await source.resolveSettings?.(projectId, provider);
 		if (settings) {
 			return settings;
@@ -125,8 +122,8 @@ export async function resolveProviderSettings(
 }
 
 /**
- * Resolve a provider model from the first model source that has credentials for it: DB config,
- * then nao_config.yaml, then env vars. Returns null when no source has credentials for the provider.
+ * Resolve a provider model from the first model source that serves it: DB config, nao_config.yaml,
+ * env vars, then nao's managed models. Returns null when no source has credentials for the provider.
  */
 export async function resolveProviderModel(
 	projectId: string,
@@ -138,49 +135,23 @@ export async function resolveProviderModel(
 	if (isProviderDisabled(provider)) {
 		return null;
 	}
-	if (provider === 'nao') {
-		const apiKey = process.env.NAO_MANAGED_OPENAI_API_KEY;
-		if (!isManagedAiEnabled() || !usageContext?.userId || !apiKey || !isKnownModel(provider, modelId)) {
-			return null;
-		}
-		const byokSources = await getProjectModelSources(projectId);
-		if (byokSources.some((source) => source.provider !== 'nao' && hasSelectableModel(source))) {
-			return null;
-		}
-		const model = createProviderModel(provider, { apiKey }, modelId);
-		const project = await projectQueries.getProjectById(projectId);
-		const attribution = {
-			...usageContext,
-			projectId,
-			orgId: usageContext.orgId ?? project?.orgId ?? undefined,
-		};
-		return meterModel(model, provider, modelId, attribution);
-	}
-	const request: ModelRequest = { projectId, provider, modelId, applyUserSettings };
-	for (const source of MODEL_SOURCES) {
+	const request: ModelRequest = {
+		projectId,
+		provider,
+		modelId,
+		applyUserSettings,
+		usageContext,
+		hasOwnModels() {
+			return hasOwnSelectableModel(projectId);
+		},
+	};
+	for (const source of getSourcesServing(provider)) {
 		const result = await source.resolveModel(request);
 		if (result) {
 			return result;
 		}
 	}
 	return null;
-}
-
-function meterModel(
-	result: ProviderModelResult,
-	provider: LlmProvider,
-	modelId: string,
-	context?: ManagedAiUsageContext,
-	customModels: CustomModelMetadata[] = [],
-): ProviderModelResult {
-	if (!context) {
-		return result;
-	}
-	const declaredCosts = customModels.find((model) => model.id === modelId)?.costPerM;
-	return {
-		...result,
-		model: withManagedAiUsageMetering(result.model, provider, modelId, context, declaredCosts),
-	};
 }
 
 /** Read the `llm` block of the project's nao_config.yaml, if the project has one on disk. */
@@ -460,37 +431,45 @@ export const getProjectModelNameResolver = async (
 
 /**
  * The model list of every provider available to a project, taking each provider from the first
- * source that declares it: the database, then nao_config.yaml, then the environment.
+ * source that declares it. Managed sources are only offered when no other source has a selectable model.
  */
 async function getProjectModelSources(projectId: string): Promise<ProviderModelSource[]> {
+	const ownProviders = await collectProviders(projectId, { managed: false });
+	if (ownProviders.some(hasSelectableModel)) {
+		return ownProviders;
+	}
+	return [...ownProviders, ...(await collectProviders(projectId, { managed: true }))];
+}
+
+async function hasOwnSelectableModel(projectId: string): Promise<boolean> {
+	const ownProviders = await collectProviders(projectId, { managed: false });
+	return ownProviders.some(hasSelectableModel);
+}
+
+async function collectProviders(projectId: string, { managed }: { managed: boolean }): Promise<ProviderModelSource[]> {
 	const collected: ProviderModelSource[] = [];
-	for (const source of MODEL_SOURCES) {
+	for (const source of getModelSources().filter((candidate) => Boolean(candidate.managed) === managed)) {
 		for (const entry of await source.listProviders(projectId)) {
 			const isFirstDeclaration = !collected.some((existing) => existing.provider === entry.provider);
-			if (isFirstDeclaration && !isProviderDisabled(entry.provider)) {
+			if (isFirstDeclaration && servesProvider(source, entry.provider) && !isProviderDisabled(entry.provider)) {
 				collected.push(entry);
 			}
 		}
 	}
-
-	const enabledSources = collected.filter((source) => source.provider !== 'nao');
-	if (!enabledSources.some(hasSelectableModel) && isManagedAiEnabled()) {
-		const project = await projectQueries.getProjectById(projectId);
-		const summary = project?.orgId ? await creditWalletQueries.getCreditSummary(project.orgId) : null;
-		if (summary && summary.balanceMicroUsd > 0) {
-			enabledSources.push({
-				provider: 'nao',
-				enabledModels: getKnownModelIds('nao'),
-				customModels: [],
-				baseUrl: null,
-			});
-		}
-	}
-	return enabledSources;
+	return collected;
 }
 
 function hasSelectableModel(source: ProviderModelSource): boolean {
 	return source.enabledModels.length > 0 || Boolean(getDefaultModelId(source.provider));
+}
+
+function getSourcesServing(provider: LlmProvider): ModelSource[] {
+	return getModelSources().filter((source) => servesProvider(source, provider));
+}
+
+/** Managed providers run on nao's own keys, so only managed sources serve them. */
+function servesProvider(source: ModelSource, provider: LlmProvider): boolean {
+	return Boolean(source.managed) === isManagedProvider(provider);
 }
 
 const getModelName = (provider: LlmProvider, modelId: string): string =>
@@ -582,4 +561,7 @@ const envSource = credentialSource({
 	},
 });
 
-const MODEL_SOURCES: ModelSource[] = [projectConfigSource, naoConfigFileSource, envSource];
+/** Built on call: `managed-ai` imports this module back through the project queries, so it may not be loaded yet. */
+function getModelSources(): ModelSource[] {
+	return [projectConfigSource, naoConfigFileSource, envSource, managedAiSource];
+}

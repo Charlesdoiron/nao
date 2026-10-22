@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PROVIDER_META } from '@nao/backend/provider-meta';
+import { isManagedProvider, PROVIDER_META } from '@nao/backend/provider-meta';
 import {
 	LLM_PROVIDERS,
 	NAMED_PROVIDER_KIND,
@@ -51,7 +51,7 @@ export function useLlmProviders() {
 	// Kinds that accept several instances stay on offer: each new one is added under its own name.
 	const availableProvidersToAdd: LlmProviderKind[] = LLM_PROVIDERS.filter(
 		(p) =>
-			p !== 'nao' &&
+			!isManagedProvider(p) &&
 			(p === NAMED_PROVIDER_KIND ||
 				(!projectConfiguredProviders.includes(p) &&
 					!envProviders.includes(p) &&
