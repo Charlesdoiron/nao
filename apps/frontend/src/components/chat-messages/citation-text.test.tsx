@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantTextWithCitation } from './citation-text';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-vi.mock('@/main', () => ({ trpc: {} }));
+const mocks = vi.hoisted(() => ({
+	submitSupportRequest: vi.fn(),
+}));
+
+vi.mock('@/main', () => ({
+	trpc: {},
+	trpcClient: { support: { submit: { mutate: mocks.submitSupportRequest } } },
+}));
 
 vi.mock('@/hooks/use-attachment-download', () => ({
 	useAttachmentDownload: () => ({ mutate: vi.fn(), isPending: false, error: null }),
@@ -23,7 +30,10 @@ const renderAnswer = (text: string, isStreaming = false) => {
 };
 
 describe('AssistantTextWithCitation', () => {
-	afterEach(cleanup);
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
 
 	it('suppresses a backticked saved file throughout streaming', () => {
 		const stages = [
@@ -138,37 +148,55 @@ describe('AssistantTextWithCitation', () => {
 		expect(screen.queryByRole('button')).toBeNull();
 	});
 
+	it('opens an in-app dialog and sends a support request', async () => {
+		mocks.submitSupportRequest.mockResolvedValue({ success: true });
+		renderAnswer('[Contact support](mailto:support@getnao.io)');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Contact support' }));
+		fireEvent.change(screen.getByRole('textbox', { name: 'Support request' }), {
+			target: { value: 'Please help me connect my warehouse.' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'Send to support' }));
+
+		await waitFor(() => {
+			expect(mocks.submitSupportRequest).toHaveBeenCalledWith({
+				request: 'Please help me connect my warehouse.',
+			});
+			expect(screen.getByRole('heading', { name: 'Request sent' })).toBeDefined();
+		});
+	});
+
 	it.each([
+		['Read the docs', 'https://docs.getnao.io'],
 		['Set up your project', '/onboarding'],
-		['Contact support', 'mailto:support@getnao.io'],
-	])('turns the %s message action into a button', (label, href) => {
+	])('keeps the %s message action as a link', (label, href) => {
 		renderAnswer(`[${label}](${href})`);
 
-		expect(screen.getByRole('link', { name: label }).getAttribute('data-slot')).toBe('button');
+		expect(screen.getByRole('link', { name: label }).getAttribute('data-slot')).toBeNull();
 	});
 
-	it('keeps ordinary message links as links', () => {
-		renderAnswer('[Read the docs](https://docs.getnao.io)');
-
-		expect(screen.getByRole('link', { name: 'Read the docs' }).getAttribute('data-slot')).toBeNull();
-	});
-
-	it.each([
-		[
+	it('clarifies the legacy Jaffle Shop limit message and removes its onboarding action', () => {
+		renderAnswer(
 			'You’ve finished the Jaffle Shop preview. [Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
-			'Set up your own project',
-			'You’ve finished the Jaffle Shop preview. This conversation is saved.',
-		],
-		[
-			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. [Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
-			'Contact support',
-			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. If you need help debugging your setup.',
-		],
-	])('keeps legacy message text above its action', (message, actionLabel, expectedMessage) => {
-		const { container } = renderAnswer(message);
+		);
 
-		expect(container.textContent).toContain(expectedMessage);
-		expect(container.textContent?.trim().endsWith(actionLabel)).toBe(true);
+		expect(
+			screen.getByText(
+				'You’ve used all the requests available for this example project. Let’s set up your own project and chat with your own data!',
+			),
+		).toBeTruthy();
+		expect(screen.queryByRole('link', { name: 'Set up your own project' })).toBeNull();
+	});
+
+	it('keeps the legacy guided setup message above its support action', () => {
+		const { container } = renderAnswer(
+			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. [Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
+		);
+
+		expect(container.textContent).toContain(
+			'You’ve reached the chat limit for guided setup. Your progress is safe, and the setup actions on this page still work. If you need help debugging your setup.',
+		);
+		expect(container.textContent?.trim().endsWith('Contact support')).toBe(true);
 	});
 
 	it('does not turn a saved-file example in a fenced code block into a chip', () => {

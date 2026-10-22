@@ -158,7 +158,7 @@ export async function handleExampleAllowanceExhaustedRoute({
 	});
 	const responseText = isOnboarding
 		? 'You’ve made great progress! You’ve reached the chat limit for guided setup, but your progress is safe and every setup action on this page still works. If you get stuck, we’re happy to help.\n\n[Contact support](mailto:support@getnao.io)'
-		: 'Thanks for exploring Jaffle Shop! Your preview is complete, and this conversation is saved. When you’re ready, set up your own project to start asking questions about your data.\n\n[Set up your project](/onboarding)';
+		: 'You’ve used all the requests available for this example project. Let’s set up your own project and chat with your own data!';
 	const assistantMessageId = crypto.randomUUID();
 	await chatQueries.upsertMessage({
 		id: assistantMessageId,

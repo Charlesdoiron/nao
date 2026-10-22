@@ -485,7 +485,9 @@ function ChatInputBase({
 					/>
 
 					<InputGroupAddon align='block-end'>
-						{(!isTranscribeReady || (!isRecording && !isTranscribing)) && <ChatInputModelSelect />}
+						{variant !== 'onboarding' && (!isTranscribeReady || (!isRecording && !isTranscribing)) && (
+							<ChatInputModelSelect isExample={mode === 'example'} />
+						)}
 
 						{isTranscribeReady && isRecording && <SlidingWaveform analyserRef={analyserRef} />}
 

@@ -17,8 +17,11 @@ const MANAGE_MODELS_VALUE = 'manage-models';
 /** Follows the default chat model set by the admin instead of pinning a model. */
 const NAO_DEFAULT_VALUE = 'nao-default';
 const NAO_DEFAULT_LABEL = 'Auto';
+const EXAMPLE_MODEL_VALUE = 'example-model';
+const PROJECT_SETUP_VALUE = 'project-setup';
+const EXAMPLE_MODEL_NAME = 'GPT 5.6 Sol';
 
-export function ChatInputModelSelect() {
+export function ChatInputModelSelect({ isExample = false }: { isExample?: boolean }) {
 	const navigate = useNavigate();
 	const { isAdmin } = usePermissions();
 	const {
@@ -71,18 +74,17 @@ export function ChatInputModelSelect() {
 	const selectedModelName = usesDefaultModel ? NAO_DEFAULT_LABEL : (resolvedModelName ?? 'Select model');
 	const selectValue = usesDefaultModel ? NAO_DEFAULT_VALUE : selectedModel ? modelValue(selectedModel) : undefined;
 
+	if (isExample) {
+		return <ExampleModel />;
+	}
+
 	if (isPending) {
 		return null;
 	}
 
 	if (!availableModels?.length) {
 		if (!hasProject) {
-			return (
-				<div className='flex items-center gap-2 text-sm font-normal text-muted-foreground'>
-					<LlmProviderIcon provider='nao' className='size-4' />
-					<span>{NAO_DEFAULT_LABEL}</span>
-				</div>
-			);
+			return <ExampleModel />;
 		}
 		return (
 			<Link
@@ -190,6 +192,32 @@ export function ChatInputModelSelect() {
 						</SelectItem>
 					</>
 				)}
+			</SelectContent>
+		</Select>
+	);
+}
+
+function ExampleModel() {
+	return (
+		<Select value={EXAMPLE_MODEL_VALUE}>
+			<SelectTrigger variant='ghost' className='p-0 gap-1 text-sm' size='sm' aria-label='Model'>
+				<SelectValue>
+					<div className='flex items-center gap-2'>
+						<LlmProviderIcon provider='nao' className='size-4' />
+						<span className='leading-none'>{EXAMPLE_MODEL_NAME}</span>
+					</div>
+				</SelectValue>
+			</SelectTrigger>
+			<SelectContent align='center' position='popper' side='top' collisionPadding={12}>
+				<SelectItem value={EXAMPLE_MODEL_VALUE}>
+					<LlmProviderIcon provider='nao' className='size-4 opacity-100' />
+					{EXAMPLE_MODEL_NAME}
+				</SelectItem>
+				<SelectSeparator />
+				<SelectItem value={PROJECT_SETUP_VALUE} disabled className='text-muted-foreground'>
+					<Settings className='size-4' />
+					Set up a project to switch models
+				</SelectItem>
 			</SelectContent>
 		</Select>
 	);

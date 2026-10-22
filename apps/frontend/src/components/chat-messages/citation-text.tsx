@@ -1,14 +1,13 @@
 import { memo } from 'react';
 import { Streamdown } from 'streamdown';
-import { ArrowRight } from 'lucide-react';
 import { normalizeCitationMarkers, stripAssistantTags } from '@nao/shared';
 import type { ComponentProps } from 'react';
 
 import { CitationPopover } from '@/components/citation-popover';
 import { MarkdownTable } from '@/components/chat-messages/markdown-table';
 import { StreamingMarkdown } from '@/components/chat-messages/streaming-markdown';
+import { ContactSupportButton } from '@/components/contact-support-dialog';
 import { FileChip } from '@/components/file-chip';
-import { Button } from '@/components/ui/button';
 import { isStoredFilePath } from '@/lib/attachments';
 import { markdownPlugins } from '@/lib/markdown';
 import { markdownLinkSafety } from '@/components/external-link-dialog';
@@ -56,8 +55,8 @@ export const AssistantTextWithCitation = memo(({ text, isStreaming }: { text: st
 function placeMessageActionsLast(markdown: string): string {
 	return markdown
 		.replace(
-			'[Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
-			'This conversation is saved.\n\n[Set up your own project](/onboarding)',
+			'You’ve finished the Jaffle Shop preview. [Set up your own project](/onboarding) to keep chatting. This conversation is saved.',
+			'You’ve used all the requests available for this example project. Let’s set up your own project and chat with your own data!',
 		)
 		.replace(
 			'[Contact support](mailto:support@getnao.io) if you need help debugging your setup.',
@@ -207,26 +206,8 @@ function MarkdownTableRenderer({ node, className }: any) {
 }
 
 function MarkdownLinkRenderer({ href, children, node: _, ...props }: ComponentProps<'a'> & { node?: unknown }) {
-	if (href === '/onboarding') {
-		return (
-			<Button asChild size='sm' className='mt-3 flex w-fit rounded-full no-underline'>
-				<a href={href} {...props}>
-					{children}
-					<ArrowRight className='size-3.5' />
-				</a>
-			</Button>
-		);
-	}
-
 	if (href === 'mailto:support@getnao.io') {
-		return (
-			<Button asChild size='sm' className='mt-3 flex w-fit rounded-full no-underline'>
-				<a href={href} {...props}>
-					{children}
-					<ArrowRight className='size-3.5' />
-				</a>
-			</Button>
-		);
+		return <ContactSupportButton>{children}</ContactSupportButton>;
 	}
 
 	return (

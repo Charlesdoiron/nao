@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { ChatInputModelSelect } from './chat-input-model-select';
@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 
 const mocks = vi.hoisted(() => ({
 	setSelectedModel: vi.fn(),
+	hasProject: false,
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,7 +30,7 @@ vi.mock('@/hooks/use-model-selection', () => ({
 		setSelectedModel: mocks.setSelectedModel,
 		isPending: false,
 		canCycleModels: false,
-		hasProject: false,
+		hasProject: mocks.hasProject,
 	}),
 }));
 
@@ -37,12 +38,31 @@ vi.mock('@/hooks/use-permissions', () => ({
 	usePermissions: () => ({ isAdmin: true }),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	mocks.hasProject = false;
+});
 
-it('shows the nao automatic model instead of setup for a project-less user', () => {
+it('shows the example model instead of setup for a project-less user', () => {
 	render(<ChatInputModelSelect />);
 
 	expect(screen.getByLabelText('nao model')).toBeTruthy();
-	expect(screen.getByText('Auto')).toBeTruthy();
+	expect(screen.queryByText('Auto')).toBeNull();
+	expect(screen.getByText('GPT 5.6 Sol')).toBeTruthy();
+	expect(screen.queryByText('Configure a model')).toBeNull();
+
+	fireEvent.keyDown(screen.getByRole('combobox', { name: 'Model' }), { key: 'Enter' });
+
+	expect(
+		screen.getByRole('option', { name: 'Set up a project to switch models' }).getAttribute('aria-disabled'),
+	).toBe('true');
+});
+
+it('shows the example model for an example chat when the user has a project', () => {
+	mocks.hasProject = true;
+
+	render(<ChatInputModelSelect isExample />);
+
+	expect(screen.getByText('GPT 5.6 Sol')).toBeTruthy();
 	expect(screen.queryByText('Configure a model')).toBeNull();
 });

@@ -156,7 +156,7 @@ describe('example chat allowance', () => {
 			isOnboarding: false,
 			source: 'web' as const,
 			responseText:
-				'Thanks for exploring Jaffle Shop! Your preview is complete, and this conversation is saved. When you’re ready, set up your own project to start asking questions about your data.\n\n[Set up your project](/onboarding)',
+				'You’ve used all the requests available for this example project. Let’s set up your own project and chat with your own data!',
 		},
 		{
 			isOnboarding: true,
