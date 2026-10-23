@@ -86,7 +86,7 @@ export function CustomStoryPreviewPage({ chatId, storySlug, authorName }: Custom
 	);
 
 	useTrackViewDuration({ assetType: 'story', chatId, storyId, versionNumber: story.viewedVersion ?? undefined });
-	const isArchived = Boolean(content?.archivedAt);
+	const isArchived = Boolean(content ? content.archivedAt : story.versionsQuery.data?.archivedAt);
 
 	return (
 		<div className='flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background'>
