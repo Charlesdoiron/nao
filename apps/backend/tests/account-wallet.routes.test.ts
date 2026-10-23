@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
 	getOrganizationSetupCreditGrant: vi.fn(),
 	listCreditLedger: vi.fn(),
 	listManagedAiUsage: vi.fn(),
+	getUserOrgMembership: vi.fn(),
+	getUserOrgMembershipByProject: vi.fn(),
 }));
 
 vi.mock('../src/auth', () => ({
@@ -32,12 +34,8 @@ vi.mock('../src/queries/managed-ai-usage.queries', () => ({
 }));
 
 vi.mock('../src/queries/organization.queries', () => ({
-	getUserOrgMembership: vi.fn(async () => ({
-		orgId: 'org-id',
-		userId: 'user-id',
-		role: state.role,
-		createdAt: new Date(),
-	})),
+	getUserOrgMembership: mocks.getUserOrgMembership,
+	getUserOrgMembershipByProject: mocks.getUserOrgMembershipByProject,
 }));
 
 vi.mock('../src/queries/project.queries', () => ({}));
@@ -65,6 +63,18 @@ describe('account wallet activity authorization', () => {
 		});
 		mocks.listCreditLedger.mockResolvedValue({ groups: [], nextCursor: null, totalCount: 0 });
 		mocks.listManagedAiUsage.mockResolvedValue({ runs: [], nextCursor: null, totalCount: 0 });
+		mocks.getUserOrgMembership.mockImplementation(async () => ({
+			orgId: 'org-id',
+			userId: 'user-id',
+			role: state.role,
+			createdAt: new Date(),
+		}));
+		mocks.getUserOrgMembershipByProject.mockImplementation(async () => ({
+			orgId: 'project-org-id',
+			userId: 'user-id',
+			role: state.role,
+			createdAt: new Date(),
+		}));
 	});
 
 	it('keeps wallet activity private while returning only the member usage', async () => {
@@ -117,15 +127,22 @@ describe('account wallet activity authorization', () => {
 		});
 		expect(mocks.listManagedAiUsage).toHaveBeenCalledWith({ orgId: 'org-id' }, { cursor: undefined, limit: 10 });
 	});
+
+	it('uses the selected project organization when no organization is selected', async () => {
+		await caller(null).account.getCreditSummary();
+
+		expect(mocks.getUserOrgMembershipByProject).toHaveBeenCalledWith('user-id', 'project-id');
+		expect(mocks.getCreditSummary).toHaveBeenCalledWith('project-org-id');
+	});
 });
 
-function caller() {
+function caller(selectedOrganizationId: string | null = 'org-id') {
 	return testRouter.createCaller({
 		session: {
 			user: { id: 'user-id', name: 'Admin', email: 'admin@example.com' },
 			session: { token: 'session-token' },
 		},
 		selectedProjectId: 'project-id',
-		selectedOrganizationId: 'org-id',
+		selectedOrganizationId,
 	} as never);
 }

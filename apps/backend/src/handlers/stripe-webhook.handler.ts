@@ -15,8 +15,10 @@ import {
 	getStripeDispute,
 	getStripeEvent,
 	getStripeInvoice,
+	getStripePaymentIntent,
 	getStripePaymentMethod,
 	isCreditTopUpCheckoutSession,
+	isCreditTopUpPaymentIntent,
 } from '../services/stripe.service';
 import { isCloudBillingPlanKey } from '../types/billing';
 
@@ -220,7 +222,7 @@ async function processRefundedCharge(stripeChargeId: string): Promise<void> {
 	if (!paymentIntentId || charge.amount <= 0 || charge.amount_refunded <= 0) {
 		return;
 	}
-	const purchase = await getCreditPurchaseByPaymentIntent(paymentIntentId);
+	const purchase = await getCreditPurchaseForClawback(paymentIntentId);
 	if (!purchase) {
 		return;
 	}
@@ -249,7 +251,7 @@ async function processDispute(stripeDisputeId: string): Promise<void> {
 	if (!paymentIntentId) {
 		return;
 	}
-	const purchase = await getCreditPurchaseByPaymentIntent(paymentIntentId);
+	const purchase = await getCreditPurchaseForClawback(paymentIntentId);
 	if (!purchase) {
 		return;
 	}
@@ -277,6 +279,14 @@ async function processDispute(stripeDisputeId: string): Promise<void> {
 			paidAmountCents: charge.amount,
 		},
 	});
+}
+
+async function getCreditPurchaseForClawback(paymentIntentId: string) {
+	const purchase = await getCreditPurchaseByPaymentIntent(paymentIntentId);
+	if (purchase || !isCreditTopUpPaymentIntent(await getStripePaymentIntent(paymentIntentId))) {
+		return purchase;
+	}
+	throw new Error(`Credit purchase for Stripe PaymentIntent "${paymentIntentId}" has not been credited yet`);
 }
 
 async function processSubscription(stripeSubscriptionId: string): Promise<void> {

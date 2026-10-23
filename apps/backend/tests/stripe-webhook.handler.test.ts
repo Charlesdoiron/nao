@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 	getInboxEvent: vi.fn(),
 	getInvoice: vi.fn(),
 	getPaymentMethod: vi.fn(),
+	getPaymentIntent: vi.fn(),
 	getCreditTopUpPurchase: vi.fn(),
 	getCreditPurchase: vi.fn(),
 	getCharge: vi.fn(),
@@ -54,8 +55,11 @@ vi.mock('../src/services/stripe.service', () => ({
 	getStripeDispute: mocks.getDispute,
 	getStripeEvent: mocks.getEvent,
 	getStripeInvoice: mocks.getInvoice,
+	getStripePaymentIntent: mocks.getPaymentIntent,
 	getStripePaymentMethod: mocks.getPaymentMethod,
 	isCreditTopUpCheckoutSession: mocks.isCreditTopUp,
+	isCreditTopUpPaymentIntent: (paymentIntent: { metadata?: Record<string, string> }) =>
+		paymentIntent.metadata?.nao_checkout_kind === 'credit_top_up',
 }));
 
 import { stripeWebhookProcessHandler } from '../src/handlers/stripe-webhook.handler';
@@ -215,6 +219,61 @@ describe('stripeWebhookProcessHandler', () => {
 		expect(mocks.setCreditPurchaseMovement).toHaveBeenCalledWith(
 			expect.objectContaining({ targetDeltaMicroUsd: -10_000_000 }),
 		);
+	});
+
+	it.each(['charge.refunded', 'charge.dispute.created'] as const)(
+		'retries a %s event when its credit purchase has not been credited yet',
+		async (eventType) => {
+			mocks.getEvent.mockResolvedValue({ type: eventType, data: { object: { id: 'stripe_object' } } });
+			mocks.getCharge.mockResolvedValue({
+				id: 'stripe_object',
+				amount: 2_100,
+				amount_refunded: 1_050,
+				payment_intent: 'pi_top_up',
+			});
+			mocks.getDispute.mockResolvedValue({
+				id: 'stripe_object',
+				status: 'needs_response',
+				amount: 2_100,
+				charge: { id: 'ch_top_up', amount: 2_100, payment_intent: 'pi_top_up' },
+			});
+			mocks.getCreditPurchase.mockResolvedValue(null);
+			mocks.getPaymentIntent.mockResolvedValue({
+				id: 'pi_top_up',
+				metadata: { nao_checkout_kind: 'credit_top_up' },
+			});
+
+			await expect(stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never)).rejects.toThrow(
+				'Credit purchase for Stripe PaymentIntent "pi_top_up" has not been credited yet',
+			);
+
+			expect(mocks.markFailed).toHaveBeenCalledWith(
+				'evt_123',
+				'Credit purchase for Stripe PaymentIntent "pi_top_up" has not been credited yet',
+			);
+			expect(mocks.markProcessed).not.toHaveBeenCalled();
+			expect(mocks.setCreditPurchaseMovement).not.toHaveBeenCalled();
+		},
+	);
+
+	it('acknowledges a refund unrelated to a credit top-up', async () => {
+		mocks.getEvent.mockResolvedValue({
+			type: 'charge.refunded',
+			data: { object: { id: 'ch_subscription' } },
+		});
+		mocks.getCharge.mockResolvedValue({
+			id: 'ch_subscription',
+			amount: 2_100,
+			amount_refunded: 2_100,
+			payment_intent: 'pi_subscription',
+		});
+		mocks.getCreditPurchase.mockResolvedValue(null);
+		mocks.getPaymentIntent.mockResolvedValue({ id: 'pi_subscription', metadata: {} });
+
+		await stripeWebhookProcessHandler({ eventId: 'evt_123' }, {} as never);
+
+		expect(mocks.markProcessed).toHaveBeenCalledWith('evt_123');
+		expect(mocks.markFailed).not.toHaveBeenCalled();
 	});
 
 	it('rejects a job whose inbox event is missing', async () => {

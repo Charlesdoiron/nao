@@ -199,10 +199,11 @@ function createStreamMeter(
 	});
 }
 
-// ponytail: chars/4 over the serialized prompt (including base64 attachments) and streamed deltas is
-// a coarse stand-in for the usage the provider never reports on abort. Upgrade: a tokenizer-based count.
+// ponytail: chars/4 over the serialized prompt, tool definitions, and streamed deltas is a coarse
+// stand-in for the usage the provider never reports on abort. Upgrade: a tokenizer-based count.
 function estimateUsage(params: LanguageModelV3CallOptions, streamedChars: number): LanguageModelV3Usage {
-	const inputTokens = Math.ceil((JSON.stringify(params.prompt) ?? '').length / 4);
+	const serializedInput = `${JSON.stringify(params.prompt) ?? ''}${JSON.stringify(params.tools) ?? ''}`;
+	const inputTokens = Math.ceil(serializedInput.length / 4);
 	const outputTokens = Math.ceil(streamedChars / 4);
 	return {
 		inputTokens: { total: inputTokens, noCache: inputTokens, cacheRead: 0, cacheWrite: 0 },

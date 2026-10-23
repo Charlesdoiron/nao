@@ -625,7 +625,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 						...usage,
 						walletId: wallet.id,
 						isManaged: true,
-						customerChargeMicroUsd: Math.min(customerChargeMicroUsd, -reservation.deltaMicroUsd),
+						customerChargeMicroUsd,
 					})
 					.onConflictDoNothing()
 					.returning()
@@ -710,7 +710,7 @@ export async function recordManagedAiUsageAndChargeWallet(
 				...usage,
 				walletId: wallet.id,
 				isManaged: true,
-				customerChargeMicroUsd: Math.min(customerChargeMicroUsd, -reservation.deltaMicroUsd),
+				customerChargeMicroUsd,
 			})
 			.onConflictDoNothing()
 			.returning()

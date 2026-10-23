@@ -343,6 +343,31 @@ describe('managed AI usage and organization credits', () => {
 		expect(Number(ledgerTotal.total)).toBe(summary.balanceMicroUsd);
 	});
 
+	it('includes tool definitions in the credit reservation', async () => {
+		const reserveCredits = vi.spyOn(creditWalletService, 'reserveManagedAiCredits');
+		const model = withManagedAiUsageMetering(createModel(), 'nao', 'gpt-6-luna', {
+			userId: MANAGED_USER_ID,
+			orgId: ORG_ID,
+			category: 'chat',
+		});
+
+		await model.doGenerate({ maxOutputTokens: 1 } as LanguageModelV3CallOptions);
+		await model.doGenerate({
+			maxOutputTokens: 1,
+			tools: [
+				{
+					type: 'function',
+					name: 'large_tool',
+					description: 'x'.repeat(4_000),
+					inputSchema: { type: 'object', properties: {} },
+				},
+			],
+		});
+
+		expect(reserveCredits.mock.calls[0]?.[2]).toBe(1);
+		expect(reserveCredits.mock.calls[1]?.[2] ?? 0).toBeGreaterThan(1);
+	});
+
 	it('propagates settlement failures after successful generation', async () => {
 		const settlementError = new Error('wallet settlement failed');
 		const settleUsage = vi
@@ -484,7 +509,7 @@ describe('managed AI usage and organization credits', () => {
 		expect(providerCall).not.toHaveBeenCalled();
 	});
 
-	it('reserves credits before dispatch and never settles below zero', async () => {
+	it('reserves credits before dispatch and charges actual overages', async () => {
 		await db.update(s.creditWallet).set({ balanceMicroUsd: 1 }).where(eq(s.creditWallet.orgId, EXHAUSTED_ORG_ID));
 		let releaseProvider!: () => void;
 		const firstProviderCall = vi.fn(
@@ -509,9 +534,9 @@ describe('managed AI usage and organization credits', () => {
 
 		const summary = await getCreditSummary(EXHAUSTED_ORG_ID);
 		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.orgId, EXHAUSTED_ORG_ID));
-		expect(summary.balanceMicroUsd).toBe(0);
+		expect(summary.balanceMicroUsd).toBe(-149);
 		expect(rows.at(-1)).toMatchObject({
-			customerChargeMicroUsd: 1,
+			customerChargeMicroUsd: 150,
 			upstreamCostMicroUsd: 150,
 		});
 	});

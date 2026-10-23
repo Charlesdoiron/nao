@@ -709,6 +709,10 @@ export function isCreditTopUpCheckoutSession(session: Stripe.Checkout.Session): 
 	return session.mode === 'payment' && session.metadata?.[CHECKOUT_KIND_METADATA_KEY] === CREDIT_TOP_UP_CHECKOUT_KIND;
 }
 
+export function isCreditTopUpPaymentIntent(paymentIntent: Stripe.PaymentIntent): boolean {
+	return paymentIntent.metadata?.[CHECKOUT_KIND_METADATA_KEY] === CREDIT_TOP_UP_CHECKOUT_KIND;
+}
+
 export async function getCreditTopUpPurchase(stripeCheckoutSessionId: string): Promise<CreditTopUpPurchase> {
 	const session = await getStripeClient().checkout.sessions.retrieve(stripeCheckoutSessionId, {
 		expand: ['line_items.data.price.product', 'payment_intent', 'invoice'],
@@ -761,6 +765,10 @@ export async function getStripeInvoice(stripeInvoiceId: string): Promise<Stripe.
 
 export async function getStripePaymentMethod(stripePaymentMethodId: string): Promise<Stripe.PaymentMethod> {
 	return getStripeClient().paymentMethods.retrieve(stripePaymentMethodId);
+}
+
+export async function getStripePaymentIntent(stripePaymentIntentId: string): Promise<Stripe.PaymentIntent> {
+	return getStripeClient().paymentIntents.retrieve(stripePaymentIntentId);
 }
 
 export async function getStripeCharge(stripeChargeId: string): Promise<Stripe.Charge> {

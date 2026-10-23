@@ -14,7 +14,12 @@ import * as userQueries from '../queries/user.queries';
 import { emailService } from '../services/email';
 import { buildResetPasswordEmail } from '../utils/email-builders';
 import { regexPassword } from '../utils/utils';
-import { adminProtectedProcedure, projectProtectedProcedure, protectedProcedure } from './trpc';
+import {
+	adminProtectedProcedure,
+	projectProtectedProcedure,
+	protectedProcedure,
+	resolveOrganizationMembership,
+} from './trpc';
 
 const creditLedgerPaginationInput = z
 	.object({
@@ -31,7 +36,11 @@ const managedAiUsagePaginationInput = z
 	.default({ limit: 25 });
 
 const walletProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-	const membership = await orgQueries.getUserOrgMembership(ctx.user.id, ctx.selectedOrganizationId);
+	const membership = await resolveOrganizationMembership(
+		ctx.user.id,
+		ctx.selectedProjectId,
+		ctx.selectedOrganizationId,
+	);
 	return next({ ctx: { membership } });
 });
 
