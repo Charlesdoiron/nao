@@ -1,19 +1,25 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+	claimWarehouseProvisioningJobContextFiles: vi.fn(),
 	getWarehouseProvisioningJob: vi.fn(),
+	releaseWarehouseProvisioningJobLock: vi.fn(),
 }));
 
 vi.mock('../src/queries/warehouse-provisioning-job.queries', () => ({
+	claimWarehouseProvisioningJobContextFiles: mocks.claimWarehouseProvisioningJobContextFiles,
 	getWarehouseProvisioningJob: mocks.getWarehouseProvisioningJob,
+	releaseWarehouseProvisioningJobLock: mocks.releaseWarehouseProvisioningJobLock,
 }));
 
 import {
 	cleanupWarehouseContextFiles,
+	clearWarehouseContextFiles,
 	MAX_WAREHOUSE_CONTEXT_FILE_SIZE_BYTES,
 	restoreWarehouseContextFiles,
 	saveWarehouseContextFile,
@@ -24,9 +30,14 @@ describe('warehouse context files', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.claimWarehouseProvisioningJobContextFiles.mockImplementation(async (jobId: string, userId: string) => {
+			const job = await mocks.getWarehouseProvisioningJob(jobId, userId);
+			return job?.status === 'awaiting_sources' ? job : null;
+		});
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		for (const directory of temporaryDirectories.splice(0)) {
 			fs.rmSync(directory, { recursive: true, force: true });
 		}
@@ -59,6 +70,22 @@ describe('warehouse context files', () => {
 			),
 		).toBe('# Notes');
 		expect(fs.existsSync(path.join(temporaryDirectory, result.path))).toBe(false);
+		expect(mocks.releaseWarehouseProvisioningJobLock).toHaveBeenCalledOnce();
+	});
+
+	it('clears a partial staged selection before retrying', async () => {
+		const temporaryDirectory = createTemporaryDirectory();
+		mocks.getWarehouseProvisioningJob.mockResolvedValue({
+			status: 'awaiting_sources',
+			temporaryDirectory,
+		});
+		await saveWarehouseContextFile('job-id', 'user-id', 'old.md', Buffer.from('# Old'));
+
+		await clearWarehouseContextFiles('job-id', 'user-id');
+
+		expect(
+			fs.existsSync(path.join(path.dirname(temporaryDirectory), '.warehouse-onboarding-uploads', 'job-id')),
+		).toBe(false);
 	});
 
 	it('keeps both files when sanitized names collide', async () => {
@@ -68,7 +95,7 @@ describe('warehouse context files', () => {
 			temporaryDirectory,
 		});
 
-		await saveWarehouseContextFile('job-id', 'user-id', 'notes.txt', Buffer.from('first'));
+		await saveWarehouseContextFile('job-id', 'user-id', '../notes.txt', Buffer.from('first'));
 		const result = await saveWarehouseContextFile('job-id', 'user-id', 'notes.txt', Buffer.from('second'));
 		const retried = await saveWarehouseContextFile('job-id', 'user-id', 'notes.txt', Buffer.from('second'));
 
@@ -110,6 +137,14 @@ describe('warehouse context files', () => {
 		).toBe(false);
 	});
 
+	it('rethrows staging directory access errors other than a missing directory', async () => {
+		const projectDirectory = createTemporaryDirectory();
+		const accessError = Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+		vi.spyOn(fsPromises, 'access').mockRejectedValueOnce(accessError);
+
+		await expect(restoreWarehouseContextFiles('job-id', projectDirectory)).rejects.toBe(accessError);
+	});
+
 	it('does not expose jobs belonging to another user', async () => {
 		mocks.getWarehouseProvisioningJob.mockResolvedValue(null);
 
@@ -119,6 +154,19 @@ describe('warehouse context files', () => {
 			code: 404,
 			message: 'Warehouse setup job not found',
 		});
+	});
+
+	it('rejects uploads while submission holds the job lease', async () => {
+		mocks.claimWarehouseProvisioningJobContextFiles.mockResolvedValueOnce(null);
+		mocks.getWarehouseProvisioningJob.mockResolvedValue({
+			status: 'awaiting_sources',
+			temporaryDirectory: createTemporaryDirectory(),
+		});
+
+		await expect(
+			saveWarehouseContextFile('job-id', 'user-id', 'notes.md', Buffer.from('notes')),
+		).rejects.toMatchObject({ code: 409 });
+		expect(mocks.releaseWarehouseProvisioningJobLock).not.toHaveBeenCalled();
 	});
 
 	it('rejects uploads after synchronization starts', async () => {

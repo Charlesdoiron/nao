@@ -10,7 +10,7 @@ import {
 	getWarehouseTableKey,
 	WarehouseTableSelection,
 } from './warehouse-table-selection';
-import type { WarehouseSchemaInventory } from './warehouse-table-selection';
+import type { WarehouseSchemaInventory, WarehouseTableSelectionMode } from './warehouse-table-selection';
 
 vi.mock('@/main', () => ({ trpc: {} }));
 
@@ -49,17 +49,42 @@ describe('WarehouseTableSelection', () => {
 		expect(onSubmit).toHaveBeenCalledOnce();
 	});
 
-	it('filters schemas and tables without changing the selection', () => {
+	it('filters by table and schema without changing the selection', () => {
 		render(<SelectionHarness onSubmit={vi.fn()} />);
 
 		fireEvent.click(screen.getByRole('button', { name: /Specific selection/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'Expand public folder' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'customers table access' }));
 		fireEvent.change(screen.getByRole('textbox', { name: 'Search schemas and tables' }), {
 			target: { value: 'events' },
 		});
 
 		expect(screen.getByText('events')).toBeTruthy();
 		expect(screen.queryByText('orders')).toBeNull();
-		expect(screen.getByText('0 of 3 selected')).toBeTruthy();
+		expect(screen.getByText('1 of 3 selected')).toBeTruthy();
+
+		fireEvent.change(screen.getByRole('textbox', { name: 'Search schemas and tables' }), {
+			target: { value: 'public' },
+		});
+
+		expect(screen.getByText('customers')).toBeTruthy();
+		expect(screen.getByText('orders')).toBeTruthy();
+		expect(screen.queryByText('events')).toBeNull();
+		expect(screen.getByText('1 of 3 selected')).toBeTruthy();
+	});
+
+	it('keeps a complete manual selection in specific mode', () => {
+		render(<SelectionHarness onSubmit={vi.fn()} />);
+
+		fireEvent.click(screen.getByRole('button', { name: /Specific selection/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'Expand public folder' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'customers table access' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'orders table access' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Expand warehouse folder' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'events table access' }));
+
+		expect(screen.getByText('3 of 3 selected')).toBeTruthy();
+		expect(screen.getByRole('button', { name: /Specific selection/ }).getAttribute('aria-pressed')).toBe('true');
 	});
 
 	it('collapses and expands a schema from the arrow beside its name', () => {
@@ -99,6 +124,7 @@ describe('WarehouseTableSelection', () => {
 });
 
 function SelectionHarness({ onSubmit }: { onSubmit: () => void }) {
+	const [selectionMode, setSelectionMode] = useState<WarehouseTableSelectionMode>('all');
 	const [selectedTableKeys, setSelectedTableKeys] = useState(() => getAllWarehouseTableKeys(schemas));
 
 	return (
@@ -106,9 +132,11 @@ function SelectionHarness({ onSubmit }: { onSubmit: () => void }) {
 			schemas={schemas}
 			databaseType='postgres'
 			databaseLabel='Warehouse'
+			selectionMode={selectionMode}
 			selectedTableKeys={selectedTableKeys}
 			isPending={false}
 			error={null}
+			onSelectionModeChange={setSelectionMode}
 			onChange={setSelectedTableKeys}
 			onBack={vi.fn()}
 			onSubmit={onSubmit}

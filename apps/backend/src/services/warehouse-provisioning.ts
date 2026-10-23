@@ -74,6 +74,7 @@ const PROVISIONING_STATUSES: WarehouseProvisioningStatus[] = [
 const FINALIZATION_STATUSES: WarehouseProvisioningStatus[] = ['finalizing', 'publishing'];
 const RECOVERABLE_STATUSES: WarehouseProvisioningStatus[] = [
 	...PROVISIONING_STATUSES,
+	'awaiting_sources',
 	'awaiting_context',
 	...FINALIZATION_STATUSES,
 ];
@@ -474,10 +475,10 @@ async function runProvisioningJob(
 	let awaitingContextSources = false;
 	await withJobLease(jobId, async () => {
 		awaitingContextSources = await provisionWarehouse(jobId, input);
+		if (awaitingContextSources) {
+			await updateJob(jobId, { status: 'awaiting_sources', attempts: 0 });
+		}
 	});
-	if (awaitingContextSources) {
-		await updateJob(jobId, { status: 'awaiting_sources', attempts: 0 });
-	}
 	await maybeStartFinalization(jobId);
 }
 
@@ -577,6 +578,13 @@ export async function submitWarehouseContextSources(
 	};
 	const claimedJob = await claimJob(jobId, ['awaiting_sources']);
 	if (!claimedJob) {
+		const currentJob = await warehouseProvisioningJobQueries.getWarehouseProvisioningJob(jobId, userId);
+		if (currentJob?.status === 'awaiting_sources') {
+			throw new TRPCError({
+				code: 'CONFLICT',
+				message: 'Business context files are still being updated. Try again.',
+			});
+		}
 		return;
 	}
 
@@ -1254,6 +1262,12 @@ export async function reconcileWarehouseProvisioningJobs(): Promise<void> {
 
 	await Promise.all(
 		jobs.map(async (job) => {
+			if (job.status === 'awaiting_sources') {
+				if (!job.temporaryDirectory || !fs.existsSync(job.temporaryDirectory)) {
+					await recoverProvisioningJob(job.id, ['awaiting_sources']);
+				}
+				return;
+			}
 			if (job.status !== 'awaiting_context' && job.attempts >= MAX_JOB_ATTEMPTS) {
 				await failExhaustedJob(job);
 				return;
@@ -1271,8 +1285,11 @@ export async function reconcileWarehouseProvisioningJobs(): Promise<void> {
 	);
 }
 
-async function recoverProvisioningJob(jobId: string): Promise<void> {
-	const job = await claimJob(jobId, PROVISIONING_STATUSES);
+async function recoverProvisioningJob(
+	jobId: string,
+	statuses: WarehouseProvisioningStatus[] = PROVISIONING_STATUSES,
+): Promise<void> {
+	const job = await claimJob(jobId, statuses);
 	if (!job) {
 		return;
 	}

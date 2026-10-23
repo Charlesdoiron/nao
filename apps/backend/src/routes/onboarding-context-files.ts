@@ -3,7 +3,11 @@ import { z } from 'zod/v4';
 
 import type { App } from '../app';
 import { authMiddleware } from '../middleware/auth';
-import { MAX_WAREHOUSE_CONTEXT_FILE_SIZE_BYTES, saveWarehouseContextFile } from '../services/warehouse-context-files';
+import {
+	clearWarehouseContextFiles,
+	MAX_WAREHOUSE_CONTEXT_FILE_SIZE_BYTES,
+	saveWarehouseContextFile,
+} from '../services/warehouse-context-files';
 import { HandlerError } from '../utils/error';
 
 const uploadQuerySchema = z.object({
@@ -38,6 +42,19 @@ export const onboardingContextFileRoutes = async (app: App) => {
 			}
 
 			return saveWarehouseContextFile(request.query.jobId, request.user.id, upload.filename, data);
+		},
+	);
+
+	app.delete(
+		'/',
+		{
+			schema: {
+				querystring: uploadQuerySchema,
+			},
+		},
+		async (request) => {
+			await clearWarehouseContextFiles(request.query.jobId, request.user.id);
+			return { success: true };
 		},
 	);
 };

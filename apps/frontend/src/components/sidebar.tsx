@@ -428,7 +428,7 @@ function SidebarNav({
 		enabled: Boolean(onboardingChatId),
 		refetchInterval: (query) => {
 			const status = query.state.data?.status;
-			return status && status !== 'awaiting_sources' && status !== 'awaiting_context' ? 2000 : false;
+			return status && status !== 'awaiting_context' ? 2000 : false;
 		},
 		refetchOnWindowFocus: 'always',
 	});

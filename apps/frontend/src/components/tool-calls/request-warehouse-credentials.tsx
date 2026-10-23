@@ -12,7 +12,7 @@ import {
 	WarehouseTableSelection,
 } from './warehouse-table-selection';
 import type { WarehouseCredentialsFormValues } from './warehouse-credentials';
-import type { WarehouseSchemaInventory } from './warehouse-table-selection';
+import type { WarehouseSchemaInventory, WarehouseTableSelectionMode } from './warehouse-table-selection';
 import type { ToolCallComponentProps } from '.';
 import type { TabBarItem } from '@/components/ui/tab-bar';
 
@@ -49,6 +49,7 @@ export function RequestWarehouseCredentialsToolCall({
 	const [validatedCredentialFingerprint, setValidatedCredentialFingerprint] = useState<string | null>(null);
 	const [setupStep, setSetupStep] = useState<SetupStep>('credentials');
 	const [discoveredSchemas, setDiscoveredSchemas] = useState<WarehouseSchemaInventory[]>();
+	const [tableSelectionMode, setTableSelectionMode] = useState<WarehouseTableSelectionMode>('all');
 	const [selectedTableKeys, setSelectedTableKeys] = useState<Set<string>>(new Set());
 	const cardRef = useRef<HTMLDivElement>(null);
 	const notifiedJobId = useRef<string | null>(null);
@@ -164,13 +165,12 @@ export function RequestWarehouseCredentialsToolCall({
 		if (!credentialValues || !discoveredSchemas) {
 			return;
 		}
-		const tableCount = discoveredSchemas.reduce((count, schema) => count + schema.tables.length, 0);
 		const selected = getCompactWarehouseTableSelection(discoveredSchemas, selectedTableKeys);
 		await startProvisioning.mutateAsync({
 			provider,
 			credentials: buildWarehouseCredentials(provider, credentialValues),
 			tableSelection:
-				selectedTableKeys.size === tableCount
+				tableSelectionMode === 'all'
 					? { mode: 'all' }
 					: {
 							mode: 'selected',
@@ -309,9 +309,11 @@ export function RequestWarehouseCredentialsToolCall({
 									schemas={discoveredSchemas}
 									databaseType={provider}
 									databaseLabel={WAREHOUSE_PROVIDER_LABELS[provider]}
+									selectionMode={tableSelectionMode}
 									selectedTableKeys={selectedTableKeys}
 									isPending={startProvisioning.isPending}
 									error={startProvisioning.error}
+									onSelectionModeChange={setTableSelectionMode}
 									onChange={setSelectedTableKeys}
 									onBack={() => setSetupStep('credentials')}
 									onSubmit={() => void startSelectedProvisioning()}
@@ -325,6 +327,7 @@ export function RequestWarehouseCredentialsToolCall({
 											credentials: buildWarehouseCredentials(provider, values),
 										});
 										setDiscoveredSchemas(result.schemas);
+										setTableSelectionMode('all');
 										setSelectedTableKeys(getAllWarehouseTableKeys(result.schemas));
 									}}
 									onSubmit={async () => {

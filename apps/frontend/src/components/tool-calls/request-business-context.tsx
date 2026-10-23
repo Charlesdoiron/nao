@@ -73,7 +73,7 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 	const githubConnected = githubValues.repoFullName.length > 0 && githubValues.branch.length > 0;
 	const selectedContextSources: SelectedContextSources = {
 		...(notionConnected && {
-			notion: { apiKey: notionValues.apiKey, pages: parseNotionPages(notionValues.pagesText) },
+			notion: { apiKey: notionValues.apiKey.trim(), pages: parseNotionPages(notionValues.pagesText) },
 		}),
 		...(confluenceConnected && {
 			confluence: {
@@ -104,6 +104,7 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 		setFileUploadError(null);
 		setIsUploadingFiles(true);
 		try {
+			await clearWarehouseContextFiles(jobId);
 			for (const file of filesToUpload) {
 				await uploadWarehouseContextFile(jobId, file);
 			}
@@ -279,12 +280,13 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 									/>
 								</>
 							}
-							error={validateNotion.error ?? submitContext.error}
+							error={validateNotion.error}
+							submissionError={submitContext.error}
 							onValuesChange={setNotionValues}
 							onValidatedFingerprintChange={setValidatedNotionFingerprint}
 							onValidate={async (values) => {
 								const result = await validateNotion.mutateAsync({
-									apiKey: values.apiKey,
+									apiKey: values.apiKey.trim(),
 									pages: parseNotionPages(values.pagesText),
 								});
 								setValidatedNotionPages(result.pages);
@@ -299,6 +301,18 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 			</DialogContent>
 		</Dialog>
 	);
+}
+
+async function clearWarehouseContextFiles(jobId: string): Promise<void> {
+	const response = await fetch(`/api/onboarding/context-files?jobId=${encodeURIComponent(jobId)}`, {
+		method: 'DELETE',
+	});
+	if (response.ok) {
+		return;
+	}
+
+	const body = (await response.json().catch(() => null)) as { error?: string } | null;
+	throw new Error(body?.error ?? 'Could not update the selected business context files.');
 }
 
 async function uploadWarehouseContextFile(jobId: string, file: File): Promise<void> {

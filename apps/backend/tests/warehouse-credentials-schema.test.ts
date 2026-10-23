@@ -87,9 +87,19 @@ describe('warehouse credentials schema', () => {
 		expect(
 			warehouseContextSourcesInputSchema.parse({
 				jobId: '11111111-1111-4111-8111-111111111111',
+			}),
+		).toEqual({
+			jobId: '11111111-1111-4111-8111-111111111111',
+			businessContext: {},
+			contextSources: {},
+		});
+
+		expect(
+			warehouseContextSourcesInputSchema.parse({
+				jobId: '11111111-1111-4111-8111-111111111111',
 				contextSources: {
 					notion: {
-						apiKey: 'secret',
+						apiKey: '  secret  ',
 						pages: ['https://notion.so/page'],
 					},
 					confluence: {

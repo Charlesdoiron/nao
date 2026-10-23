@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GithubContextSetup } from './github-context-setup';
 import type { GithubContextValues } from './github-context-setup';
 
+const mocks = vi.hoisted(() => ({ connected: true }));
+
 vi.mock('@/main', () => ({
 	trpc: {
 		github: {
@@ -20,7 +22,10 @@ vi.mock('@/main', () => ({
 			getStatus: {
 				queryOptions: () => ({
 					queryKey: ['github-status'],
-					queryFn: async () => ({ connected: true, user: { login: 'octocat', avatarUrl: '' } }),
+					queryFn: async () =>
+						mocks.connected
+							? { connected: true, user: { login: 'octocat', avatarUrl: '' } }
+							: { connected: false },
 				}),
 			},
 		},
@@ -42,13 +47,18 @@ vi.mock('@/components/settings/github-repo-list', () => ({
 	),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	mocks.connected = true;
+	vi.restoreAllMocks();
+});
 
 describe('GithubContextSetup', () => {
 	it('selects a repository from the connected GitHub account', async () => {
+		const onValuesChange = vi.fn();
 		render(
 			<QueryClientProvider client={new QueryClient()}>
-				<GithubHarness />
+				<GithubHarness onValuesChange={onValuesChange} />
 			</QueryClientProvider>,
 		);
 
@@ -58,10 +68,41 @@ describe('GithubContextSetup', () => {
 
 		expect(screen.getByText('Connected')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Hide' })).toBeTruthy();
+		expect(onValuesChange).toHaveBeenCalledWith({ repoFullName: 'acme/analytics', branch: 'main' });
+	});
+
+	it('clears the waiting state when GitHub redirects with an error', async () => {
+		mocks.connected = false;
+		const popup = {
+			closed: false,
+			close: vi.fn(),
+			location: { href: 'http://localhost/onboarding?github=error&reason=exchange_failed' },
+		} as unknown as Window;
+		vi.spyOn(window, 'open').mockReturnValue(popup);
+		render(
+			<QueryClientProvider client={new QueryClient()}>
+				<GithubHarness onValuesChange={vi.fn()} />
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		const connectButton = await screen.findByRole('button', { name: 'Connect GitHub' });
+		await waitFor(() => expect((connectButton as HTMLButtonElement).disabled).toBe(false));
+		fireEvent.click(connectButton);
+		expect(screen.getByRole('button', { name: 'Waiting for GitHub…' })).toBeTruthy();
+
+		await screen.findByText('GitHub authorization failed. Please try again.');
+		expect(screen.getByRole('button', { name: 'Connect GitHub' })).toBeTruthy();
+		expect(popup.close).toHaveBeenCalledOnce();
 	});
 });
 
-function GithubHarness() {
+function GithubHarness({ onValuesChange }: { onValuesChange: (values: GithubContextValues) => void }) {
 	const [values, setValues] = useState<GithubContextValues>({ repoFullName: '', branch: '' });
-	return <GithubContextSetup values={values} isStarting={false} onValuesChange={setValues} />;
+	const handleValuesChange = (nextValues: GithubContextValues) => {
+		setValues(nextValues);
+		onValuesChange(nextValues);
+	};
+
+	return <GithubContextSetup values={values} isStarting={false} onValuesChange={handleValuesChange} />;
 }

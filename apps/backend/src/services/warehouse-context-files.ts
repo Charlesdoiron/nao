@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
@@ -27,43 +28,43 @@ export async function saveWarehouseContextFile(
 	originalFileName: string,
 	data: Buffer,
 ): Promise<{ filename: string; path: string; size: number }> {
-	const job = await warehouseProvisioningJobQueries.getWarehouseProvisioningJob(jobId, userId);
-	if (!job) {
-		throw new HandlerError('NOT_FOUND', 'Warehouse setup job not found');
-	}
-	if (job.status !== 'awaiting_sources') {
-		throw new HandlerError('CONFLICT', 'Business context files can only be uploaded before sync starts.');
-	}
-	if (!job.temporaryDirectory) {
-		throw new Error('Warehouse setup temporary directory is missing');
-	}
-
-	const filename = validateFile(originalFileName, data);
-	const uploadDirectory = getStagingDirectory(jobId, job.temporaryDirectory);
-	await fs.mkdir(uploadDirectory, { recursive: true });
-	const stored = await writeWithoutReplacing(uploadDirectory, filename, data);
-	try {
-		await validateUploadDirectory(uploadDirectory);
-	} catch (error) {
-		if (stored.created) {
-			await fs.rm(path.join(uploadDirectory, stored.filename), { force: true });
+	return withWritableContextFiles(jobId, userId, async (temporaryDirectory) => {
+		const filename = validateFile(originalFileName, data);
+		const uploadDirectory = getStagingDirectory(jobId, temporaryDirectory);
+		await fs.mkdir(uploadDirectory, { recursive: true });
+		const stored = await writeWithoutReplacing(uploadDirectory, filename, data);
+		try {
+			await validateUploadDirectory(uploadDirectory);
+		} catch (error) {
+			if (stored.created) {
+				await fs.rm(path.join(uploadDirectory, stored.filename), { force: true });
+			}
+			throw error;
 		}
-		throw error;
-	}
 
-	return {
-		filename: stored.filename,
-		path: path.posix.join('docs', 'uploads', stored.filename),
-		size: data.length,
-	};
+		return {
+			filename: stored.filename,
+			path: path.posix.join('docs', 'uploads', stored.filename),
+			size: data.length,
+		};
+	});
+}
+
+export async function clearWarehouseContextFiles(jobId: string, userId: string): Promise<void> {
+	await withWritableContextFiles(jobId, userId, (temporaryDirectory) =>
+		cleanupWarehouseContextFiles(jobId, temporaryDirectory),
+	);
 }
 
 export async function restoreWarehouseContextFiles(jobId: string, projectDirectory: string): Promise<void> {
 	const stagingDirectory = getStagingDirectory(jobId, projectDirectory);
 	try {
 		await fs.access(stagingDirectory);
-	} catch {
-		return;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+			return;
+		}
+		throw error;
 	}
 
 	await fs.mkdir(path.join(projectDirectory, PROJECT_UPLOAD_DIRECTORY), { recursive: true });
@@ -74,6 +75,35 @@ export async function cleanupWarehouseContextFiles(jobId: string, projectDirecto
 	const stagingDirectory = getStagingDirectory(jobId, projectDirectory);
 	await fs.rm(stagingDirectory, { recursive: true, force: true });
 	await fs.rmdir(path.dirname(stagingDirectory)).catch(() => undefined);
+}
+
+async function withWritableContextFiles<T>(
+	jobId: string,
+	userId: string,
+	action: (temporaryDirectory: string) => Promise<T>,
+): Promise<T> {
+	const workerId = `context-files:${crypto.randomUUID()}`;
+	const job = await warehouseProvisioningJobQueries.claimWarehouseProvisioningJobContextFiles(
+		jobId,
+		userId,
+		workerId,
+	);
+	if (!job) {
+		const existingJob = await warehouseProvisioningJobQueries.getWarehouseProvisioningJob(jobId, userId);
+		if (!existingJob) {
+			throw new HandlerError('NOT_FOUND', 'Warehouse setup job not found');
+		}
+		throw new HandlerError('CONFLICT', 'Business context files can only be changed before sync starts.');
+	}
+
+	try {
+		if (!job.temporaryDirectory) {
+			throw new Error('Warehouse setup temporary directory is missing');
+		}
+		return await action(job.temporaryDirectory);
+	} finally {
+		await warehouseProvisioningJobQueries.releaseWarehouseProvisioningJobLock(jobId, workerId);
+	}
 }
 
 function validateFile(originalFileName: string, data: Buffer): string {

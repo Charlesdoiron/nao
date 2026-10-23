@@ -85,6 +85,7 @@ describe('project warehouse credentials', () => {
 				'"https://x-access-token:current-token@github.com/acme/analytics.git"',
 		});
 		expect(mocks.getUserRoleInProject).toHaveBeenCalledWith('project-1', 'user-1');
+		expect(mocks.getGithubToken).toHaveBeenCalledWith('user-1');
 	});
 
 	it('omits GitHub access after the user disconnects', async () => {

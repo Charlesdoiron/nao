@@ -27,19 +27,19 @@ export function FileContextSetup({ files, disabled, error, onFilesChange }: File
 	const [isDragging, setIsDragging] = useState(false);
 	const [rejection, setRejection] = useState<string | null>(null);
 
-	const addFiles = (candidates: FileList | File[]) => {
+	const addFiles = async (candidates: File[]) => {
 		const nextFiles = [...files];
-		const fingerprints = new Set(files.map(fileFingerprint));
+		const fingerprints = new Set(await Promise.all(files.map(fileFingerprint)));
 		let totalSize = files.reduce((total, file) => total + file.size, 0);
 		let nextRejection: string | null = null;
 
-		for (const file of Array.from(candidates)) {
+		for (const file of candidates) {
 			const problem = validateFile(file);
 			if (problem) {
 				nextRejection = problem;
 				continue;
 			}
-			const fingerprint = fileFingerprint(file);
+			const fingerprint = await fileFingerprint(file);
 			if (fingerprints.has(fingerprint)) {
 				continue;
 			}
@@ -64,7 +64,7 @@ export function FileContextSetup({ files, disabled, error, onFilesChange }: File
 		event.preventDefault();
 		setIsDragging(false);
 		if (!disabled) {
-			addFiles(event.dataTransfer.files);
+			void addFiles(Array.from(event.dataTransfer.files));
 		}
 	};
 
@@ -122,7 +122,7 @@ export function FileContextSetup({ files, disabled, error, onFilesChange }: File
 					className='sr-only'
 					onChange={(event) => {
 						if (event.target.files) {
-							addFiles(event.target.files);
+							void addFiles(Array.from(event.target.files));
 						}
 						event.target.value = '';
 					}}
@@ -144,9 +144,9 @@ export function FileContextSetup({ files, disabled, error, onFilesChange }: File
 
 			{files.length > 0 && (
 				<ul className='space-y-2'>
-					{files.map((file) => (
+					{files.map((file, index) => (
 						<li
-							key={fileFingerprint(file)}
+							key={`${file.name}:${file.size}:${file.lastModified}:${index}`}
 							className='flex items-center gap-3 rounded-lg border bg-background px-3 py-2'
 						>
 							<FileText className='size-4 shrink-0 text-muted-foreground' aria-hidden />
@@ -169,7 +169,7 @@ export function FileContextSetup({ files, disabled, error, onFilesChange }: File
 				</ul>
 			)}
 
-			{(rejection || error) && <FormError error={rejection ?? error ?? ''} />}
+			{(error || rejection) && <FormError error={error ?? rejection ?? ''} />}
 		</section>
 	);
 }
@@ -185,8 +185,25 @@ function validateFile(file: File): string | null {
 	return null;
 }
 
-function fileFingerprint(file: File): string {
-	return `${file.name}:${file.size}:${file.lastModified}`;
+async function fileFingerprint(file: File): Promise<string> {
+	const bytes = Uint8Array.from(new Uint8Array(await readFile(file)));
+	const digest = await crypto.subtle.digest('SHA-256', bytes);
+	return `${file.name}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function readFile(file: File): Promise<ArrayBuffer> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}.`));
+		reader.onload = () => {
+			if (reader.result instanceof ArrayBuffer) {
+				resolve(reader.result);
+			} else {
+				reject(new Error(`Could not read ${file.name}.`));
+			}
+		};
+		reader.readAsArrayBuffer(file);
+	});
 }
 
 function formatFileSize(bytes: number): string {

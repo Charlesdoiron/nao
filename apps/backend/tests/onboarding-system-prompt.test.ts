@@ -68,6 +68,10 @@ describe('onboarding system prompt', () => {
 		expect(prompt).toContain('Do not ask for this context again');
 		expect(prompt).toContain('Call generate_onboarding_rules immediately');
 		expect(prompt).toContain('"businessContext": {}');
+		expect(prompt).toContain(
+			'including generate_onboarding_rules immediately after the internal context-request event',
+		);
+		expect(prompt).not.toContain('direct open-ended business-context question');
 		expect(prompt).not.toContain('write one or two sentences, paste a link');
 	});
 

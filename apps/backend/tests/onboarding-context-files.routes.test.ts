@@ -2,15 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	addHook: vi.fn(),
+	authMiddleware: vi.fn(),
+	clearWarehouseContextFiles: vi.fn(),
+	delete: vi.fn(),
 	post: vi.fn(),
 	saveWarehouseContextFile: vi.fn(),
 }));
 
 vi.mock('../src/middleware/auth', () => ({
-	authMiddleware: vi.fn(),
+	authMiddleware: mocks.authMiddleware,
 }));
 
 vi.mock('../src/services/warehouse-context-files', () => ({
+	clearWarehouseContextFiles: mocks.clearWarehouseContextFiles,
 	MAX_WAREHOUSE_CONTEXT_FILE_SIZE_BYTES: 5 * 1024 * 1024,
 	saveWarehouseContextFile: mocks.saveWarehouseContextFile,
 }));
@@ -22,8 +26,13 @@ describe('onboarding context file routes', () => {
 		vi.clearAllMocks();
 		await onboardingContextFileRoutes({
 			addHook: mocks.addHook,
+			delete: mocks.delete,
 			post: mocks.post,
 		} as never);
+	});
+
+	it('requires authentication for context file routes', () => {
+		expect(mocks.addHook).toHaveBeenCalledWith('preHandler', mocks.authMiddleware);
 	});
 
 	it('passes an uploaded file to the job-scoped storage service', async () => {
@@ -66,6 +75,16 @@ describe('onboarding context file routes', () => {
 		});
 		expect(mocks.saveWarehouseContextFile).not.toHaveBeenCalled();
 	});
+
+	it('clears staged files for the authenticated job owner', async () => {
+		const result = await deleteHandler()({
+			query: { jobId: 'job-id' },
+			user: { id: 'user-id' },
+		});
+
+		expect(mocks.clearWarehouseContextFiles).toHaveBeenCalledWith('job-id', 'user-id');
+		expect(result).toEqual({ success: true });
+	});
 });
 
 function handler() {
@@ -77,5 +96,12 @@ function handler() {
 			file: { truncated: boolean };
 			toBuffer: () => Promise<Buffer>;
 		}>;
+	}) => Promise<unknown>;
+}
+
+function deleteHandler() {
+	return mocks.delete.mock.calls[0][2] as (request: {
+		query: { jobId: string };
+		user: { id: string };
 	}) => Promise<unknown>;
 }

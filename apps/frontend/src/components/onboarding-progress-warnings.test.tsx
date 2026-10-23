@@ -24,7 +24,8 @@ describe('WarehouseProvisioningWarnings', () => {
 
 		expect(screen.getByRole('alert')).toBeTruthy();
 		expect(screen.getByText('Some optional business context was not synced')).toBeTruthy();
-		expect(screen.getByText(/Confluence could not be synced/)).toBeTruthy();
+		expect(screen.getByText('Confluence could not be synced. Warehouse setup continued without it.')).toBeTruthy();
+		expect(screen.queryByText(/warehouse setup failed/i)).toBeNull();
 	});
 
 	it('renders nothing when every source synced', () => {

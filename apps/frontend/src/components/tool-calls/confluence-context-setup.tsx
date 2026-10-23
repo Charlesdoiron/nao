@@ -70,7 +70,13 @@ export function ConfluenceContextSetup({
 					</div>
 					<p className='text-xs text-muted-foreground'>Sync Confluence Cloud pages as business context.</p>
 				</div>
-				<Button type='button' variant='outline' size='sm' onClick={() => setExpanded((current) => !current)}>
+				<Button
+					type='button'
+					variant='outline'
+					size='sm'
+					aria-expanded={expanded}
+					onClick={() => setExpanded((current) => !current)}
+				>
 					{expanded ? 'Hide' : connected ? 'Edit' : 'Connect'}
 				</Button>
 			</div>
@@ -194,7 +200,7 @@ export function getConfluenceContextFingerprint(values: ConfluenceContextValues)
 function isConfluenceCloudUrl(value: string): boolean {
 	try {
 		const url = new URL(value.trim());
-		return url.protocol === 'https:' && url.hostname.endsWith('.atlassian.net');
+		return url.protocol === 'https:' && url.hostname.endsWith('.atlassian.net') && !url.search && !url.hash;
 	} catch {
 		return false;
 	}

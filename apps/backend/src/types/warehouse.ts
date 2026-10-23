@@ -41,7 +41,7 @@ export const warehouseTableSelectionSchema = z.discriminatedUnion('mode', [
 ]);
 
 export const notionContextSourceSchema = z.object({
-	apiKey: z.string().min(1),
+	apiKey: z.string().trim().min(1),
 	pages: z.array(z.string().min(1)).min(1),
 });
 

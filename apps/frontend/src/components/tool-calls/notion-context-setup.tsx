@@ -25,6 +25,7 @@ interface NotionContextSetupProps {
 	additionalProviders?: ReactNode;
 	hasConnectedContext?: boolean;
 	error: { message: string } | null;
+	submissionError: { message: string } | null;
 	onValuesChange: (values: NotionContextValues) => void;
 	onValidatedFingerprintChange: (fingerprint: string) => void;
 	onValidate: (values: NotionContextValues) => Promise<void>;
@@ -45,6 +46,7 @@ export function NotionContextSetup({
 	additionalProviders,
 	hasConnectedContext,
 	error,
+	submissionError,
 	onValuesChange,
 	onValidatedFingerprintChange,
 	onValidate,
@@ -62,7 +64,7 @@ export function NotionContextSetup({
 	const canValidate = values.apiKey.trim().length > 0 && pages.length > 0;
 
 	const validate = async () => {
-		await onValidate(values);
+		await onValidate({ ...values, apiKey: values.apiKey.trim() });
 		onValidatedFingerprintChange(fingerprint);
 	};
 
@@ -149,7 +151,7 @@ export function NotionContextSetup({
 									type='button'
 									size='sm'
 									className='rounded-full'
-									onClick={validate}
+									onClick={() => void validate().catch(() => undefined)}
 									disabled={!canValidate || isValidating || isStarting}
 									isLoading={isValidating}
 								>
@@ -163,6 +165,7 @@ export function NotionContextSetup({
 			</div>
 
 			<div className='space-y-2 border-t pt-4'>
+				{submissionError && <FormError error={submissionError.message} />}
 				{!canStart && (
 					<p className='text-xs text-muted-foreground'>Select at least one table before syncing.</p>
 				)}
@@ -199,7 +202,7 @@ export function parseNotionPages(value: string): string[] {
 
 export function getNotionContextFingerprint(values: NotionContextValues): string {
 	return JSON.stringify({
-		apiKey: values.apiKey,
+		apiKey: values.apiKey.trim(),
 		pages: parseNotionPages(values.pagesText),
 	});
 }

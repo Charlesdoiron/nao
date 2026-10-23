@@ -24,12 +24,14 @@ export function GithubContextSetup({ values, isStarting, onValuesChange }: Githu
 	const [expanded, setExpanded] = useState(Boolean(values.repoFullName));
 	const [isAuthorizing, setIsAuthorizing] = useState(false);
 	const [popupBlocked, setPopupBlocked] = useState(false);
+	const [authorizationError, setAuthorizationError] = useState<string | null>(null);
 	const authWindow = useRef<Window | null>(null);
 	const availability = useQuery(trpc.github.isAvailable.queryOptions());
 	const status = useQuery({
 		...trpc.github.getStatus.queryOptions(),
 		refetchInterval: isAuthorizing ? 1000 : false,
 	});
+	const refetchStatus = status.refetch;
 	const accountConnected = status.data?.connected === true;
 	const repositoryConnected = accountConnected && values.repoFullName.length > 0;
 
@@ -46,14 +48,37 @@ export function GithubContextSetup({ values, isStarting, onValuesChange }: Githu
 		if (!isAuthorizing) {
 			return;
 		}
+		const finishAuthorization = (error?: string) => {
+			authWindow.current?.close();
+			authWindow.current = null;
+			setIsAuthorizing(false);
+			setAuthorizationError(error ?? null);
+		};
 		const interval = window.setInterval(() => {
-			if (authWindow.current?.closed) {
+			const popup = authWindow.current;
+			if (popup?.closed) {
 				authWindow.current = null;
 				setIsAuthorizing(false);
+				void refetchStatus();
+				return;
+			}
+			try {
+				if (popup && new URL(popup.location.href).searchParams.get('github') === 'error') {
+					finishAuthorization('GitHub authorization failed. Please try again.');
+				}
+			} catch {
+				return;
 			}
 		}, 500);
-		return () => window.clearInterval(interval);
-	}, [isAuthorizing]);
+		const timeout = window.setTimeout(
+			() => finishAuthorization('GitHub authorization timed out. Please try again.'),
+			120_000,
+		);
+		return () => {
+			window.clearInterval(interval);
+			window.clearTimeout(timeout);
+		};
+	}, [isAuthorizing, refetchStatus]);
 
 	useEffect(() => {
 		return () => authWindow.current?.close();
@@ -61,6 +86,7 @@ export function GithubContextSetup({ values, isStarting, onValuesChange }: Githu
 
 	const connectGithub = () => {
 		setPopupBlocked(false);
+		setAuthorizationError(null);
 		authWindow.current = window.open(
 			'/api/github/connect?returnTo=/onboarding',
 			'nao-github-connect',
@@ -152,6 +178,7 @@ export function GithubContextSetup({ values, isStarting, onValuesChange }: Githu
 					)}
 
 					{popupBlocked && <FormError error='Allow popups for nao, then try connecting GitHub again.' />}
+					{authorizationError && <FormError error={authorizationError} />}
 					{status.error && <FormError error={status.error.message} />}
 				</div>
 			)}

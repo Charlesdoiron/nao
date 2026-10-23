@@ -15,13 +15,17 @@ export interface WarehouseSchemaInventory {
 	tables: string[];
 }
 
+export type WarehouseTableSelectionMode = 'all' | 'selected';
+
 interface WarehouseTableSelectionProps {
 	schemas: WarehouseSchemaInventory[];
 	databaseType: string;
 	databaseLabel: string;
+	selectionMode: WarehouseTableSelectionMode;
 	selectedTableKeys: Set<string>;
 	isPending: boolean;
 	error: { message: string } | null;
+	onSelectionModeChange: (mode: WarehouseTableSelectionMode) => void;
 	onChange: (selectedTableKeys: Set<string>) => void;
 	onBack: () => void;
 	onSubmit: () => void;
@@ -31,9 +35,11 @@ export function WarehouseTableSelection({
 	schemas,
 	databaseType,
 	databaseLabel,
+	selectionMode,
 	selectedTableKeys,
 	isPending,
 	error,
+	onSelectionModeChange,
 	onChange,
 	onBack,
 	onSubmit,
@@ -48,29 +54,29 @@ export function WarehouseTableSelection({
 			),
 		[databaseLabel, databaseType, schemas],
 	);
-	const allSelected = tableCount > 0 && selectedCount === tableCount;
-	const databaseAccess: DatabaseContextAccess = allSelected
-		? { mode: 'all', strict: true }
-		: {
-				mode: 'restricted',
-				strict: true,
-				grants: schemas.flatMap(({ schema, tables }): DatabaseContextGrant[] => {
-					const selectedTables = tables.filter((table) =>
-						selectedTableKeys.has(getWarehouseTableKey(schema, table)),
-					);
-					if (tables.length > 0 && selectedTables.length === tables.length) {
-						return [{ kind: 'schema', databaseType, database: databaseLabel, schema }];
-					}
-					return selectedTables.map((table) => ({
-						kind: 'table',
-						databaseType,
-						database: databaseLabel,
-						schema,
-						table,
-					}));
-				}),
-				patterns: [],
-			};
+	const databaseAccess: DatabaseContextAccess =
+		selectionMode === 'all'
+			? { mode: 'all', strict: true }
+			: {
+					mode: 'restricted',
+					strict: true,
+					grants: schemas.flatMap(({ schema, tables }): DatabaseContextGrant[] => {
+						const selectedTables = tables.filter((table) =>
+							selectedTableKeys.has(getWarehouseTableKey(schema, table)),
+						);
+						if (tables.length > 0 && selectedTables.length === tables.length) {
+							return [{ kind: 'schema', databaseType, database: databaseLabel, schema }];
+						}
+						return selectedTables.map((table) => ({
+							kind: 'table',
+							databaseType,
+							database: databaseLabel,
+							schema,
+							table,
+						}));
+					}),
+					patterns: [],
+				};
 	const isSearching = databaseAccess.mode === 'restricted' && search.trim().length > 0;
 	const filteredObjects =
 		databaseAccess.mode === 'restricted' ? filterDatabaseContextObjects(objects, search) : objects;
@@ -97,8 +103,14 @@ export function WarehouseTableSelection({
 					mode={databaseAccess.mode}
 					everythingDescription='All current and future tables.'
 					specificDescription='Choose the schemas and tables to sync.'
-					onEverything={() => onChange(getAllWarehouseTableKeys(schemas))}
-					onSpecific={() => onChange(new Set())}
+					onEverything={() => {
+						onSelectionModeChange('all');
+						onChange(getAllWarehouseTableKeys(schemas));
+					}}
+					onSpecific={() => {
+						onSelectionModeChange('selected');
+						onChange(new Set());
+					}}
 				/>
 				<div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
 					{databaseAccess.mode === 'restricted' && (

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RequestWarehouseCredentialsToolCall } from './request-warehouse-credentials';
 import type { ToolCallComponentProps } from '.';
@@ -146,6 +146,16 @@ vi.mock('./warehouse-credentials-form', () => ({
 	),
 }));
 
+beforeEach(() => {
+	vi.stubGlobal(
+		'fetch',
+		vi.fn().mockResolvedValue({
+			ok: true,
+			json: vi.fn().mockResolvedValue({}),
+		}),
+	);
+});
+
 afterEach(() => {
 	cleanup();
 	mocks.isRunning = true;
@@ -250,10 +260,13 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 			target: { files: [file] },
 		});
 
-		expect(screen.getByText('handbook.md')).toBeTruthy();
+		await screen.findByText('handbook.md');
 		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
 
 		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledOnce());
+		expect(mocks.uploadContextFile).toHaveBeenNthCalledWith(1, '/api/onboarding/context-files?jobId=job-1', {
+			method: 'DELETE',
+		});
 		expect(mocks.uploadContextFile).toHaveBeenCalledWith(
 			'/api/onboarding/context-files?jobId=job-1',
 			expect.objectContaining({
@@ -299,6 +312,7 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		fireEvent.click(screen.getByRole('button', { name: /Specific selection/ }));
 		fireEvent.click(screen.getByRole('button', { name: 'Expand public folder' }));
 		fireEvent.click(screen.getByRole('checkbox', { name: 'customers table access' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'orders table access' }));
 		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
 		await waitFor(() =>
@@ -307,7 +321,8 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 				credentials: expect.any(Object),
 				tableSelection: {
 					mode: 'selected',
-					tables: [{ schema: 'public', table: 'customers' }],
+					schemas: ['public'],
+					tables: [],
 				},
 				onboardingChatId: 'chat-1',
 			}),

@@ -1004,6 +1004,46 @@ describe('warehouse provisioning', () => {
 		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
 	});
 
+	it('recreates a missing temporary project while awaiting context sources', async () => {
+		vi.useFakeTimers();
+		const registeredProjectDirectory = mockSuccessfulProvisioning('project-recovered');
+		const { jobId } = await startWarehouseProvisioning({
+			userId: 'user-1',
+			orgId: 'org-1',
+			projectName: 'analytics',
+			provider: 'postgres',
+			credentials: {
+				host: 'warehouse.example.com',
+				port: 5432,
+				database: 'analytics',
+				user: 'nao',
+				password: 'secret',
+			},
+		});
+		const job = warehouseJobs.get(jobId);
+		if (!job) {
+			throw new Error('Expected provisioning job');
+		}
+		warehouseJobs.set(jobId, {
+			...job,
+			status: 'awaiting_sources',
+			temporaryDirectory: path.join(os.tmpdir(), `missing-warehouse-onboarding-${crypto.randomUUID()}`),
+		});
+
+		await reconcileWarehouseProvisioningJobs();
+
+		const recoveredJob = warehouseJobs.get(jobId);
+		expect(recoveredJob).toMatchObject({
+			status: 'awaiting_sources',
+			attempts: 0,
+		});
+		expect(recoveredJob?.temporaryDirectory).toBeTruthy();
+		expect(fs.existsSync(recoveredJob!.temporaryDirectory!)).toBe(true);
+		expect(spawn).toHaveBeenCalledTimes(2);
+		fs.rmSync(recoveredJob!.temporaryDirectory!, { recursive: true, force: true });
+		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
+	});
+
 	it('fails an abandoned job after its retry budget is exhausted', async () => {
 		vi.useFakeTimers();
 		const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'warehouse-onboarding-exhausted-'));
