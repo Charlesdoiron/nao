@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { BookOpenText } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import {
 	ConfluenceContextSetup,
@@ -57,6 +57,7 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 	const [files, setFiles] = useState<File[]>([]);
 	const [isUploadingFiles, setIsUploadingFiles] = useState(false);
 	const [fileUploadError, setFileUploadError] = useState<string | null>(null);
+	const preparedFiles = useRef<File[] | null>(null);
 	const validateNotion = useMutation(trpc.onboarding.validateNotionContext.mutationOptions());
 	const validateConfluence = useMutation(trpc.onboarding.validateConfluenceContext.mutationOptions());
 	const submitContext = useMutation(
@@ -101,12 +102,16 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 		selectedBusinessContext: { additionalContext?: string } = businessContext,
 		filesToUpload = files,
 	) => {
+		submitContext.reset();
 		setFileUploadError(null);
 		setIsUploadingFiles(true);
 		try {
-			await clearWarehouseContextFiles(jobId);
-			for (const file of filesToUpload) {
-				await uploadWarehouseContextFile(jobId, file);
+			if (!areSameFiles(preparedFiles.current, filesToUpload)) {
+				await clearWarehouseContextFiles(jobId);
+				for (const file of filesToUpload) {
+					await uploadWarehouseContextFile(jobId, file);
+				}
+				preparedFiles.current = [...filesToUpload];
 			}
 		} catch (error) {
 			setFileUploadError(error instanceof Error ? error.message : 'File upload failed.');
@@ -300,6 +305,14 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 				)}
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+function areSameFiles(preparedFiles: File[] | null, selectedFiles: File[]): boolean {
+	return (
+		preparedFiles !== null &&
+		preparedFiles.length === selectedFiles.length &&
+		preparedFiles.every((file, index) => file === selectedFiles[index])
 	);
 }
 

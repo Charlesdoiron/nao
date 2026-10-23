@@ -58,6 +58,12 @@ describe('warehouse context files', () => {
 		);
 
 		expect(mocks.getWarehouseProvisioningJob).toHaveBeenCalledWith('job-id', 'user-id');
+		expect(mocks.claimWarehouseProvisioningJobContextFiles).toHaveBeenCalledWith(
+			'job-id',
+			'user-id',
+			expect.stringMatching(/^context-files:/),
+			expect.any(Date),
+		);
 		expect(result).toEqual({
 			filename: 'Quarterly notes.md',
 			path: 'docs/uploads/Quarterly notes.md',

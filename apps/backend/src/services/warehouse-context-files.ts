@@ -21,6 +21,7 @@ const MAX_WAREHOUSE_CONTEXT_TOTAL_SIZE_BYTES = MAX_BUSINESS_CONTEXT_TOTAL_SIZE_M
 const ALLOWED_EXTENSIONS = new Set<string>(BUSINESS_CONTEXT_FILE_EXTENSIONS);
 const PROJECT_UPLOAD_DIRECTORY = path.join('docs', 'uploads');
 const STAGING_DIRECTORY = '.warehouse-onboarding-uploads';
+const CONTEXT_FILE_LEASE_MS = 5 * 60_000;
 
 export async function saveWarehouseContextFile(
 	jobId: string,
@@ -87,6 +88,7 @@ async function withWritableContextFiles<T>(
 		jobId,
 		userId,
 		workerId,
+		new Date(Date.now() - CONTEXT_FILE_LEASE_MS),
 	);
 	if (!job) {
 		const existingJob = await warehouseProvisioningJobQueries.getWarehouseProvisioningJob(jobId, userId);

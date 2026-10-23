@@ -155,6 +155,12 @@ vi.mock('../src/queries/warehouse-provisioning-job.queries', () => ({
 			warehouseJobs.set(jobId, { ...job, lockedBy: null, lockedAt: null });
 		}
 	}),
+	releaseStaleWarehouseProvisioningJobContextFileLock: vi.fn(async (jobId: string, staleBefore: Date) => {
+		const job = warehouseJobs.get(jobId);
+		if (job?.status === 'awaiting_sources' && job.lockedAt && job.lockedAt < staleBefore) {
+			warehouseJobs.set(jobId, { ...job, lockedBy: null, lockedAt: null });
+		}
+	}),
 	listRecoverableWarehouseProvisioningJobs: vi.fn(async (statuses: string[], staleBefore: Date) =>
 		[...warehouseJobs.values()].filter(
 			(job) => statuses.includes(job.status) && (job.lockedAt === null || job.lockedAt < staleBefore),
@@ -1002,6 +1008,40 @@ describe('warehouse provisioning', () => {
 			fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 		}
 		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
+	});
+
+	it('releases a stale context-file lock while the temporary project still exists', async () => {
+		vi.useFakeTimers();
+		const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'warehouse-onboarding-locked-'));
+		const { jobId } = await startWarehouseProvisioning({
+			userId: 'user-1',
+			orgId: 'org-1',
+			projectName: 'analytics',
+			provider: 'postgres',
+			credentials: { host: 'warehouse.example.com', password: 'secret' },
+		});
+		const job = warehouseJobs.get(jobId);
+		if (!job) {
+			throw new Error('Expected provisioning job');
+		}
+		warehouseJobs.set(jobId, {
+			...job,
+			status: 'awaiting_sources',
+			temporaryDirectory,
+			lockedBy: 'context-files:abandoned',
+			lockedAt: new Date(Date.now() - 5 * 60_000 - 1),
+		});
+
+		await reconcileWarehouseProvisioningJobs();
+
+		expect(warehouseJobs.get(jobId)).toMatchObject({
+			status: 'awaiting_sources',
+			temporaryDirectory,
+			lockedBy: null,
+			lockedAt: null,
+		});
+		expect(spawn).not.toHaveBeenCalled();
+		fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 	});
 
 	it('recreates a missing temporary project while awaiting context sources', async () => {

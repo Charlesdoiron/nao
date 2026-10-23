@@ -1255,9 +1255,10 @@ export function startWarehouseProvisioningReconciler(): void {
 }
 
 export async function reconcileWarehouseProvisioningJobs(): Promise<void> {
+	const staleBefore = new Date(Date.now() - JOB_LEASE_MS);
 	const jobs = await warehouseProvisioningJobQueries.listRecoverableWarehouseProvisioningJobs(
 		RECOVERABLE_STATUSES,
-		new Date(Date.now() - JOB_LEASE_MS),
+		staleBefore,
 	);
 
 	await Promise.all(
@@ -1265,6 +1266,11 @@ export async function reconcileWarehouseProvisioningJobs(): Promise<void> {
 			if (job.status === 'awaiting_sources') {
 				if (!job.temporaryDirectory || !fs.existsSync(job.temporaryDirectory)) {
 					await recoverProvisioningJob(job.id, ['awaiting_sources']);
+				} else {
+					await warehouseProvisioningJobQueries.releaseStaleWarehouseProvisioningJobContextFileLock(
+						job.id,
+						staleBefore,
+					);
 				}
 				return;
 			}

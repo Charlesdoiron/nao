@@ -6,7 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileContextSetup } from './file-context-setup';
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 describe('FileContextSetup', () => {
 	it('adds and removes Markdown and text files', async () => {
@@ -32,6 +35,20 @@ describe('FileContextSetup', () => {
 
 		await screen.findByText('company.pdf must be a Markdown or text file.');
 		expect(screen.queryByRole('button', { name: 'Remove company.pdf' })).toBeNull();
+	});
+
+	it('shows file fingerprint failures instead of rejecting the event handler promise', async () => {
+		const onFilesChange = vi.fn();
+		vi.spyOn(crypto.subtle, 'digest').mockRejectedValueOnce(new Error('Could not fingerprint company.txt.'));
+		render(<FileContextSetup files={[]} disabled={false} error={null} onFilesChange={onFilesChange} />);
+		const file = new File(['Company notes'], 'company.txt', { type: 'text/plain' });
+
+		fireEvent.change(screen.getByLabelText('Upload business context files'), {
+			target: { files: [file] },
+		});
+
+		await screen.findByText('Could not fingerprint company.txt.');
+		expect(onFilesChange).not.toHaveBeenCalled();
 	});
 
 	it('accepts files dropped onto the source card', async () => {

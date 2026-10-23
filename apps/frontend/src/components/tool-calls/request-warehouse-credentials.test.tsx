@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 		valid: true,
 		pages: [{ url: 'https://acme.atlassian.net/wiki/pages/123', title: 'Company context' }],
 	}),
+	resetSubmitContext: vi.fn(),
 	startProvisioning: vi.fn().mockResolvedValue({ jobId: 'new-job', status: 'queued' }),
 	submitContextSources: vi.fn().mockResolvedValue({ status: 'syncing' }),
 	uploadContextFile: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('@tanstack/react-query', () => ({
 						: options.mutationKey?.[0] === 'submit-context-sources'
 							? mocks.submitContextSources
 							: mocks.startProvisioning,
-		reset: vi.fn(),
+		reset: options.mutationKey?.[0] === 'submit-context-sources' ? mocks.resetSubmitContext : vi.fn(),
 	}),
 	useQuery: (options: { queryKey: string[] }) =>
 		options.queryKey[0] === 'active-job'
@@ -236,12 +237,13 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		);
 	});
 
-	it('uploads selected business context files before starting sync', async () => {
+	it('reuses uploaded context files when retrying a submission with a lost response', async () => {
 		mocks.jobStatus = 'awaiting_sources';
 		mocks.uploadContextFile.mockResolvedValue({
 			ok: true,
 			json: vi.fn().mockResolvedValue({}),
 		});
+		mocks.submitContextSources.mockRejectedValueOnce(new Error('Response lost'));
 		vi.stubGlobal('fetch', mocks.uploadContextFile);
 		const toolPart = {
 			type: 'tool-request_warehouse_credentials',
@@ -264,6 +266,11 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
 
 		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledOnce());
+		const submitButton = screen.getByRole('button', { name: 'Sync with context' });
+		await waitFor(() => expect((submitButton as HTMLButtonElement).disabled).toBe(false));
+		fireEvent.click(submitButton);
+		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledTimes(2));
+
 		expect(mocks.uploadContextFile).toHaveBeenNthCalledWith(1, '/api/onboarding/context-files?jobId=job-1', {
 			method: 'DELETE',
 		});
@@ -273,6 +280,11 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 				method: 'POST',
 				body: expect.any(FormData),
 			}),
+		);
+		expect(mocks.uploadContextFile).toHaveBeenCalledTimes(2);
+		expect(mocks.resetSubmitContext).toHaveBeenCalledTimes(2);
+		expect(mocks.resetSubmitContext.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.uploadContextFile.mock.invocationCallOrder[0],
 		);
 		expect(mocks.uploadContextFile.mock.invocationCallOrder[0]).toBeLessThan(
 			mocks.submitContextSources.mock.invocationCallOrder[0],
