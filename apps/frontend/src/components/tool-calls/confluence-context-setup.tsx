@@ -45,7 +45,7 @@ export function ConfluenceContextSetup({
 	const connected = validatedFingerprint !== null && validatedFingerprint === fingerprint;
 	const pages = parseConfluencePages(values.pagesText);
 	const canValidate =
-		values.baseUrl.trim().length > 0 &&
+		isConfluenceCloudUrl(values.baseUrl) &&
 		values.email.trim().length > 0 &&
 		values.apiToken.trim().length > 0 &&
 		pages.length > 0;
@@ -89,6 +89,11 @@ export function ConfluenceContextSetup({
 								placeholder='https://acme.atlassian.net/wiki'
 								autoComplete='url'
 							/>
+							{values.baseUrl.trim() && !isConfluenceCloudUrl(values.baseUrl) && (
+								<p className='text-xs text-destructive'>
+									Enter a Confluence Cloud URL such as https://acme.atlassian.net/wiki.
+								</p>
+							)}
 						</div>
 						<div className='grid gap-2'>
 							<label htmlFor='confluence-email' className='text-sm font-medium'>
@@ -152,6 +157,7 @@ export function ConfluenceContextSetup({
 						<Button
 							type='button'
 							size='sm'
+							className='rounded-full'
 							onClick={validate}
 							disabled={!canValidate || isValidating || isStarting}
 							isLoading={isValidating}
@@ -183,4 +189,13 @@ export function getConfluenceContextFingerprint(values: ConfluenceContextValues)
 		apiToken: values.apiToken.trim(),
 		pages: parseConfluencePages(values.pagesText),
 	});
+}
+
+function isConfluenceCloudUrl(value: string): boolean {
+	try {
+		const url = new URL(value.trim());
+		return url.protocol === 'https:' && url.hostname.endsWith('.atlassian.net');
+	} catch {
+		return false;
+	}
 }

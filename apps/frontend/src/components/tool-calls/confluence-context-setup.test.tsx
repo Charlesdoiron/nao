@@ -40,6 +40,27 @@ describe('ConfluenceContextSetup', () => {
 		expect(screen.getByText('Confluence connected · 2 pages')).toBeTruthy();
 	});
 
+	it('rejects non-cloud Confluence URLs', () => {
+		render(<ConfluenceHarness onValidate={vi.fn()} />);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+		fireEvent.change(screen.getByLabelText('Confluence site URL'), {
+			target: { value: 'http://confluence.internal/wiki' },
+		});
+		fireEvent.change(screen.getByLabelText('Account email'), {
+			target: { value: 'person@acme.com' },
+		});
+		fireEvent.change(screen.getByLabelText('API token'), {
+			target: { value: 'atlassian-token' },
+		});
+		fireEvent.change(screen.getByLabelText('Page URLs or IDs'), {
+			target: { value: '123' },
+		});
+
+		expect(screen.getByRole('button', { name: 'Connect Confluence' }).hasAttribute('disabled')).toBe(true);
+		expect(screen.getByText(/Enter a Confluence Cloud URL/)).toBeTruthy();
+	});
+
 	it('normalizes and deduplicates page entries', () => {
 		expect(parseConfluencePages(' 123 \n\n456\r\n123 ')).toEqual(['123', '456']);
 	});

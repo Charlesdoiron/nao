@@ -21,6 +21,7 @@ type MockWarehouseJob = {
 	modelProjectId: string | null;
 	logs: string | null;
 	error: string | null;
+	warnings: Array<{ source: 'notion' | 'confluence' | 'github'; message: string }> | null;
 	temporaryDirectory: string | null;
 	lockedBy: string | null;
 	lockedAt: Date | null;
@@ -72,6 +73,7 @@ vi.mock('../src/queries/warehouse-provisioning-job.queries', () => ({
 			modelProjectId: null,
 			logs: null,
 			error: null,
+			warnings: null,
 			temporaryDirectory: null,
 			lockedBy: null,
 			lockedAt: null,
@@ -172,10 +174,11 @@ vi.mock('../src/services/onboarding-rules', () => ({
 	generateOnboardingRules: vi.fn(),
 }));
 vi.mock('../src/services/warehouse-credentials', () => ({
+	ONBOARDING_GITHUB_REPOSITORY_URL_ENV: 'NAO_ONBOARDING_GITHUB_REPOSITORY_URL',
 	saveProjectWarehouseEnvVars: vi.fn(),
 }));
 vi.mock('../src/utils/logger', () => ({
-	logger: { error: vi.fn() },
+	logger: { error: vi.fn(), warn: vi.fn() },
 	serializeError: (error: unknown) => ({
 		message: error instanceof Error ? error.message : String(error),
 	}),
@@ -188,6 +191,7 @@ import { spawn } from 'node:child_process';
 
 import * as projectQueries from '../src/queries/project.queries';
 import * as scheduledJobQueries from '../src/queries/scheduled-job.queries';
+import * as userQueries from '../src/queries/user.queries';
 import * as warehouseProvisioningJobQueries from '../src/queries/warehouse-provisioning-job.queries';
 import {
 	deleteManagedGithubRepository,
@@ -202,6 +206,7 @@ import {
 	queueWarehouseFinalization,
 	reconcileWarehouseProvisioningJobs,
 	startWarehouseProvisioning,
+	submitWarehouseContextSources,
 	validateConfluenceContext,
 	validateNotionContext,
 	validateWarehouseCredentials,
@@ -220,6 +225,17 @@ afterEach(() => {
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
 });
+
+async function submitContextSources(
+	jobId: string,
+	contextSources: Parameters<typeof submitWarehouseContextSources>[2] = {},
+	businessContext: Parameters<typeof submitWarehouseContextSources>[3] = {},
+): Promise<void> {
+	await vi.waitFor(async () => {
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_sources');
+	});
+	await submitWarehouseContextSources(jobId, 'user-1', contextSources, businessContext);
+}
 
 describe('warehouse provisioning', () => {
 	it('validates credentials before starting provisioning', async () => {
@@ -348,6 +364,25 @@ describe('warehouse provisioning', () => {
 		});
 	});
 
+	it.each([
+		'http://acme.atlassian.net/wiki',
+		'https://confluence.internal/wiki',
+		'https://acme.atlassian.net.attacker.example/wiki',
+	])('rejects non-cloud Confluence URL %s', async (baseUrl) => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			validateConfluenceContext({
+				baseUrl,
+				email: 'person@acme.com',
+				apiToken: 'atlassian-secret',
+				pages: ['123'],
+			}),
+		).rejects.toThrow('Enter a Confluence Cloud URL');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('points users to the credentials that need checking', async () => {
 		vi.stubGlobal(
 			'fetch',
@@ -401,6 +436,7 @@ describe('warehouse provisioning', () => {
 			projectName: 'analytics',
 			logs: null,
 			error: null,
+			warnings: null,
 		});
 		expect(await getWarehouseProvisioningJob(jobId, 'another-user')).toBeNull();
 		expect(JSON.stringify(await getWarehouseProvisioningJob(jobId, 'user-1'))).not.toContain('super-secret');
@@ -479,12 +515,13 @@ describe('warehouse provisioning', () => {
 		vi.mocked(saveProjectWarehouseEnvVars).mockRejectedValue(new Error('Credential storage failed'));
 		vi.mocked(projectQueries.deleteProject).mockResolvedValue();
 		vi.mocked(scheduledJobQueries.deleteJobByUniqueKey).mockResolvedValue();
-		vi.mocked(spawn).mockImplementation((_command, args) => {
+		vi.mocked(spawn).mockImplementation((_command, args, options) => {
 			const child = Object.assign(new EventEmitter(), {
 				stdout: new EventEmitter(),
 				stderr: new EventEmitter(),
 				kill: vi.fn(),
 			});
+			createSyncedTable(args, options?.cwd);
 			queueMicrotask(() => {
 				child.stdout.emit('data', Buffer.from(`Running nao ${args?.[0]}\n`));
 				child.emit('close', 0);
@@ -493,14 +530,15 @@ describe('warehouse provisioning', () => {
 		});
 		vi.stubGlobal(
 			'fetch',
-			vi.fn().mockResolvedValue(
-				new Response(
-					JSON.stringify({
-						database_config: { type: 'postgres' },
-						env_vars: { POSTGRES_PASSWORD: 'secret' },
-					}),
-					{ status: 200, headers: { 'Content-Type': 'application/json' } },
-				),
+			vi.fn().mockImplementation(
+				async () =>
+					new Response(
+						JSON.stringify({
+							database_config: { type: 'postgres' },
+							env_vars: { POSTGRES_PASSWORD: 'secret' },
+						}),
+						{ status: 200, headers: { 'Content-Type': 'application/json' } },
+					),
 			),
 		);
 
@@ -517,6 +555,7 @@ describe('warehouse provisioning', () => {
 				password: 'secret',
 			},
 		});
+		await submitContextSources(jobId);
 
 		await vi.waitFor(async () => {
 			expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('failed');
@@ -529,6 +568,40 @@ describe('warehouse provisioning', () => {
 		expect(scheduledJobQueries.deleteJobByUniqueKey).toHaveBeenCalledWith('context.recommendations:project-1');
 		expect(projectQueries.deleteProject).toHaveBeenCalledWith('project-1');
 		expect(fs.existsSync(registeredProjectDirectory)).toBe(false);
+	});
+
+	it('fails before registering a project when no selected tables were synced', async () => {
+		const registeredProjectDirectory = mockSuccessfulProvisioning('project-empty');
+		vi.mocked(spawn).mockImplementation((_command, args) => {
+			const child = Object.assign(new EventEmitter(), {
+				stdout: new EventEmitter(),
+				stderr: new EventEmitter(),
+				kill: vi.fn(),
+			});
+			queueMicrotask(() => {
+				child.stdout.emit('data', Buffer.from(`Running nao ${args?.[0]}\n`));
+				child.emit('close', 0);
+			});
+			return child as never;
+		});
+
+		const { jobId } = await startWarehouseProvisioning({
+			userId: 'user-1',
+			orgId: 'org-1',
+			projectName: 'analytics',
+			provider: 'postgres',
+			credentials: { host: 'warehouse.example.com', password: 'secret' },
+		});
+		await submitContextSources(jobId);
+
+		await vi.waitFor(async () => {
+			expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('failed');
+		});
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.error).toBe(
+			'None of the selected tables were synced. They may have been renamed, removed, or become inaccessible.',
+		);
+		expect(createNewProject).not.toHaveBeenCalled();
+		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
 	});
 
 	it('finalizes in the background after sync and context are both ready', async () => {
@@ -547,14 +620,15 @@ describe('warehouse provisioning', () => {
 				password: 'secret',
 			},
 		});
+		await submitContextSources(jobId, {}, { additionalContext: 'A bicycle rental company.' });
 
 		await queueWarehouseFinalization(jobId, 'user-1', {
-			businessContext: { additionalContext: 'A bicycle rental company.' },
+			businessContext: {},
 			modelSelection: { provider: 'openai', modelId: 'gpt-4o-mini' },
 			modelProjectId: 'example-project',
 		});
 
-		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('queued');
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('syncing');
 		expect(generateOnboardingRules).not.toHaveBeenCalled();
 
 		await vi.waitFor(async () => {
@@ -571,6 +645,96 @@ describe('warehouse provisioning', () => {
 			projectName: 'analytics',
 			projectDir: registeredProjectDirectory,
 		});
+		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
+	});
+
+	it('continues warehouse setup when an optional context source fails to sync', async () => {
+		const registeredProjectDirectory = mockSuccessfulProvisioning('project-context-warning');
+		vi.mocked(spawn).mockImplementation((_command, args, options) => {
+			const child = Object.assign(new EventEmitter(), {
+				stdout: new EventEmitter(),
+				stderr: new EventEmitter(),
+				kill: vi.fn(),
+			});
+			createSyncedTable(args, options?.cwd);
+			queueMicrotask(() => {
+				if (args?.includes('notion')) {
+					child.stderr.emit('data', Buffer.from('Notion dependency is unavailable'));
+					child.emit('close', 1);
+				} else {
+					child.stdout.emit('data', Buffer.from(`Running nao ${args?.[0]}\n`));
+					child.emit('close', 0);
+				}
+			});
+			return child as never;
+		});
+
+		const { jobId } = await startWarehouseProvisioning({
+			userId: 'user-1',
+			orgId: 'org-1',
+			projectName: 'analytics',
+			provider: 'postgres',
+			credentials: { host: 'warehouse.example.com', password: 'secret' },
+		});
+		await submitContextSources(jobId, {
+			notion: {
+				apiKey: 'notion-secret',
+				pages: ['https://notion.so/company-context'],
+			},
+		});
+
+		await vi.waitFor(async () => {
+			expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_context');
+		});
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.warnings).toEqual([
+			{
+				source: 'notion',
+				message: 'Notion could not be synced. Warehouse setup continued without it.',
+			},
+		]);
+		expect(createNewProject).toHaveBeenCalledOnce();
+		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
+	});
+
+	it('skips a disconnected GitHub source without failing warehouse setup', async () => {
+		const registeredProjectDirectory = mockSuccessfulProvisioning('project-github-warning');
+		let registeredConfig = '';
+		vi.mocked(userQueries.getGithubToken).mockResolvedValueOnce(null);
+		vi.mocked(createNewProject).mockImplementation(async ({ sourceDir }) => {
+			registeredConfig = fs.readFileSync(path.join(sourceDir, 'nao_config.yaml'), 'utf8');
+			return {
+				projectId: 'project-github-warning',
+				projectName: 'analytics',
+				status: 'created',
+			};
+		});
+
+		const { jobId } = await startWarehouseProvisioning({
+			userId: 'user-1',
+			orgId: 'org-1',
+			projectName: 'analytics',
+			provider: 'postgres',
+			credentials: { host: 'warehouse.example.com', password: 'secret' },
+		});
+		await submitContextSources(jobId, {
+			github: { repoFullName: 'acme/analytics', branch: 'main' },
+		});
+
+		await vi.waitFor(async () => {
+			expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_context');
+		});
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.warnings).toEqual([
+			{
+				source: 'github',
+				message: 'GitHub was disconnected before its repository could be synced.',
+			},
+		]);
+		expect(registeredConfig).not.toContain('repos:');
+		expect(vi.mocked(spawn).mock.calls.map(([, args]) => args)).toEqual([
+			['init', '--yes'],
+			['debug'],
+			['sync', '--provider', 'databases'],
+		]);
 		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
 	});
 
@@ -591,6 +755,7 @@ describe('warehouse provisioning', () => {
 				password: 'secret',
 			},
 		});
+		await submitContextSources(jobId);
 
 		await queueWarehouseFinalization(jobId, 'user-1', {
 			businessContext: { additionalContext: 'A bicycle rental company.' },
@@ -629,6 +794,7 @@ describe('warehouse provisioning', () => {
 					'project_name: analytics\ndatabases:\n  - type: postgres\n    password: super-secret\n',
 				);
 			}
+			createSyncedTable(args, options?.cwd);
 			queueMicrotask(() => {
 				child.stdout.emit(
 					'data',
@@ -644,17 +810,18 @@ describe('warehouse provisioning', () => {
 		});
 		vi.stubGlobal(
 			'fetch',
-			vi.fn().mockResolvedValue(
-				new Response(
-					JSON.stringify({
-						database_config: {
-							type: 'postgres',
-							password: "${{ env('NAO_ONBOARDING_POSTGRES_PASSWORD') }}",
-						},
-						env_vars: { NAO_ONBOARDING_POSTGRES_PASSWORD: '"super-secret"' },
-					}),
-					{ status: 200, headers: { 'Content-Type': 'application/json' } },
-				),
+			vi.fn().mockImplementation(
+				async () =>
+					new Response(
+						JSON.stringify({
+							database_config: {
+								type: 'postgres',
+								password: "${{ env('NAO_ONBOARDING_POSTGRES_PASSWORD') }}",
+							},
+							env_vars: { NAO_ONBOARDING_POSTGRES_PASSWORD: '"super-secret"' },
+						}),
+						{ status: 200, headers: { 'Content-Type': 'application/json' } },
+					),
 			),
 		);
 
@@ -664,28 +831,29 @@ describe('warehouse provisioning', () => {
 			projectName: 'analytics',
 			provider: 'postgres',
 			credentials: { password: 'super-secret' },
-			contextSources: {
-				notion: {
-					apiKey: 'notion-secret',
-					pages: ['https://notion.so/company-context'],
-				},
-				confluence: {
-					baseUrl: 'https://acme.atlassian.net/wiki',
-					email: 'person@acme.com',
-					apiToken: 'confluence-secret',
-					pages: ['123'],
-				},
-				github: {
-					repoFullName: 'acme/analytics',
-					branch: 'main',
-				},
-			},
 			tableSelection: {
 				mode: 'selected',
+				schemas: ['analytics*'],
 				tables: [
 					{ schema: 'public', table: 'orders' },
 					{ schema: 'sales*', table: 'forecast?' },
 				],
+			},
+		});
+		await submitContextSources(jobId, {
+			notion: {
+				apiKey: 'notion-secret',
+				pages: ['https://notion.so/company-context'],
+			},
+			confluence: {
+				baseUrl: 'https://acme.atlassian.net/wiki',
+				email: 'person@acme.com',
+				apiToken: 'confluence-secret',
+				pages: ['123'],
+			},
+			github: {
+				repoFullName: 'acme/analytics',
+				branch: 'main',
 			},
 		});
 
@@ -696,17 +864,10 @@ describe('warehouse provisioning', () => {
 		expect(vi.mocked(spawn).mock.calls.map(([, args]) => args)).toEqual([
 			['init', '--yes'],
 			['debug'],
-			[
-				'sync',
-				'--provider',
-				'databases',
-				'--provider',
-				'notion',
-				'--provider',
-				'confluence',
-				'--provider',
-				'repositories',
-			],
+			['sync', '--provider', 'databases'],
+			['sync', '--provider', 'notion'],
+			['sync', '--provider', 'confluence'],
+			['sync', '--provider', 'repositories'],
 		]);
 		expect(registeredConfig).toContain('project_name: analytics');
 		expect(registeredConfig).toContain('name: postgres');
@@ -728,7 +889,7 @@ describe('warehouse provisioning', () => {
 					notion: { pages: string[] };
 				}
 			).databases[0]?.include,
-		).toEqual(['public.orders', 'sales[*].forecast[?]']);
+		).toEqual(['analytics[*].*', 'public.orders', 'sales[*].forecast[?]']);
 		expect(
 			(
 				yaml.load(registeredConfig) as {
@@ -770,6 +931,12 @@ describe('warehouse provisioning', () => {
 				NAO_ONBOARDING_GITHUB_REPOSITORY_URL:
 					'"https://x-access-token:github-secret@github.com/acme/analytics.git"',
 			}),
+			{
+				githubConnection: {
+					userId: 'user-1',
+					repoFullName: 'acme/analytics',
+				},
+			},
 		);
 		expect(warehouseJobs.get(jobId)?.logs).toContain('Cloning [REDACTED]');
 		expect(warehouseJobs.get(jobId)?.logs).not.toContain('github-secret');
@@ -794,6 +961,7 @@ describe('warehouse provisioning', () => {
 				password: 'secret',
 			},
 		});
+		await submitContextSources(jobId);
 
 		await queueWarehouseFinalization(jobId, 'user-1', {
 			businessContext: {},
@@ -827,8 +995,12 @@ describe('warehouse provisioning', () => {
 
 		await Promise.all([reconcileWarehouseProvisioningJobs(), reconcileWarehouseProvisioningJobs()]);
 
-		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_context');
-		expect(spawn).toHaveBeenCalledTimes(3);
+		expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_sources');
+		expect(spawn).toHaveBeenCalledTimes(2);
+		const temporaryDirectory = warehouseJobs.get(jobId)?.temporaryDirectory;
+		if (temporaryDirectory) {
+			fs.rmSync(temporaryDirectory, { recursive: true, force: true });
+		}
 		fs.rmSync(registeredProjectDirectory, { recursive: true, force: true });
 	});
 
@@ -958,6 +1130,7 @@ describe('warehouse provisioning', () => {
 				password: 'secret',
 			},
 		});
+		await submitContextSources(jobId);
 
 		await vi.waitFor(async () => {
 			expect((await getWarehouseProvisioningJob(jobId, 'user-1'))?.status).toBe('awaiting_context');
@@ -1028,12 +1201,13 @@ function mockSuccessfulProvisioning(projectId: string): string {
 		url: 'https://github.com/nao-org/nao-analytics-project',
 		created: true,
 	});
-	vi.mocked(spawn).mockImplementation((_command, args) => {
+	vi.mocked(spawn).mockImplementation((_command, args, options) => {
 		const child = Object.assign(new EventEmitter(), {
 			stdout: new EventEmitter(),
 			stderr: new EventEmitter(),
 			kill: vi.fn(),
 		});
+		createSyncedTable(args, options?.cwd);
 		queueMicrotask(() => {
 			child.stdout.emit('data', Buffer.from(`Running nao ${args?.[0]}\n`));
 			child.emit('close', 0);
@@ -1042,15 +1216,25 @@ function mockSuccessfulProvisioning(projectId: string): string {
 	});
 	vi.stubGlobal(
 		'fetch',
-		vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					database_config: { type: 'postgres' },
-					env_vars: { POSTGRES_PASSWORD: 'secret' },
-				}),
-				{ status: 200, headers: { 'Content-Type': 'application/json' } },
-			),
+		vi.fn().mockImplementation(
+			async () =>
+				new Response(
+					JSON.stringify({
+						database_config: { type: 'postgres' },
+						env_vars: { POSTGRES_PASSWORD: 'secret' },
+					}),
+					{ status: 200, headers: { 'Content-Type': 'application/json' } },
+				),
 		),
 	);
 	return registeredProjectDirectory;
+}
+
+function createSyncedTable(args: readonly string[] | undefined, cwd: string | URL | undefined): void {
+	if (args?.[0] !== 'sync' || !args.includes('databases') || !cwd) {
+		return;
+	}
+	fs.mkdirSync(path.join(String(cwd), 'databases/type=postgres/database=analytics/schema=public/table=orders'), {
+		recursive: true,
+	});
 }

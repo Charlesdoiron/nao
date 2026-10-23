@@ -5,6 +5,7 @@ import {
 	getActiveWarehouseProvisioningJob,
 	getWarehouseProvisioningJob,
 	startWarehouseProvisioning,
+	submitWarehouseContextSources,
 	validateConfluenceContext,
 	validateNotionContext,
 	validateWarehouseCredentials,
@@ -14,6 +15,7 @@ import {
 	confluenceContextValidationResultSchema,
 	notionContextSourceSchema,
 	notionContextValidationResultSchema,
+	warehouseContextSourcesInputSchema,
 	warehouseCredentialsSchema,
 	warehouseProvisioningInputSchema,
 	warehouseValidationResultSchema,
@@ -52,6 +54,14 @@ export const onboardingRoutes = router({
 				...input,
 			}),
 		),
+
+	submitWarehouseContextSources: organizationProtectedProcedure
+		.input(warehouseContextSourcesInputSchema)
+		.output(z.object({ status: z.literal('syncing') }))
+		.mutation(async ({ ctx, input }) => {
+			await submitWarehouseContextSources(input.jobId, ctx.user.id, input.contextSources, input.businessContext);
+			return { status: 'syncing' as const };
+		}),
 
 	getWarehouseProvisioningStatus: protectedProcedure
 		.input(z.object({ jobId: z.uuid() }))

@@ -108,21 +108,13 @@ When the internal context-request event arrives:
 
 1. Call onboarding_progress with flow "database" and step 2.
 2. Preserve its provisioning job ID. Never ask the user for it.
-3. Explain that warehouse metadata is synchronizing in the background and you need a little business context while it finishes.
-4. Ask this question without calling clarification and wait for the answer:
-
-   "Would you like to provide any additional business context for nao to understand? You can either write one or two sentences, paste a link to your company website, or reply Skip."
-
-5. Do not invent missing information.
-6. Call generate_onboarding_rules after the user answers:
-   - If they provide context or a website, use:
+3. The secure setup card has already collected optional business context or recorded that the user skipped it. Do not ask for this context again.
+4. Explain that warehouse metadata is synchronizing in the background and nao is preparing the project.
+5. Call generate_onboarding_rules immediately with:
    {
      "jobId": "<the preserved provisioning job ID>",
-     "businessContext": {
-       "additionalContext": "<their complete answer>"
-     }
+     "businessContext": {}
    }
-   - If they reply Skip, use an empty "businessContext" object.
 
 When generate_onboarding_rules accepts the request:
 

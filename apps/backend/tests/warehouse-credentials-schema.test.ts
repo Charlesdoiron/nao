@@ -1,7 +1,11 @@
 import { requestWarehouseCredentials } from '@nao/shared/tools';
 import { describe, expect, it } from 'vitest';
 
-import { warehouseCredentialsSchema, warehouseProvisioningInputSchema } from '../src/types/warehouse';
+import {
+	warehouseContextSourcesInputSchema,
+	warehouseCredentialsSchema,
+	warehouseProvisioningInputSchema,
+} from '../src/types/warehouse';
 
 describe('warehouse credentials schema', () => {
 	it.each([...requestWarehouseCredentials.PROVIDERS])('accepts the %s credentials envelope', (provider) => {
@@ -40,7 +44,7 @@ describe('warehouse credentials schema', () => {
 		).toBe(true);
 	});
 
-	it('accepts selected tables and rejects an empty selection', () => {
+	it('accepts selected schemas or tables and rejects an empty selection', () => {
 		expect(
 			warehouseProvisioningInputSchema.parse({
 				provider: 'postgres',
@@ -54,21 +58,35 @@ describe('warehouse credentials schema', () => {
 			mode: 'selected',
 			tables: [{ schema: 'public', table: 'orders' }],
 		});
+		expect(
+			warehouseProvisioningInputSchema.parse({
+				provider: 'postgres',
+				credentials: {},
+				tableSelection: {
+					mode: 'selected',
+					schemas: ['analytics'],
+					tables: [],
+				},
+			}).tableSelection,
+		).toEqual({
+			mode: 'selected',
+			schemas: ['analytics'],
+			tables: [],
+		});
 
 		expect(
 			warehouseProvisioningInputSchema.safeParse({
 				provider: 'postgres',
 				credentials: {},
-				tableSelection: { mode: 'selected', tables: [] },
+				tableSelection: { mode: 'selected', schemas: [], tables: [] },
 			}).success,
 		).toBe(false);
 	});
 
 	it('accepts optional documentation context and rejects missing pages', () => {
 		expect(
-			warehouseProvisioningInputSchema.parse({
-				provider: 'postgres',
-				credentials: {},
+			warehouseContextSourcesInputSchema.parse({
+				jobId: '11111111-1111-4111-8111-111111111111',
 				contextSources: {
 					notion: {
 						apiKey: 'secret',
@@ -104,9 +122,8 @@ describe('warehouse credentials schema', () => {
 		});
 
 		expect(
-			warehouseProvisioningInputSchema.safeParse({
-				provider: 'postgres',
-				credentials: {},
+			warehouseContextSourcesInputSchema.safeParse({
+				jobId: '11111111-1111-4111-8111-111111111111',
 				contextSources: {
 					notion: {
 						apiKey: 'secret',
@@ -117,9 +134,8 @@ describe('warehouse credentials schema', () => {
 		).toBe(false);
 
 		expect(
-			warehouseProvisioningInputSchema.safeParse({
-				provider: 'postgres',
-				credentials: {},
+			warehouseContextSourcesInputSchema.safeParse({
+				jobId: '11111111-1111-4111-8111-111111111111',
 				contextSources: {
 					github: {
 						repoFullName: 'https://github.com/acme/analytics',

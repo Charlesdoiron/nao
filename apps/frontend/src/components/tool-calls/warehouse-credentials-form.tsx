@@ -418,6 +418,7 @@ export function WarehouseCredentialsForm({
 								<Button
 									size='sm'
 									type='submit'
+									className='rounded-full'
 									disabled={!canSubmit || isValidating || isPending}
 									isLoading={isValidating || isPending}
 								>

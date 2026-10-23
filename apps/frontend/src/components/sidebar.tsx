@@ -428,11 +428,13 @@ function SidebarNav({
 		enabled: Boolean(onboardingChatId),
 		refetchInterval: (query) => {
 			const status = query.state.data?.status;
-			return status && status !== 'awaiting_context' ? 2000 : false;
+			return status && status !== 'awaiting_sources' && status !== 'awaiting_context' ? 2000 : false;
 		},
 		refetchOnWindowFocus: 'always',
 	});
-	const onboardingNeedsAttention = activeOnboardingJob.data?.status === 'awaiting_context';
+	const onboardingNeedsAttention =
+		activeOnboardingJob.data?.status === 'awaiting_sources' ||
+		activeOnboardingJob.data?.status === 'awaiting_context';
 
 	const groups = groupedChats.data?.groups.map((group) => ({
 		...group,

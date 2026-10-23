@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { RequestWarehouseCredentialsToolCall } from './request-warehouse-credentials';
@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
 		pages: [{ url: 'https://acme.atlassian.net/wiki/pages/123', title: 'Company context' }],
 	}),
 	startProvisioning: vi.fn().mockResolvedValue({ jobId: 'new-job', status: 'queued' }),
+	submitContextSources: vi.fn().mockResolvedValue({ status: 'syncing' }),
+	uploadContextFile: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -39,7 +41,9 @@ vi.mock('@tanstack/react-query', () => ({
 					? mocks.validateNotion
 					: options.mutationKey?.[0] === 'validate-confluence'
 						? mocks.validateConfluence
-						: mocks.startProvisioning,
+						: options.mutationKey?.[0] === 'submit-context-sources'
+							? mocks.submitContextSources
+							: mocks.startProvisioning,
 		reset: vi.fn(),
 	}),
 	useQuery: (options: { queryKey: string[] }) =>
@@ -48,7 +52,11 @@ vi.mock('@tanstack/react-query', () => ({
 					data: mocks.activeJobId ? { id: mocks.activeJobId, provider: 'postgres' } : undefined,
 					isFetched: mocks.activeJobIsFetched,
 				}
-			: { data: { provider: 'postgres', status: mocks.jobStatus }, isError: false },
+			: options.queryKey[0] === 'github-available'
+				? { data: true, isLoading: false }
+				: options.queryKey[0] === 'github-status'
+					? { data: { connected: false }, error: null }
+					: { data: { provider: 'postgres', status: mocks.jobStatus }, isError: false },
 	useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
@@ -81,6 +89,17 @@ vi.mock('@/main', () => ({
 			},
 			startWarehouseProvisioning: {
 				mutationOptions: () => ({ mutationKey: ['start-provisioning'] }),
+			},
+			submitWarehouseContextSources: {
+				mutationOptions: () => ({ mutationKey: ['submit-context-sources'] }),
+			},
+		},
+		github: {
+			isAvailable: {
+				queryOptions: () => ({ queryKey: ['github-available'] }),
+			},
+			getStatus: {
+				queryOptions: () => ({ queryKey: ['github-status'] }),
 			},
 		},
 	},
@@ -135,6 +154,7 @@ afterEach(() => {
 	mocks.activeJobIsFetched = true;
 	mocks.messages = [];
 	vi.clearAllMocks();
+	vi.unstubAllGlobals();
 });
 
 describe('RequestWarehouseCredentialsToolCall', () => {
@@ -172,6 +192,80 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		expect(screen.getByRole('button', { name: 'View progress' })).toBeTruthy();
 	});
 
+	it('shows business context as a separate card after warehouse verification', async () => {
+		mocks.jobStatus = 'awaiting_sources';
+		const toolPart = {
+			type: 'tool-request_warehouse_credentials',
+			toolCallId: 'tool-1',
+			state: 'output-available',
+			input: { provider: 'postgres' },
+			output: { provider: 'postgres', status: 'credentials-required' },
+		} as ToolCallComponentProps<'request_warehouse_credentials'>['toolPart'];
+		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
+
+		await screen.findByText('Postgres database verified');
+		expect(screen.getByRole('button', { name: 'Skip' }).className).toContain('text-muted-foreground/60');
+		fireEvent.click(screen.getByRole('button', { name: 'Add business context' }));
+		fireEvent.change(screen.getByLabelText('Company website'), {
+			target: { value: 'acme.example' },
+		});
+		fireEvent.change(screen.getByLabelText('Tell us more about your business'), {
+			target: { value: 'We rent bicycles.' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+		await screen.findByRole('heading', { name: 'Notion' });
+		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
+		await waitFor(() =>
+			expect(mocks.submitContextSources).toHaveBeenCalledWith({
+				jobId: 'job-1',
+				businessContext: {
+					additionalContext: 'Website: https://acme.example\n\nAbout the business: We rent bicycles.',
+				},
+				contextSources: {},
+			}),
+		);
+	});
+
+	it('uploads selected business context files before starting sync', async () => {
+		mocks.jobStatus = 'awaiting_sources';
+		mocks.uploadContextFile.mockResolvedValue({
+			ok: true,
+			json: vi.fn().mockResolvedValue({}),
+		});
+		vi.stubGlobal('fetch', mocks.uploadContextFile);
+		const toolPart = {
+			type: 'tool-request_warehouse_credentials',
+			toolCallId: 'tool-1',
+			state: 'output-available',
+			input: { provider: 'postgres' },
+			output: { provider: 'postgres', status: 'credentials-required' },
+		} as ToolCallComponentProps<'request_warehouse_credentials'>['toolPart'];
+		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
+
+		await screen.findByText('Postgres database verified');
+		fireEvent.click(screen.getByRole('button', { name: 'Add business context' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+		const file = new File(['# Company handbook'], 'handbook.md', { type: 'text/markdown' });
+		fireEvent.change(screen.getByLabelText('Upload business context files'), {
+			target: { files: [file] },
+		});
+
+		expect(screen.getByText('handbook.md')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
+
+		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledOnce());
+		expect(mocks.uploadContextFile).toHaveBeenCalledWith(
+			'/api/onboarding/context-files?jobId=job-1',
+			expect.objectContaining({
+				method: 'POST',
+				body: expect.any(FormData),
+			}),
+		);
+		expect(mocks.uploadContextFile.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.submitContextSources.mock.invocationCallOrder[0],
+		);
+	});
+
 	it('discovers tables before starting provisioning with the selected tables', async () => {
 		mocks.activeJobId = undefined;
 		const toolPart = {
@@ -184,8 +278,8 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
 
 		fireEvent.click(screen.getByRole('button', { name: 'Enter credentials' }));
-		expect((screen.getByRole('button', { name: /Tables/ }) as HTMLButtonElement).disabled).toBe(true);
-		expect((screen.getByRole('button', { name: /Business context/ }) as HTMLButtonElement).disabled).toBe(true);
+		expect((screen.getByRole('tab', { name: /Tables/ }) as HTMLButtonElement).disabled).toBe(true);
+		expect(screen.queryByRole('button', { name: /Business context/ })).toBeNull();
 		expect(document.querySelector('[data-slot="dialog-overlay"]')?.className).toContain(
 			'data-[state=open]:animate-none',
 		);
@@ -193,12 +287,7 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		await waitFor(() => expect(mocks.validateCredentials).toHaveBeenCalledOnce());
 		expect(screen.getByText('Postgres credentials verified')).toBeTruthy();
 		expect(screen.queryByText('Tables to sync')).toBeNull();
-		expect((screen.getByRole('button', { name: /Tables/ }) as HTMLButtonElement).disabled).toBe(false);
-		expect((screen.getByRole('button', { name: /Business context/ }) as HTMLButtonElement).disabled).toBe(false);
-
-		fireEvent.click(screen.getByRole('button', { name: /Business context/ }));
-		await screen.findByText('Notion');
-		fireEvent.click(screen.getByRole('button', { name: /Credentials/ }));
+		expect((screen.getByRole('tab', { name: /Tables/ }) as HTMLButtonElement).disabled).toBe(false);
 
 		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 		await screen.findByText('Tables to sync');
@@ -207,39 +296,15 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-		fireEvent.click(screen.getByRole('checkbox', { name: 'Select public.orders' }));
+		fireEvent.click(screen.getByRole('button', { name: /Specific selection/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'Expand public folder' }));
+		fireEvent.click(screen.getByRole('checkbox', { name: 'customers table access' }));
 		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-		await screen.findByText('Notion');
-		const confluenceCard = screen.getByRole('heading', { name: 'Confluence' }).closest('section');
-		expect(confluenceCard).toBeTruthy();
-		fireEvent.click(within(confluenceCard!).getByRole('button', { name: 'Connect' }));
-		fireEvent.change(screen.getByLabelText('Confluence site URL'), {
-			target: { value: 'https://acme.atlassian.net/wiki' },
-		});
-		fireEvent.change(screen.getByLabelText('Account email'), {
-			target: { value: 'person@acme.com' },
-		});
-		fireEvent.change(screen.getByLabelText('API token'), {
-			target: { value: 'atlassian-secret' },
-		});
-		fireEvent.change(screen.getByLabelText('Page URLs or IDs'), { target: { value: '123' } });
-		fireEvent.click(screen.getByRole('button', { name: 'Connect Confluence' }));
-		await waitFor(() => expect(mocks.validateConfluence).toHaveBeenCalledOnce());
-		await screen.findByText('Confluence connected · 1 page');
-		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
 
 		await waitFor(() =>
 			expect(mocks.startProvisioning).toHaveBeenCalledWith({
 				provider: 'postgres',
 				credentials: expect.any(Object),
-				contextSources: {
-					confluence: {
-						baseUrl: 'https://acme.atlassian.net/wiki',
-						email: 'person@acme.com',
-						apiToken: 'atlassian-secret',
-						pages: ['123'],
-					},
-				},
 				tableSelection: {
 					mode: 'selected',
 					tables: [{ schema: 'public', table: 'customers' }],

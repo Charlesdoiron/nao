@@ -141,6 +141,7 @@ export function GithubContextSetup({ values, isStarting, onValuesChange }: Githu
 							<Button
 								type='button'
 								size='sm'
+								className='rounded-full'
 								onClick={connectGithub}
 								disabled={availability.isLoading || isAuthorizing || isStarting}
 								isLoading={isAuthorizing}

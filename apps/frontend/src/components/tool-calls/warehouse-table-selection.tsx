@@ -1,11 +1,14 @@
-import { ChevronRight, Layers3, Search, Table2 } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { isDatabaseContextTableGranted } from '@nao/shared';
+import { Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type { DatabaseContextAccess, DatabaseContextGrant } from '@nao/shared';
 
+import { DatabaseContextTree, filterDatabaseContextObjects } from '@/components/settings/user-group-context-access';
+import { UserGroupContextModeSelector } from '@/components/settings/user-group-context-mode-selector';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { FormError } from '@/components/ui/form-fields';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 
 export interface WarehouseSchemaInventory {
 	schema: string;
@@ -14,6 +17,8 @@ export interface WarehouseSchemaInventory {
 
 interface WarehouseTableSelectionProps {
 	schemas: WarehouseSchemaInventory[];
+	databaseType: string;
+	databaseLabel: string;
 	selectedTableKeys: Set<string>;
 	isPending: boolean;
 	error: { message: string } | null;
@@ -24,6 +29,8 @@ interface WarehouseTableSelectionProps {
 
 export function WarehouseTableSelection({
 	schemas,
+	databaseType,
+	databaseLabel,
 	selectedTableKeys,
 	isPending,
 	error,
@@ -32,32 +39,49 @@ export function WarehouseTableSelection({
 	onSubmit,
 }: WarehouseTableSelectionProps) {
 	const [search, setSearch] = useState('');
-	const filteredSchemas = useMemo(() => filterSchemas(schemas, search), [schemas, search]);
 	const tableCount = countTables(schemas);
 	const selectedCount = selectedTableKeys.size;
-
-	const toggleSchema = (schema: WarehouseSchemaInventory, checked: boolean) => {
-		const nextSelection = new Set(selectedTableKeys);
-		for (const table of schema.tables) {
-			const key = getWarehouseTableKey(schema.schema, table);
-			if (checked) {
-				nextSelection.add(key);
-			} else {
-				nextSelection.delete(key);
-			}
-		}
-		onChange(nextSelection);
-	};
-
-	const toggleTable = (schema: string, table: string, checked: boolean) => {
-		const nextSelection = new Set(selectedTableKeys);
-		const key = getWarehouseTableKey(schema, table);
-		if (checked) {
-			nextSelection.add(key);
-		} else {
-			nextSelection.delete(key);
-		}
-		onChange(nextSelection);
+	const objects = useMemo(
+		() =>
+			schemas.flatMap(({ schema, tables }) =>
+				tables.map((table) => ({ databaseType, database: databaseLabel, schema, table })),
+			),
+		[databaseLabel, databaseType, schemas],
+	);
+	const allSelected = tableCount > 0 && selectedCount === tableCount;
+	const databaseAccess: DatabaseContextAccess = allSelected
+		? { mode: 'all', strict: true }
+		: {
+				mode: 'restricted',
+				strict: true,
+				grants: schemas.flatMap(({ schema, tables }): DatabaseContextGrant[] => {
+					const selectedTables = tables.filter((table) =>
+						selectedTableKeys.has(getWarehouseTableKey(schema, table)),
+					);
+					if (tables.length > 0 && selectedTables.length === tables.length) {
+						return [{ kind: 'schema', databaseType, database: databaseLabel, schema }];
+					}
+					return selectedTables.map((table) => ({
+						kind: 'table',
+						databaseType,
+						database: databaseLabel,
+						schema,
+						table,
+					}));
+				}),
+				patterns: [],
+			};
+	const isSearching = databaseAccess.mode === 'restricted' && search.trim().length > 0;
+	const filteredObjects =
+		databaseAccess.mode === 'restricted' ? filterDatabaseContextObjects(objects, search) : objects;
+	const updateSelection = (access: DatabaseContextAccess) => {
+		onChange(
+			new Set(
+				objects
+					.filter((object) => isDatabaseContextTableGranted(access, object))
+					.map((object) => getWarehouseTableKey(object.schema, object.table)),
+			),
+		);
 	};
 
 	return (
@@ -66,61 +90,52 @@ export function WarehouseTableSelection({
 				<div>
 					<h3 className='text-sm font-medium text-foreground'>Tables to sync</h3>
 					<p className='text-[11px] leading-relaxed text-muted-foreground'>
-						Only selected tables are added to nao&apos;s context. Warehouse permissions are unchanged.
+						Only selected tables are added to nao's context. Warehouse permissions are unchanged.
 					</p>
 				</div>
+				<UserGroupContextModeSelector
+					mode={databaseAccess.mode}
+					everythingDescription='All current and future tables.'
+					specificDescription='Choose the schemas and tables to sync.'
+					onEverything={() => onChange(getAllWarehouseTableKeys(schemas))}
+					onSpecific={() => onChange(new Set())}
+				/>
 				<div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
-					<div className='relative min-w-0 flex-1'>
-						<Search className='pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-						<Input
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							placeholder='Search schemas and tables'
-							aria-label='Search schemas and tables'
-							className='pl-9'
-						/>
-					</div>
-					<div className='flex items-center justify-between gap-1 sm:justify-start'>
-						<span className='mr-1 whitespace-nowrap text-xs text-muted-foreground'>
-							{selectedCount} of {tableCount} selected
-						</span>
-						<Button
-							type='button'
-							variant='ghost'
-							size='sm'
-							className='h-8 px-2 text-xs'
-							onClick={() => onChange(getAllWarehouseTableKeys(schemas))}
-						>
-							Select all
-						</Button>
-						<Button
-							type='button'
-							variant='ghost'
-							size='sm'
-							className='h-8 px-2 text-xs'
-							onClick={() => onChange(new Set())}
-						>
-							Clear
-						</Button>
-					</div>
+					{databaseAccess.mode === 'restricted' && (
+						<div className='relative min-w-0 flex-1'>
+							<Search className='pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
+							<Input
+								value={search}
+								onChange={(event) => setSearch(event.target.value)}
+								placeholder='Search schemas and tables'
+								aria-label='Search schemas and tables'
+								className='pl-9'
+							/>
+						</div>
+					)}
+					<Badge variant='secondary' className='w-fit whitespace-nowrap'>
+						{selectedCount} of {tableCount} selected
+					</Badge>
 				</div>
 
-				<div className='h-72 overflow-y-auto rounded-md border bg-transparent shadow-xs'>
-					{filteredSchemas.length === 0 ? (
+				<div className='h-64 overflow-y-auto rounded-lg border'>
+					{filteredObjects.length === 0 ? (
 						<div className='flex h-full items-center justify-center px-4 text-sm text-muted-foreground'>
 							{tableCount === 0 ? 'No tables were found.' : 'No tables match your search.'}
 						</div>
 					) : (
-						filteredSchemas.map((schema) => (
-							<SchemaSelection
-								key={schema.schema}
-								schema={schema}
-								selectedTableKeys={selectedTableKeys}
-								searching={search.trim().length > 0}
-								onToggleSchema={toggleSchema}
-								onToggleTable={toggleTable}
+						<ul>
+							<DatabaseContextTree
+								objects={filteredObjects}
+								selectionObjects={objects}
+								databaseAccess={databaseAccess}
+								onChange={updateSelection}
+								isSearching={isSearching}
+								draftPattern=''
+								showDatabaseRoot={false}
+								showSelectionSourceLabels={false}
 							/>
-						))
+						</ul>
 					)}
 				</div>
 			</section>
@@ -134,6 +149,7 @@ export function WarehouseTableSelection({
 				<Button
 					type='button'
 					size='sm'
+					className='rounded-full'
 					onClick={onSubmit}
 					disabled={selectedCount === 0 || isPending}
 					isLoading={isPending}
@@ -142,92 +158,6 @@ export function WarehouseTableSelection({
 				</Button>
 			</div>
 		</div>
-	);
-}
-
-function SchemaSelection({
-	schema,
-	selectedTableKeys,
-	searching,
-	onToggleSchema,
-	onToggleTable,
-}: {
-	schema: WarehouseSchemaInventory;
-	selectedTableKeys: Set<string>;
-	searching: boolean;
-	onToggleSchema: (schema: WarehouseSchemaInventory, checked: boolean) => void;
-	onToggleTable: (schema: string, table: string, checked: boolean) => void;
-}) {
-	const [expanded, setExpanded] = useState(true);
-	const panelId = useId();
-	const selectedCount = schema.tables.filter((table) =>
-		selectedTableKeys.has(getWarehouseTableKey(schema.schema, table)),
-	).length;
-	const checked = selectedCount === schema.tables.length;
-	const checkboxState = selectedCount > 0 && !checked ? 'indeterminate' : checked;
-	const open = searching || expanded;
-
-	return (
-		<section className='border-b last:border-b-0'>
-			<div
-				className={cn(
-					'sticky top-0 z-10 flex h-10 items-center gap-2 bg-background/90 px-3 backdrop-blur-sm',
-					open && 'border-b',
-				)}
-			>
-				<Checkbox
-					checked={checkboxState}
-					aria-label={`Select all tables in ${schema.schema}`}
-					onCheckedChange={(nextChecked) => onToggleSchema(schema, nextChecked === true)}
-				/>
-				<Layers3 className='size-4 text-muted-foreground' />
-				<button
-					type='button'
-					className='flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-					aria-label={`${open ? 'Collapse' : 'Expand'} ${schema.schema} schema`}
-					aria-expanded={open}
-					aria-controls={panelId}
-					onClick={() => setExpanded((current) => !current)}
-				>
-					<span className='min-w-0 truncate text-sm font-medium' title={schema.schema}>
-						{schema.schema}
-					</span>
-					<ChevronRight
-						className={cn(
-							'size-3.5 shrink-0 text-muted-foreground transition-transform',
-							open && 'rotate-90',
-						)}
-					/>
-				</button>
-				<span className='text-xs text-muted-foreground'>
-					{selectedCount}/{schema.tables.length}
-				</span>
-			</div>
-			{open && (
-				<ul id={panelId} className='py-1'>
-					{schema.tables.map((table) => {
-						const selected = selectedTableKeys.has(getWarehouseTableKey(schema.schema, table));
-						return (
-							<li key={table}>
-								<label className='flex h-8 cursor-pointer items-center gap-2 px-3 pl-9 text-sm hover:bg-muted/50'>
-									<Checkbox
-										checked={selected}
-										aria-label={`Select ${schema.schema}.${table}`}
-										onCheckedChange={(nextChecked) =>
-											onToggleTable(schema.schema, table, nextChecked === true)
-										}
-									/>
-									<Table2 className='size-3.5 text-muted-foreground' />
-									<span className='min-w-0 truncate' title={table}>
-										{table}
-									</span>
-								</label>
-							</li>
-						);
-					})}
-				</ul>
-			)}
-		</section>
 	);
 }
 
@@ -241,30 +171,25 @@ export function getAllWarehouseTableKeys(schemas: WarehouseSchemaInventory[]): S
 	);
 }
 
-export function getSelectedWarehouseTables(
+export function getCompactWarehouseTableSelection(
 	schemas: WarehouseSchemaInventory[],
 	selectedTableKeys: Set<string>,
-): Array<{ schema: string; table: string }> {
-	return schemas.flatMap((schema) =>
-		schema.tables
-			.filter((table) => selectedTableKeys.has(getWarehouseTableKey(schema.schema, table)))
-			.map((table) => ({ schema: schema.schema, table })),
-	);
-}
+): { schemas: string[]; tables: Array<{ schema: string; table: string }> } {
+	const selectedSchemas: string[] = [];
+	const selectedTables: Array<{ schema: string; table: string }> = [];
 
-function filterSchemas(schemas: WarehouseSchemaInventory[], search: string): WarehouseSchemaInventory[] {
-	const nonEmptySchemas = schemas.filter((schema) => schema.tables.length > 0);
-	const query = search.trim().toLocaleLowerCase();
-	if (!query) {
-		return nonEmptySchemas;
-	}
-	return nonEmptySchemas.flatMap((schema) => {
-		if (schema.schema.toLocaleLowerCase().includes(query)) {
-			return [schema];
+	for (const schema of schemas) {
+		const tables = schema.tables.filter((table) =>
+			selectedTableKeys.has(getWarehouseTableKey(schema.schema, table)),
+		);
+		if (schema.tables.length > 0 && tables.length === schema.tables.length) {
+			selectedSchemas.push(schema.schema);
+		} else {
+			selectedTables.push(...tables.map((table) => ({ schema: schema.schema, table })));
 		}
-		const tables = schema.tables.filter((table) => table.toLocaleLowerCase().includes(query));
-		return tables.length > 0 ? [{ ...schema, tables }] : [];
-	});
+	}
+
+	return { schemas: selectedSchemas, tables: selectedTables };
 }
 
 function countTables(schemas: WarehouseSchemaInventory[]): number {

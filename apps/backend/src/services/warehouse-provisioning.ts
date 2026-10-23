@@ -29,7 +29,9 @@ import {
 	warehouseConnectionCredentialsSchema,
 	warehouseCredentialsSchema,
 	type WarehouseProvider,
+	type WarehouseProvisioningBusinessContext,
 	type WarehouseProvisioningStatus,
+	type WarehouseProvisioningWarning,
 	type WarehouseTableSelection,
 	warehouseTableSelectionSchema,
 	type WarehouseValidationResult,
@@ -45,7 +47,8 @@ import {
 	provisionManagedGithubRepository,
 } from './managed-github-repository';
 import { generateOnboardingRules } from './onboarding-rules';
-import { saveProjectWarehouseEnvVars } from './warehouse-credentials';
+import { cleanupWarehouseContextFiles, restoreWarehouseContextFiles } from './warehouse-context-files';
+import { ONBOARDING_GITHUB_REPOSITORY_URL_ENV, saveProjectWarehouseEnvVars } from './warehouse-credentials';
 
 const INIT_TIMEOUT_MS = 15 * 60_000;
 const DEBUG_TIMEOUT_MS = 5 * 60_000;
@@ -60,7 +63,6 @@ const FAILED_JOB_COOLDOWN_MS = 30_000;
 const MAX_JOB_ATTEMPTS = 5;
 const NOTION_API_KEY_ENV = 'NAO_ONBOARDING_NOTION_API_KEY';
 const CONFLUENCE_API_TOKEN_ENV = 'NAO_ONBOARDING_CONFLUENCE_API_TOKEN';
-const GITHUB_REPOSITORY_URL_ENV = 'NAO_ONBOARDING_GITHUB_REPOSITORY_URL';
 const WORKER_ID = `${os.hostname()}:${process.pid}:${crypto.randomUUID()}`;
 const PROVISIONING_STATUSES: WarehouseProvisioningStatus[] = [
 	'queued',
@@ -154,12 +156,6 @@ const persistedCredentialsSchema = z.discriminatedUnion('version', [
 ]);
 
 class WarehousePreparationError extends Error {}
-
-class GithubConnectionError extends Error {
-	constructor() {
-		super('GitHub is no longer connected. Reconnect it and try again.');
-	}
-}
 
 export async function validateWarehouseCredentials(
 	input: ProjectWarehouseCredentials,
@@ -353,7 +349,6 @@ type StartWarehouseProvisioningInput = {
 	userId: string;
 	orgId: string;
 	projectName: string;
-	contextSources?: OnboardingContextSources;
 	onboardingChatId?: string;
 	tableSelection?: WarehouseTableSelection;
 } & ProjectWarehouseCredentials;
@@ -371,7 +366,7 @@ type WarehouseProvisioningFinalization = {
 
 type PublicWarehouseProvisioningJob = Pick<
 	DBWarehouseProvisioningJob,
-	'id' | 'provider' | 'status' | 'projectId' | 'projectName' | 'logs' | 'error'
+	'id' | 'provider' | 'status' | 'projectId' | 'projectName' | 'logs' | 'error' | 'warnings'
 >;
 
 export async function startWarehouseProvisioning(
@@ -388,7 +383,7 @@ export async function startWarehouseProvisioning(
 		userId: input.userId,
 		orgId: input.orgId,
 		projectName: input.projectName,
-		contextSources: onboardingContextSourcesSchema.parse(input.contextSources ?? {}),
+		contextSources: {},
 		onboardingChatId: input.onboardingChatId,
 		tableSelection: warehouseTableSelectionSchema.parse(input.tableSelection ?? { mode: 'all' }),
 		...connection,
@@ -476,7 +471,13 @@ async function runProvisioningJob(
 		return;
 	}
 
-	await withJobLease(jobId, () => provisionWarehouse(jobId, input));
+	let awaitingContextSources = false;
+	await withJobLease(jobId, async () => {
+		awaitingContextSources = await provisionWarehouse(jobId, input);
+	});
+	if (awaitingContextSources) {
+		await updateJob(jobId, { status: 'awaiting_sources', attempts: 0 });
+	}
 	await maybeStartFinalization(jobId);
 }
 
@@ -509,6 +510,7 @@ function toPublicWarehouseProvisioningJob(job: DBWarehouseProvisioningJob): Publ
 		projectName: job.projectName,
 		logs: job.logs,
 		error: job.error,
+		warnings: job.warnings,
 	};
 }
 
@@ -529,17 +531,90 @@ export async function queueWarehouseFinalization(
 	}
 
 	await updateJob(jobId, {
-		businessContext: finalization.businessContext,
+		businessContext: { ...(job.businessContext ?? {}), ...finalization.businessContext },
 		modelSelection: finalization.modelSelection ?? null,
 		modelProjectId: finalization.modelProjectId,
 	});
 	await maybeStartFinalization(jobId);
 }
 
-async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput): Promise<void> {
+export async function submitWarehouseContextSources(
+	jobId: string,
+	userId: string,
+	contextSources: OnboardingContextSources,
+	businessContext: WarehouseProvisioningBusinessContext,
+): Promise<void> {
+	const job = await warehouseProvisioningJobQueries.getWarehouseProvisioningJob(jobId, userId);
+	if (!job) {
+		throw new TRPCError({ code: 'NOT_FOUND', message: 'Warehouse setup job not found' });
+	}
+	if (job.status === 'failed' || job.status === 'cancelled') {
+		throw new TRPCError({ code: 'BAD_REQUEST', message: job.error ?? 'Warehouse setup failed' });
+	}
+	if (job.status !== 'awaiting_sources') {
+		if (['syncing', 'registering', 'awaiting_context', 'finalizing', 'publishing', 'ready'].includes(job.status)) {
+			return;
+		}
+		throw new TRPCError({ code: 'CONFLICT', message: 'The warehouse connection is still being verified.' });
+	}
+	if (!job.encryptedCredentials || !job.temporaryDirectory) {
+		throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Warehouse setup cannot be resumed.' });
+	}
+
+	const projectDir = job.temporaryDirectory;
+	const sources = onboardingContextSourcesSchema.parse(contextSources);
+	const persistedCredentials = persistedCredentialsSchema.parse(JSON.parse(decryptSecret(job.encryptedCredentials)));
+	const tableSelection =
+		persistedCredentials.version === 1 ? { mode: 'all' as const } : persistedCredentials.tableSelection;
+	const input: ProvisionWarehouseInput = {
+		userId: job.userId,
+		orgId: job.orgId,
+		projectName: job.projectName,
+		contextSources: sources,
+		tableSelection,
+		provider: job.provider,
+		credentials: persistedCredentials.credentials,
+	};
+	const claimedJob = await claimJob(jobId, ['awaiting_sources']);
+	if (!claimedJob) {
+		return;
+	}
+
+	try {
+		await updateJob(jobId, {
+			status: 'syncing',
+			logs: '',
+			warnings: [],
+			businessContext,
+			encryptedCredentials: encryptSecret(
+				JSON.stringify({
+					version: 3,
+					contextSources: sources,
+					credentials: input.credentials,
+					tableSelection,
+				}),
+			),
+		});
+	} catch (error) {
+		await warehouseProvisioningJobQueries.releaseWarehouseProvisioningJobLock(jobId, WORKER_ID);
+		throw error;
+	}
+
+	setImmediate(() => {
+		void (async () => {
+			await withJobLease(jobId, () => syncWarehouse(jobId, input, projectDir));
+			await maybeStartFinalization(jobId);
+		})().catch(logReconciliationError);
+	});
+}
+
+async function provisionWarehouse(
+	jobId: string,
+	input: ProvisionWarehouseInput,
+	pauseForContextSources = true,
+): Promise<boolean> {
 	let projectDir: string | null = null;
-	let registeredProjectId: string | null = null;
-	let registeredProjectPath: string | null = null;
+	let preserveTemporaryDirectory = false;
 
 	try {
 		projectDir = createTempProjectDir('warehouse-onboarding');
@@ -549,46 +624,27 @@ async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput)
 			throw new ProjectNameConflictError(input.projectName);
 		}
 
-		const provisionConfig = await prepareWarehouseConfig(input.provider, input.credentials);
-		const githubToken = input.contextSources.github ? await userQueries.getGithubToken(input.userId) : undefined;
-		if (input.contextSources.github && !githubToken) {
-			throw new GithubConnectionError();
-		}
-		const contextEnvVars: Record<string, string> = {
-			...(input.contextSources.notion && {
-				[NOTION_API_KEY_ENV]: JSON.stringify(input.contextSources.notion.apiKey),
-			}),
-			...(input.contextSources.confluence && {
-				[CONFLUENCE_API_TOKEN_ENV]: JSON.stringify(input.contextSources.confluence.apiToken),
-			}),
-			...(input.contextSources.github &&
-				githubToken && {
-					[GITHUB_REPOSITORY_URL_ENV]: JSON.stringify(
-						authenticatedRepoUrl(githubToken, input.contextSources.github.repoFullName),
-					),
-				}),
-		};
-		const projectEnvVars = { ...provisionConfig.env_vars, ...contextEnvVars };
+		const projectConfig = await prepareProjectConfig(input);
 
 		await updateJob(jobId, { status: 'initializing' });
 		writeWarehouseConfig(
 			projectDir,
 			input.projectName,
 			input.provider,
-			provisionConfig.database_config,
+			projectConfig.databaseConfig,
 			input.tableSelection,
-			input.contextSources,
+			projectConfig.contextSources,
 		);
-		const commandEnvironment = createCommandEnvironment(projectEnvVars);
+		const commandEnvironment = createCommandEnvironment(projectConfig.envVars);
 		await runNaoCommand(['init', '--yes'], projectDir, commandEnvironment, INIT_TIMEOUT_MS);
 
 		writeWarehouseConfig(
 			projectDir,
 			input.projectName,
 			input.provider,
-			provisionConfig.database_config,
+			projectConfig.databaseConfig,
 			input.tableSelection,
-			input.contextSources,
+			projectConfig.contextSources,
 		);
 
 		await updateJob(jobId, { status: 'debugging', logs: '' });
@@ -596,19 +652,79 @@ async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput)
 			updateJob(jobId, { logs }),
 		);
 
-		await updateJob(jobId, { status: 'syncing', logs: '' });
-		const syncArgs = ['sync', '--provider', 'databases'];
-		if (input.contextSources.notion) {
-			syncArgs.push('--provider', 'notion');
+		if (pauseForContextSources) {
+			preserveTemporaryDirectory = true;
+			return true;
+		} else {
+			await updateJob(jobId, { status: 'syncing', logs: '' });
+			preserveTemporaryDirectory = true;
+			await syncWarehouse(jobId, input, projectDir);
 		}
-		if (input.contextSources.confluence) {
-			syncArgs.push('--provider', 'confluence');
+	} catch (error) {
+		const serializedError = serializeError(error);
+		const errorMessage = typeof serializedError.message === 'string' ? serializedError.message : 'Unknown error';
+		logger.error(`Warehouse provisioning failed: ${errorMessage}`, {
+			source: 'system',
+			context: {
+				jobId,
+				error: serializedError,
+			},
+		});
+		await updateJob(jobId, {
+			status: 'failed',
+			error: getPublicProvisioningError(error),
+			encryptedCredentials: null,
+			temporaryDirectory: null,
+			finishedAt: new Date(),
+		});
+		if (projectDir) {
+			await cleanupStagedWarehouseContextFiles(jobId, projectDir);
 		}
-		if (input.contextSources.github) {
-			syncArgs.push('--provider', 'repositories');
+	} finally {
+		if (projectDir && !preserveTemporaryDirectory) {
+			fs.rmSync(projectDir, { recursive: true, force: true });
 		}
-		await runNaoCommand(syncArgs, projectDir, commandEnvironment, SYNC_TIMEOUT_MS, (logs) =>
-			updateJob(jobId, { logs }),
+	}
+	return false;
+}
+
+async function syncWarehouse(jobId: string, input: ProvisionWarehouseInput, projectDir: string): Promise<void> {
+	let registeredProjectId: string | null = null;
+	let registeredProjectPath: string | null = null;
+
+	try {
+		const projectConfig = await prepareProjectConfig(input);
+		await restoreWarehouseContextFiles(jobId, projectDir);
+		writeWarehouseConfig(
+			projectDir,
+			input.projectName,
+			input.provider,
+			projectConfig.databaseConfig,
+			input.tableSelection,
+			projectConfig.contextSources,
+		);
+		const commandEnvironment = createCommandEnvironment(projectConfig.envVars);
+		const publishLogs = createSyncLogPublisher(jobId);
+		await updateJob(jobId, { warnings: projectConfig.warnings });
+		await runNaoCommand(
+			['sync', '--provider', 'databases'],
+			projectDir,
+			commandEnvironment,
+			SYNC_TIMEOUT_MS,
+			publishLogs('Database'),
+		);
+		if (!hasSyncedWarehouseTables(projectDir)) {
+			throw new WarehousePreparationError(
+				'None of the selected tables were synced. They may have been renamed, removed, or become inaccessible.',
+			);
+		}
+		const warnings = await syncOptionalContextSources(
+			jobId,
+			projectConfig.contextSources,
+			projectDir,
+			commandEnvironment,
+			projectConfig.warnings,
+			publishLogs,
 		);
 
 		const projectId = crypto.randomUUID();
@@ -631,15 +747,24 @@ async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput)
 		}
 		registeredProjectPath = registeredProject.path;
 
-		await saveProjectWarehouseEnvVars(project.projectId, input.provider, projectEnvVars);
+		await saveProjectWarehouseEnvVars(project.projectId, input.provider, projectConfig.envVars, {
+			...(projectConfig.contextSources.github && {
+				githubConnection: {
+					userId: input.userId,
+					repoFullName: projectConfig.contextSources.github.repoFullName,
+				},
+			}),
+		});
 
 		await updateJob(jobId, {
 			status: 'awaiting_context',
 			projectId: project.projectId,
+			warnings,
 			attempts: 0,
 			encryptedCredentials: null,
 			temporaryDirectory: null,
 		});
+		await cleanupStagedWarehouseContextFiles(jobId, projectDir);
 	} catch (error) {
 		const serializedError = serializeError(error);
 		const errorMessage = typeof serializedError.message === 'string' ? serializedError.message : 'Unknown error';
@@ -660,10 +785,150 @@ async function provisionWarehouse(jobId: string, input: ProvisionWarehouseInput)
 			temporaryDirectory: null,
 			finishedAt: new Date(),
 		});
+		await cleanupStagedWarehouseContextFiles(jobId, projectDir);
 	} finally {
-		if (projectDir) {
-			fs.rmSync(projectDir, { recursive: true, force: true });
+		fs.rmSync(projectDir, { recursive: true, force: true });
+	}
+}
+
+function hasSyncedWarehouseTables(projectDir: string): boolean {
+	const databasesDir = path.join(projectDir, 'databases');
+	if (!fs.existsSync(databasesDir)) {
+		return false;
+	}
+
+	const directories = [databasesDir];
+	while (directories.length > 0) {
+		const directory = directories.pop();
+		if (!directory) {
+			continue;
 		}
+		for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+			if (!entry.isDirectory()) {
+				continue;
+			}
+			if (entry.name.startsWith('table=')) {
+				return true;
+			}
+			directories.push(path.join(directory, entry.name));
+		}
+	}
+	return false;
+}
+
+async function prepareProjectConfig(input: ProvisionWarehouseInput): Promise<{
+	databaseConfig: Record<string, unknown>;
+	envVars: Record<string, string>;
+	contextSources: OnboardingContextSources;
+	warnings: WarehouseProvisioningWarning[];
+}> {
+	const provisionConfig = await prepareWarehouseConfig(input.provider, input.credentials);
+	const githubToken = input.contextSources.github ? await userQueries.getGithubToken(input.userId) : undefined;
+	const { github: requestedGithub, ...nonGithubSources } = input.contextSources;
+	const contextSources: OnboardingContextSources =
+		requestedGithub && githubToken ? { ...nonGithubSources, github: requestedGithub } : nonGithubSources;
+	const warnings =
+		requestedGithub && !githubToken
+			? [createContextSourceWarning('github', 'GitHub was disconnected before its repository could be synced.')]
+			: [];
+	const contextEnvVars: Record<string, string> = {
+		...(contextSources.notion && {
+			[NOTION_API_KEY_ENV]: JSON.stringify(contextSources.notion.apiKey),
+		}),
+		...(contextSources.confluence && {
+			[CONFLUENCE_API_TOKEN_ENV]: JSON.stringify(contextSources.confluence.apiToken),
+		}),
+		...(contextSources.github &&
+			githubToken && {
+				[ONBOARDING_GITHUB_REPOSITORY_URL_ENV]: JSON.stringify(
+					authenticatedRepoUrl(githubToken, contextSources.github.repoFullName),
+				),
+			}),
+	};
+	return {
+		databaseConfig: provisionConfig.database_config,
+		envVars: { ...provisionConfig.env_vars, ...contextEnvVars },
+		contextSources,
+		warnings,
+	};
+}
+
+type ContextSourceName = WarehouseProvisioningWarning['source'];
+type SyncLogPublisher = (label: string) => (output: string) => Promise<void>;
+
+async function syncOptionalContextSources(
+	jobId: string,
+	contextSources: OnboardingContextSources,
+	projectDir: string,
+	commandEnvironment: NodeJS.ProcessEnv,
+	initialWarnings: WarehouseProvisioningWarning[],
+	publishLogs: SyncLogPublisher,
+): Promise<WarehouseProvisioningWarning[]> {
+	const sources: Array<{
+		source: ContextSourceName;
+		label: string;
+		provider: string;
+		enabled: boolean;
+	}> = [
+		{ source: 'notion', label: 'Notion', provider: 'notion', enabled: Boolean(contextSources.notion) },
+		{
+			source: 'confluence',
+			label: 'Confluence',
+			provider: 'confluence',
+			enabled: Boolean(contextSources.confluence),
+		},
+		{ source: 'github', label: 'GitHub', provider: 'repositories', enabled: Boolean(contextSources.github) },
+	];
+	const warnings = [...initialWarnings];
+
+	for (const source of sources.filter(({ enabled }) => enabled)) {
+		try {
+			await runNaoCommand(
+				['sync', '--provider', source.provider],
+				projectDir,
+				commandEnvironment,
+				SYNC_TIMEOUT_MS,
+				publishLogs(source.label),
+			);
+		} catch (error) {
+			logger.warn(`${source.label} context sync failed: ${String(error)}`, {
+				source: 'system',
+				context: { jobId, contextSource: source.source },
+			});
+			warnings.push(
+				createContextSourceWarning(
+					source.source,
+					`${source.label} could not be synced. Warehouse setup continued without it.`,
+				),
+			);
+			await updateJob(jobId, { warnings });
+		}
+	}
+
+	return warnings;
+}
+
+function createSyncLogPublisher(jobId: string): SyncLogPublisher {
+	const outputBySource = new Map<string, string>();
+	return (label) => async (output) => {
+		outputBySource.set(label, output);
+		const logs = [...outputBySource].map(([source, value]) => `## ${source}\n${value}`).join('\n\n');
+		await updateJob(jobId, { logs: logs.slice(-COMMAND_OUTPUT_LIMIT) });
+	};
+}
+
+function createContextSourceWarning(source: ContextSourceName, message: string): WarehouseProvisioningWarning {
+	return { source, message };
+}
+
+async function cleanupStagedWarehouseContextFiles(jobId: string, projectDir: string): Promise<void> {
+	try {
+		await cleanupWarehouseContextFiles(jobId, projectDir);
+	} catch (error) {
+		logger.warn(`Could not clean up staged warehouse context files: ${String(error)}`, {
+			source: 'system',
+			context: { jobId },
+		});
 	}
 }
 
@@ -803,9 +1068,12 @@ function writeWarehouseConfig(
 	const include =
 		tableSelection.mode === 'selected'
 			? [
-					...new Set(
-						tableSelection.tables.map(({ schema, table }) => `${escapeGlob(schema)}.${escapeGlob(table)}`),
-					),
+					...new Set([
+						...(tableSelection.schemas ?? []).map((schema) => `${escapeGlob(schema)}.*`),
+						...tableSelection.tables.map(
+							({ schema, table }) => `${escapeGlob(schema)}.${escapeGlob(table)}`,
+						),
+					]),
 				]
 			: undefined;
 	const config = yaml.dump({
@@ -832,7 +1100,7 @@ function writeWarehouseConfig(
 			repos: [
 				{
 					name: contextSources.github.repoFullName.replace('/', '-'),
-					url: `\${{ env('${GITHUB_REPOSITORY_URL_ENV}') }}`,
+					url: `\${{ env('${ONBOARDING_GITHUB_REPOSITORY_URL_ENV}') }}`,
 					branch: contextSources.github.branch,
 				},
 			],
@@ -1008,6 +1276,8 @@ async function recoverProvisioningJob(jobId: string): Promise<void> {
 	if (!job) {
 		return;
 	}
+	const resumeSync = job.status === 'syncing' || job.status === 'registering';
+	let awaitingContextSources = false;
 
 	await withJobLease(jobId, async () => {
 		try {
@@ -1044,14 +1314,18 @@ async function recoverProvisioningJob(jobId: string): Promise<void> {
 				temporaryDirectory: null,
 				finishedAt: null,
 			});
-			await provisionWarehouse(jobId, {
-				userId: job.userId,
-				orgId: job.orgId,
-				projectName: job.projectName,
-				contextSources,
-				tableSelection,
-				...connection,
-			});
+			awaitingContextSources = await provisionWarehouse(
+				jobId,
+				{
+					userId: job.userId,
+					orgId: job.orgId,
+					projectName: job.projectName,
+					contextSources,
+					tableSelection,
+					...connection,
+				},
+				!resumeSync,
+			);
 		} catch (error) {
 			const serializedError = serializeError(error);
 			logger.error('Warehouse provisioning recovery failed', {
@@ -1067,6 +1341,9 @@ async function recoverProvisioningJob(jobId: string): Promise<void> {
 			});
 		}
 	});
+	if (awaitingContextSources) {
+		await updateJob(jobId, { status: 'awaiting_sources', attempts: 0 });
+	}
 
 	await maybeStartFinalization(jobId);
 }
@@ -1085,6 +1362,7 @@ async function recoverFinalizationJob(jobId: string): Promise<void> {
 
 async function failExhaustedJob(job: DBWarehouseProvisioningJob): Promise<void> {
 	if (job.temporaryDirectory) {
+		await cleanupStagedWarehouseContextFiles(job.id, job.temporaryDirectory);
 		try {
 			fs.rmSync(job.temporaryDirectory, { recursive: true, force: true });
 		} catch (error) {
@@ -1169,10 +1447,6 @@ class ProjectNameConflictError extends Error {
 
 export function getPublicProvisioningError(error: unknown): string {
 	if (error instanceof ProjectNameConflictError) {
-		return error.message;
-	}
-
-	if (error instanceof GithubConnectionError) {
 		return error.message;
 	}
 

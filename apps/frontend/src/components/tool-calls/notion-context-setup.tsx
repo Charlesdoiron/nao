@@ -29,6 +29,7 @@ interface NotionContextSetupProps {
 	onValidatedFingerprintChange: (fingerprint: string) => void;
 	onValidate: (values: NotionContextValues) => Promise<void>;
 	onBack: () => void;
+	backLabel?: string;
 	onSkip: () => void;
 	onSubmit: () => void;
 }
@@ -48,6 +49,7 @@ export function NotionContextSetup({
 	onValidatedFingerprintChange,
 	onValidate,
 	onBack,
+	backLabel = 'Previous',
 	onSkip,
 	onSubmit,
 }: NotionContextSetupProps) {
@@ -146,6 +148,7 @@ export function NotionContextSetup({
 								<Button
 									type='button'
 									size='sm'
+									className='rounded-full'
 									onClick={validate}
 									disabled={!canValidate || isValidating || isStarting}
 									isLoading={isValidating}
@@ -163,13 +166,14 @@ export function NotionContextSetup({
 				{!canStart && (
 					<p className='text-xs text-muted-foreground'>Select at least one table before syncing.</p>
 				)}
-				<div className='flex items-center justify-between gap-2'>
+				<div className='flex items-center justify-between gap-2 rounded-full'>
 					<Button type='button' variant='ghost' size='sm' onClick={onBack} disabled={isStarting}>
-						Previous
+						{backLabel}
 					</Button>
 					<Button
 						type='button'
 						size='sm'
+						className='rounded-full'
 						onClick={contextConnected ? onSubmit : onSkip}
 						disabled={!canStart || contextValidating || isStarting}
 						isLoading={isStarting}

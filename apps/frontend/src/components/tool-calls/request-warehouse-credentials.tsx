@@ -1,28 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { CircleCheck, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { buildWarehouseCredentials } from './warehouse-credentials';
+import { RequestBusinessContext } from './request-business-context';
 import { WarehouseCredentialsForm } from './warehouse-credentials-form';
 import { isSqlProvider, WAREHOUSE_PROVIDER_LABELS } from './warehouse-provider-config';
 import {
-	ConfluenceContextSetup,
-	getConfluenceContextFingerprint,
-	parseConfluencePages,
-} from './confluence-context-setup';
-import { GithubContextSetup } from './github-context-setup';
-import { getNotionContextFingerprint, NotionContextSetup, parseNotionPages } from './notion-context-setup';
-import {
 	getAllWarehouseTableKeys,
-	getSelectedWarehouseTables,
+	getCompactWarehouseTableSelection,
 	WarehouseTableSelection,
 } from './warehouse-table-selection';
 import type { WarehouseCredentialsFormValues } from './warehouse-credentials';
 import type { WarehouseSchemaInventory } from './warehouse-table-selection';
-import type { ConfluenceContextValues } from './confluence-context-setup';
-import type { GithubContextValues } from './github-context-setup';
-import type { NotionContextValues } from './notion-context-setup';
 import type { ToolCallComponentProps } from '.';
+import type { TabBarItem } from '@/components/ui/tab-bar';
 
 import { Button } from '@/components/ui/button';
 import { DatabaseIcon } from '@/components/ui/database-icon';
@@ -35,6 +27,7 @@ import {
 	DialogTrigger,
 } from '@/components/ui/dialog';
 import { FormError } from '@/components/ui/form-fields';
+import { TabBar, TabPanel } from '@/components/ui/tab-bar';
 import { findWarehouseJobId } from '@/components/onboarding-progress';
 import { useAgentContext, useAgentMessagesSelector } from '@/contexts/agent.provider';
 import { getMessageText, NEW_CHAT_ID, ONBOARDING_CONTEXT_REQUEST_PREFIX } from '@/lib/ai';
@@ -43,12 +36,7 @@ import { trpc } from '@/main';
 
 export { WarehouseCredentialsForm as SqlCredentialsForm } from './warehouse-credentials-form';
 
-type SetupStep = 'credentials' | 'tables' | 'context';
-type SelectedContextSources = {
-	notion?: { apiKey: string; pages: string[] };
-	confluence?: { baseUrl: string; email: string; apiToken: string; pages: string[] };
-	github?: GithubContextValues;
-};
+type SetupStep = 'credentials' | 'tables';
 
 export function RequestWarehouseCredentialsToolCall({
 	toolPart,
@@ -62,18 +50,6 @@ export function RequestWarehouseCredentialsToolCall({
 	const [setupStep, setSetupStep] = useState<SetupStep>('credentials');
 	const [discoveredSchemas, setDiscoveredSchemas] = useState<WarehouseSchemaInventory[]>();
 	const [selectedTableKeys, setSelectedTableKeys] = useState<Set<string>>(new Set());
-	const [notionValues, setNotionValues] = useState<NotionContextValues>({ apiKey: '', pagesText: '' });
-	const [validatedNotionFingerprint, setValidatedNotionFingerprint] = useState<string | null>(null);
-	const [validatedNotionPages, setValidatedNotionPages] = useState<Array<{ url: string; title: string }>>([]);
-	const [confluenceValues, setConfluenceValues] = useState<ConfluenceContextValues>({
-		baseUrl: '',
-		email: '',
-		apiToken: '',
-		pagesText: '',
-	});
-	const [validatedConfluenceFingerprint, setValidatedConfluenceFingerprint] = useState<string | null>(null);
-	const [validatedConfluencePages, setValidatedConfluencePages] = useState<Array<{ url: string; title: string }>>([]);
-	const [githubValues, setGithubValues] = useState<GithubContextValues>({ repoFullName: '', branch: '' });
 	const cardRef = useRef<HTMLDivElement>(null);
 	const notifiedJobId = useRef<string | null>(null);
 	const restoredJobId = useRef(false);
@@ -102,8 +78,6 @@ export function RequestWarehouseCredentialsToolCall({
 			: false,
 	);
 	const validateCredentials = useMutation(trpc.onboarding.validateWarehouseCredentials.mutationOptions());
-	const validateNotion = useMutation(trpc.onboarding.validateNotionContext.mutationOptions());
-	const validateConfluence = useMutation(trpc.onboarding.validateConfluenceContext.mutationOptions());
 	const startProvisioning = useMutation(
 		trpc.onboarding.startWarehouseProvisioning.mutationOptions({
 			onSuccess: ({ jobId: nextJobId }) => {
@@ -184,265 +158,200 @@ export function RequestWarehouseCredentialsToolCall({
 		validatedCredentialFingerprint === JSON.stringify(credentialValues);
 	const setupStepsUnlocked = credentialsVerified && discoveredSchemas !== undefined;
 	const tableSelectionReady = setupStep === 'tables' && discoveredSchemas !== undefined && !setupInProgress;
-	const contextSetupReady = setupStep === 'context' && discoveredSchemas !== undefined && !setupInProgress;
+	const awaitingSources = job.data?.status === 'awaiting_sources';
 	const credentialsAccepted = credentialsVerified || setupInProgress;
-	const notionConnected =
-		validatedNotionFingerprint !== null && validatedNotionFingerprint === getNotionContextFingerprint(notionValues);
-	const confluenceConnected =
-		validatedConfluenceFingerprint !== null &&
-		validatedConfluenceFingerprint === getConfluenceContextFingerprint(confluenceValues);
-	const githubConnected = githubValues.repoFullName.length > 0 && githubValues.branch.length > 0;
-	const selectedContextSources: SelectedContextSources = {
-		...(notionConnected && {
-			notion: { apiKey: notionValues.apiKey, pages: parseNotionPages(notionValues.pagesText) },
-		}),
-		...(confluenceConnected && {
-			confluence: {
-				baseUrl: confluenceValues.baseUrl.trim(),
-				email: confluenceValues.email.trim(),
-				apiToken: confluenceValues.apiToken.trim(),
-				pages: parseConfluencePages(confluenceValues.pagesText),
-			},
-		}),
-		...(githubConnected && { github: githubValues }),
-	};
-	const hasConnectedContext = notionConnected || confluenceConnected || githubConnected;
-	const startSelectedProvisioning = async (contextSources: SelectedContextSources = {}) => {
+	const startSelectedProvisioning = async () => {
 		if (!credentialValues || !discoveredSchemas) {
 			return;
 		}
-		const selectedTables = getSelectedWarehouseTables(discoveredSchemas, selectedTableKeys);
 		const tableCount = discoveredSchemas.reduce((count, schema) => count + schema.tables.length, 0);
+		const selected = getCompactWarehouseTableSelection(discoveredSchemas, selectedTableKeys);
 		await startProvisioning.mutateAsync({
 			provider,
 			credentials: buildWarehouseCredentials(provider, credentialValues),
-			contextSources,
 			tableSelection:
-				selectedTables.length === tableCount ? { mode: 'all' } : { mode: 'selected', tables: selectedTables },
+				selectedTableKeys.size === tableCount
+					? { mode: 'all' }
+					: {
+							mode: 'selected',
+							...(selected.schemas.length > 0 && { schemas: selected.schemas }),
+							tables: selected.tables,
+						},
 			...(canRestoreJob && { onboardingChatId: chatId }),
 		});
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
-			<div
-				ref={cardRef}
-				className={cn(
-					'animate-fade-in-up flex flex-col items-start justify-between gap-4 rounded-xl border bg-background p-5 shadow-xs sm:flex-row sm:items-center',
-					setupFailed
-						? 'border-destructive/20'
-						: credentialsAccepted
-							? 'border-emerald-500/25'
-							: 'border-violet/20',
-				)}
-			>
-				<div className='flex min-w-0 items-center gap-3'>
-					<div
-						className={cn(
-							'flex size-10 shrink-0 items-center justify-center rounded-lg border',
-							setupFailed
-								? 'border-destructive/20 bg-destructive/5 text-destructive'
-								: credentialsAccepted
-									? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-									: 'border-violet/20 bg-violet/10 text-primary',
-						)}
-					>
-						<DatabaseIcon dialect={provider} className='size-5' />
-					</div>
-					<div className='min-w-0'>
-						<div className='font-borna text-lg font-medium tracking-tight text-foreground'>
-							{setupFailed
-								? `${WAREHOUSE_PROVIDER_LABELS[provider]} setup needs attention`
-								: contextSetupReady
-									? 'Business context optional'
-									: tableSelectionReady
-										? `${WAREHOUSE_PROVIDER_LABELS[provider]} tables ready`
-										: credentialsAccepted
-											? `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials verified`
-											: `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials required`}
+		<div className='space-y-3'>
+			<Dialog open={open} onOpenChange={setOpen}>
+				<div
+					ref={cardRef}
+					className={cn(
+						'animate-fade-in-up flex flex-col items-start justify-between gap-4 rounded-xl border bg-background p-5 shadow-xs sm:flex-row sm:items-center',
+						setupFailed
+							? 'border-destructive/20'
+							: credentialsAccepted
+								? 'border-emerald-500/25'
+								: 'border-violet/20',
+					)}
+				>
+					<div className='flex min-w-0 items-center gap-3'>
+						<div
+							className={cn(
+								'flex size-10 shrink-0 items-center justify-center rounded-lg border',
+								setupFailed
+									? 'border-destructive/20 bg-destructive/5 text-destructive'
+									: credentialsAccepted
+										? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+										: 'border-violet/20 bg-violet/10 text-primary',
+							)}
+						>
+							<DatabaseIcon dialect={provider} className='size-5' />
 						</div>
-						<p className='text-xs text-muted-foreground'>
-							{setupFailed
-								? 'Open the setup to review the problem and try again.'
-								: setupInProgress
-									? 'Your connection is being set up.'
-									: contextSetupReady
-										? 'Connect documentation or skip to start syncing.'
+						<div className='min-w-0'>
+							<div className='font-borna text-lg font-medium tracking-tight text-foreground'>
+								{setupFailed
+									? `${WAREHOUSE_PROVIDER_LABELS[provider]} setup needs attention`
+									: awaitingSources
+										? `${WAREHOUSE_PROVIDER_LABELS[provider]} database verified`
 										: tableSelectionReady
-											? 'Review which tables nao should sync.'
-											: credentialsVerified
-												? 'Ready to continue. You can still review or edit these details.'
-												: 'Credentials are submitted securely and are never shared with the agent.'}
-						</p>
+											? `${WAREHOUSE_PROVIDER_LABELS[provider]} tables ready`
+											: credentialsAccepted
+												? `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials verified`
+												: `${WAREHOUSE_PROVIDER_LABELS[provider]} credentials required`}
+							</div>
+							<p className='text-xs text-muted-foreground'>
+								{setupFailed
+									? 'Open the setup to review the problem and try again.'
+									: awaitingSources
+										? 'Your credentials and table selection are ready.'
+										: setupInProgress
+											? 'Your connection is being set up.'
+											: tableSelectionReady
+												? 'Review which tables nao should sync.'
+												: credentialsVerified
+													? 'Ready to continue. You can still review or edit these details.'
+													: 'Credentials are submitted securely and are never shared with the agent.'}
+							</p>
+						</div>
 					</div>
-				</div>
-				<DialogTrigger asChild>
-					<Button
-						variant={credentialsAccepted || setupFailed ? 'outline' : 'default'}
-						className={cn(
-							'w-full shrink-0 rounded-full sm:w-auto',
-							setupFailed &&
-								'border-destructive/25 text-destructive hover:bg-destructive/5 hover:text-destructive',
-							credentialsAccepted &&
-								'border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-400',
-						)}
-					>
-						{setupFailed
-							? 'Review setup'
-							: setupInProgress
-								? 'View progress'
-								: contextSetupReady
-									? 'Add context'
+					<DialogTrigger asChild>
+						<Button
+							variant={credentialsAccepted || setupFailed ? 'outline' : 'default'}
+							className={cn(
+								'w-full shrink-0 rounded-full sm:w-auto',
+								setupFailed &&
+									'border-destructive/25 text-destructive hover:bg-destructive/5 hover:text-destructive',
+								credentialsAccepted &&
+									'border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-400',
+							)}
+						>
+							{setupFailed
+								? 'Review setup'
+								: setupInProgress
+									? 'View progress'
 									: tableSelectionReady
 										? 'Choose tables'
 										: credentialsVerified
 											? 'Edit credentials'
 											: 'Enter credentials'}
-					</Button>
-				</DialogTrigger>
-			</div>
-			<DialogContent
-				className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'
-				overlayClassName='data-[state=open]:animate-none data-[state=closed]:animate-none'
-				style={dialogCenter === undefined ? undefined : { left: dialogCenter }}
-			>
-				<DialogHeader className='pr-8'>
-					<div className='flex items-start gap-3 text-left'>
-						<div className='flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet/15 text-violet'>
-							<DatabaseIcon dialect={provider} className='size-5' />
-						</div>
-						<div className='space-y-1'>
-							<DialogTitle>
-								{jobId
-									? `Set up ${WAREHOUSE_PROVIDER_LABELS[provider]}`
-									: setupStep === 'context'
-										? 'Add business context'
+						</Button>
+					</DialogTrigger>
+				</div>
+				<DialogContent
+					className='max-h-[90vh] overflow-y-auto sm:max-w-2xl'
+					overlayClassName='data-[state=open]:animate-none data-[state=closed]:animate-none'
+					style={dialogCenter === undefined ? undefined : { left: dialogCenter }}
+				>
+					<DialogHeader className='pr-8'>
+						<div className='flex items-start gap-3 text-left'>
+							<div className='flex size-10 shrink-0 items-center justify-center rounded-xl bg-violet/15 text-violet'>
+								<DatabaseIcon dialect={provider} className='size-5' />
+							</div>
+							<div className='space-y-1'>
+								<DialogTitle>
+									{jobId
+										? `Set up ${WAREHOUSE_PROVIDER_LABELS[provider]}`
 										: setupStep === 'tables'
 											? `Choose ${WAREHOUSE_PROVIDER_LABELS[provider]} data`
 											: `Connect ${WAREHOUSE_PROVIDER_LABELS[provider]}`}
-							</DialogTitle>
-							<DialogDescription>
-								{jobId
-									? 'Preparing your nao project and syncing metadata.'
-									: setupStep === 'context'
-										? 'Optionally connect documentation before starting sync.'
+								</DialogTitle>
+								<DialogDescription>
+									{jobId
+										? 'Preparing your nao project and syncing metadata.'
 										: setupStep === 'tables'
 											? 'Choose the tables nao should use as context.'
 											: 'Add a secure connection for your nao project.'}
-							</DialogDescription>
+								</DialogDescription>
+							</div>
 						</div>
-					</div>
-				</DialogHeader>
-				{!jobId && isSqlProvider(provider) && (
-					<SetupStepNavigation
-						activeStep={setupStep}
-						unlocked={setupStepsUnlocked}
-						selectedTableCount={selectedTableKeys.size}
-						onStepChange={setSetupStep}
-					/>
-				)}
-				{jobId ? (
-					<WarehouseProvisioningProgress
-						job={job}
-						onRetry={() => {
-							setJobId(null);
-							startProvisioning.reset();
-						}}
-					/>
-				) : setupStep === 'context' ? (
-					<NotionContextSetup
-						values={notionValues}
-						validatedFingerprint={validatedNotionFingerprint}
-						validatedPages={validatedNotionPages}
-						isValidating={validateNotion.isPending}
-						isContextValidating={validateNotion.isPending || validateConfluence.isPending}
-						isStarting={startProvisioning.isPending}
-						canStart={selectedTableKeys.size > 0}
-						hasConnectedContext={hasConnectedContext}
-						additionalProviders={
-							<>
-								<ConfluenceContextSetup
-									values={confluenceValues}
-									validatedFingerprint={validatedConfluenceFingerprint}
-									validatedPages={validatedConfluencePages}
-									isValidating={validateConfluence.isPending}
-									isStarting={startProvisioning.isPending}
-									error={validateConfluence.error}
-									onValuesChange={setConfluenceValues}
-									onValidatedFingerprintChange={setValidatedConfluenceFingerprint}
+					</DialogHeader>
+					{!jobId && isSqlProvider(provider) && (
+						<SetupStepNavigation
+							activeStep={setupStep}
+							unlocked={setupStepsUnlocked}
+							selectedTableCount={selectedTableKeys.size}
+							onStepChange={setSetupStep}
+						/>
+					)}
+					{jobId ? (
+						<WarehouseProvisioningProgress
+							job={job}
+							onRetry={() => {
+								setJobId(null);
+								startProvisioning.reset();
+							}}
+						/>
+					) : (
+						<TabPanel idBase='warehouse-setup' tabId={setupStep}>
+							{setupStep === 'tables' && discoveredSchemas ? (
+								<WarehouseTableSelection
+									schemas={discoveredSchemas}
+									databaseType={provider}
+									databaseLabel={WAREHOUSE_PROVIDER_LABELS[provider]}
+									selectedTableKeys={selectedTableKeys}
+									isPending={startProvisioning.isPending}
+									error={startProvisioning.error}
+									onChange={setSelectedTableKeys}
+									onBack={() => setSetupStep('credentials')}
+									onSubmit={() => void startSelectedProvisioning()}
+								/>
+							) : isSqlProvider(provider) ? (
+								<WarehouseCredentialsForm
+									provider={provider}
 									onValidate={async (values) => {
-										const result = await validateConfluence.mutateAsync({
-											baseUrl: values.baseUrl.trim(),
-											email: values.email.trim(),
-											apiToken: values.apiToken.trim(),
-											pages: parseConfluencePages(values.pagesText),
+										const result = await validateCredentials.mutateAsync({
+											provider,
+											credentials: buildWarehouseCredentials(provider, values),
 										});
-										setValidatedConfluencePages(result.pages);
+										setDiscoveredSchemas(result.schemas);
+										setSelectedTableKeys(getAllWarehouseTableKeys(result.schemas));
 									}}
+									onSubmit={async () => {
+										if (discoveredSchemas) {
+											setSetupStep('tables');
+										}
+									}}
+									onCancel={() => setOpen(false)}
+									isValidating={validateCredentials.isPending}
+									isPending={startProvisioning.isPending}
+									error={validateCredentials.error ?? startProvisioning.error}
+									initialValues={credentialValues}
+									onValuesChange={setCredentialValues}
+									initialValidatedFingerprint={validatedCredentialFingerprint}
+									onValidatedFingerprintChange={setValidatedCredentialFingerprint}
 								/>
-								<GithubContextSetup
-									values={githubValues}
-									isStarting={startProvisioning.isPending}
-									onValuesChange={setGithubValues}
-								/>
-							</>
-						}
-						error={validateNotion.error ?? startProvisioning.error}
-						onValuesChange={setNotionValues}
-						onValidatedFingerprintChange={setValidatedNotionFingerprint}
-						onValidate={async (values) => {
-							const result = await validateNotion.mutateAsync({
-								apiKey: values.apiKey,
-								pages: parseNotionPages(values.pagesText),
-							});
-							setValidatedNotionPages(result.pages);
-						}}
-						onBack={() => setSetupStep('tables')}
-						onSkip={() => void startSelectedProvisioning()}
-						onSubmit={() => void startSelectedProvisioning(selectedContextSources)}
-					/>
-				) : setupStep === 'tables' && discoveredSchemas ? (
-					<WarehouseTableSelection
-						schemas={discoveredSchemas}
-						selectedTableKeys={selectedTableKeys}
-						isPending={startProvisioning.isPending}
-						error={startProvisioning.error}
-						onChange={setSelectedTableKeys}
-						onBack={() => setSetupStep('credentials')}
-						onSubmit={() => setSetupStep('context')}
-					/>
-				) : isSqlProvider(provider) ? (
-					<WarehouseCredentialsForm
-						provider={provider}
-						onValidate={async (values) => {
-							const result = await validateCredentials.mutateAsync({
-								provider,
-								credentials: buildWarehouseCredentials(provider, values),
-							});
-							setDiscoveredSchemas(result.schemas);
-							setSelectedTableKeys(getAllWarehouseTableKeys(result.schemas));
-						}}
-						onSubmit={async () => {
-							if (discoveredSchemas) {
-								setSetupStep('tables');
-							}
-						}}
-						onCancel={() => setOpen(false)}
-						isValidating={validateCredentials.isPending}
-						isPending={startProvisioning.isPending}
-						error={validateCredentials.error ?? startProvisioning.error}
-						initialValues={credentialValues}
-						onValuesChange={setCredentialValues}
-						initialValidatedFingerprint={validatedCredentialFingerprint}
-						onValidatedFingerprintChange={setValidatedCredentialFingerprint}
-					/>
-				) : (
-					<div className='rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground'>
-						{WAREHOUSE_PROVIDER_LABELS[provider]} connection setup is not available yet.
-					</div>
-				)}
-			</DialogContent>
-		</Dialog>
+							) : (
+								<div className='rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground'>
+									{WAREHOUSE_PROVIDER_LABELS[provider]} connection setup is not available yet.
+								</div>
+							)}
+						</TabPanel>
+					)}
+				</DialogContent>
+			</Dialog>
+			{awaitingSources && jobId && <RequestBusinessContext jobId={jobId} />}
+		</div>
 	);
 }
 
@@ -457,46 +366,25 @@ function SetupStepNavigation({
 	selectedTableCount: number;
 	onStepChange: (step: SetupStep) => void;
 }) {
-	const steps: Array<{ id: SetupStep; label: string }> = [
+	const tabs: TabBarItem<SetupStep>[] = [
 		{ id: 'credentials', label: 'Credentials' },
-		{ id: 'tables', label: 'Tables' },
-		{ id: 'context', label: 'Business context' },
+		{
+			id: 'tables',
+			label: 'Tables',
+			count: unlocked ? selectedTableCount : undefined,
+			disabled: !unlocked,
+			disabledReason: 'Validate credentials to unlock',
+		},
 	];
 
 	return (
-		<nav aria-label='Setup steps' className='relative -mx-6 px-6 pt-1'>
-			<div className='pointer-events-none absolute inset-x-0 bottom-0 h-px bg-border' />
-			<div className='flex min-h-10 items-end gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
-				{steps.map((step) => {
-					const disabled = step.id !== 'credentials' && !unlocked;
-					const active = step.id === activeStep;
-
-					return (
-						<button
-							key={step.id}
-							type='button'
-							aria-current={active ? 'step' : undefined}
-							disabled={disabled}
-							title={disabled ? 'Validate credentials to unlock' : undefined}
-							onClick={() => onStepChange(step.id)}
-							className={cn(
-								'relative z-10 flex h-9 shrink-0 items-center gap-1.5 rounded-t-md border px-3 text-sm font-medium transition-colors',
-								active
-									? 'border-border border-b-0 bg-background text-foreground'
-									: 'border-transparent text-muted-foreground hover:bg-background/50 hover:text-foreground',
-								disabled &&
-									'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-muted-foreground',
-							)}
-						>
-							{step.label}
-							{step.id === 'tables' && unlocked && (
-								<span className='text-xs font-normal text-muted-foreground'>{selectedTableCount}</span>
-							)}
-						</button>
-					);
-				})}
-			</div>
-		</nav>
+		<TabBar
+			tabs={tabs}
+			activeTab={activeStep}
+			onTabChange={onStepChange}
+			idBase='warehouse-setup'
+			className='-mx-6 border-b px-6'
+		/>
 	);
 }
 
@@ -529,6 +417,15 @@ function WarehouseProvisioningProgress({
 				<Button variant='outline' size='sm' onClick={onRetry}>
 					Try again
 				</Button>
+			</div>
+		);
+	}
+
+	if (job.data?.status === 'awaiting_sources') {
+		return (
+			<div className='flex items-center gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4'>
+				<CircleCheck className='size-4 text-emerald-600 dark:text-emerald-400' />
+				<p className='text-sm'>Database verified. Continue with the business context card.</p>
 			</div>
 		);
 	}
