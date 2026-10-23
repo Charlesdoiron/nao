@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "088e43a9-0e06-417b-bea0-c44ac619b8f2",
+  "id": "36460db5-89cb-43c5-bea8-f3a24499c0bf",
   "prevId": "36b8a337-4cc8-4566-988f-90e0fcdbf4cd",
   "tables": {
     "account": {
@@ -5038,6 +5038,13 @@
           "autoincrement": false,
           "default": false
         },
+        "license": {
+          "name": "license",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -8870,13 +8877,6 @@
         },
         "model_selection": {
           "name": "model_selection",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "warnings": {
-          "name": "warnings",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

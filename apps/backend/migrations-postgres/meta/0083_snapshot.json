@@ -1,5 +1,5 @@
 {
-  "id": "3299911a-d61f-40c7-9706-0f09289a9861",
+  "id": "71a6d634-0641-4c49-8f1f-26c8d65055b6",
   "prevId": "6b864db7-c70e-41b4-886d-4173028e05f2",
   "version": "7",
   "dialect": "postgresql",
@@ -5464,6 +5464,12 @@
           "notNull": true,
           "default": false
         },
+        "license": {
+          "name": "license",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -9492,12 +9498,6 @@
         },
         "model_selection": {
           "name": "model_selection",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "warnings": {
-          "name": "warnings",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
