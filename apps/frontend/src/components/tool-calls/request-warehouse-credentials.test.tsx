@@ -291,6 +291,67 @@ describe('RequestWarehouseCredentialsToolCall', () => {
 		);
 	});
 
+	it('reuploads a previous file selection after replacing it fails', async () => {
+		mocks.jobStatus = 'awaiting_sources';
+		const successfulResponse = {
+			ok: true,
+			json: vi.fn().mockResolvedValue({}),
+		};
+		mocks.uploadContextFile.mockResolvedValue(successfulResponse);
+		mocks.submitContextSources.mockRejectedValueOnce(new Error('Response lost'));
+		vi.stubGlobal('fetch', mocks.uploadContextFile);
+		const toolPart = {
+			type: 'tool-request_warehouse_credentials',
+			toolCallId: 'tool-1',
+			state: 'output-available',
+			input: { provider: 'postgres' },
+			output: { provider: 'postgres', status: 'credentials-required' },
+		} as ToolCallComponentProps<'request_warehouse_credentials'>['toolPart'];
+		render(<RequestWarehouseCredentialsToolCall toolPart={toolPart} />);
+
+		await screen.findByText('Postgres database verified');
+		fireEvent.click(screen.getByRole('button', { name: 'Add business context' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+		const handbook = new File(['# Company handbook'], 'handbook.md', { type: 'text/markdown' });
+		fireEvent.change(screen.getByLabelText('Upload business context files'), {
+			target: { files: [handbook] },
+		});
+		await screen.findByText('handbook.md');
+		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
+		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledOnce());
+
+		fireEvent.click(screen.getByRole('button', { name: 'Remove handbook.md' }));
+		const replacement = new File(['Replacement'], 'replacement.txt', { type: 'text/plain' });
+		fireEvent.change(screen.getByLabelText('Upload business context files'), {
+			target: { files: [replacement] },
+		});
+		await screen.findByText('replacement.txt');
+		mocks.uploadContextFile.mockResolvedValueOnce(successfulResponse).mockResolvedValueOnce({
+			ok: false,
+			json: vi.fn().mockResolvedValue({ error: 'Replacement upload failed.' }),
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
+		await screen.findByText('Replacement upload failed.');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Remove replacement.txt' }));
+		fireEvent.change(screen.getByLabelText('Upload business context files'), {
+			target: { files: [handbook] },
+		});
+		await screen.findByText('handbook.md');
+		fireEvent.click(screen.getByRole('button', { name: 'Sync with context' }));
+
+		await waitFor(() => expect(mocks.submitContextSources).toHaveBeenCalledTimes(2));
+		expect(mocks.uploadContextFile).toHaveBeenCalledTimes(6);
+		expect(mocks.uploadContextFile).toHaveBeenNthCalledWith(5, '/api/onboarding/context-files?jobId=job-1', {
+			method: 'DELETE',
+		});
+		expect(mocks.uploadContextFile).toHaveBeenNthCalledWith(
+			6,
+			'/api/onboarding/context-files?jobId=job-1',
+			expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+		);
+	});
+
 	it('discovers tables before starting provisioning with the selected tables', async () => {
 		mocks.activeJobId = undefined;
 		const toolPart = {

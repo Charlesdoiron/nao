@@ -107,6 +107,7 @@ export function RequestBusinessContext({ jobId }: { jobId: string }) {
 		setIsUploadingFiles(true);
 		try {
 			if (!areSameFiles(preparedFiles.current, filesToUpload)) {
+				preparedFiles.current = null;
 				await clearWarehouseContextFiles(jobId);
 				for (const file of filesToUpload) {
 					await uploadWarehouseContextFile(jobId, file);
