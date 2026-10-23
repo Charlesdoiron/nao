@@ -81,16 +81,24 @@ describe('useSettingsSearch', () => {
 		expect(result.current.some((entry) => entry.title === title)).toBe(true);
 	});
 
-	it('targets the credits-only page when cloud billing is disabled', () => {
+	it.each(['Balance', 'nao AI usage'])('targets the correct organization credit page for %s', (searchTitle) => {
 		mocks.isCloud = true;
 		Object.assign(mocks.permissions, { isOrgAdmin: true, isViewer: false });
-		const { result, rerender } = renderHook(() => useSettingsSearch('Balance'));
+		const { result, rerender } = renderHook(() => useSettingsSearch(searchTitle));
 
-		expect(result.current.find((entry) => entry.title === 'Balance')?.page).toBe('/settings/credits-wallet');
+		const creditsOnlyEntry = result.current.find((entry) => entry.title === searchTitle);
+		expect(creditsOnlyEntry?.page).toBe('/settings/credits-wallet');
+		if (searchTitle === 'nao AI usage') {
+			expect(creditsOnlyEntry?.search).toEqual({ creditsTab: 'usage' });
+		}
 
 		mocks.config.cloudBillingEnabled = true;
 		rerender();
 
-		expect(result.current.find((entry) => entry.title === 'Balance')?.page).toBe('/settings/organization/billing');
+		const billingEntry = result.current.find((entry) => entry.title === searchTitle);
+		expect(billingEntry?.page).toBe('/settings/organization/billing');
+		if (searchTitle === 'nao AI usage') {
+			expect(billingEntry?.search).toEqual({ creditsTab: 'usage' });
+		}
 	});
 });

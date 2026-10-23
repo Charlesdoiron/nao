@@ -68,7 +68,7 @@ function useVisibleSettingsEntries(): SettingsSearchEntry[] {
 					(entry) =>
 						(!entry.adminOnly || isAdmin) &&
 						(!entry.nonAdminOnly || !isAdmin) &&
-						(entry.page !== '/settings/usage' || isAdmin || isContextAdmin || (isCloud && isOrgAdmin)) &&
+						(entry.page !== '/settings/usage' || isAdmin || isContextAdmin) &&
 						(!entry.licenseFeature || enabledLicenseFeatures?.[entry.licenseFeature] === true) &&
 						(!entry.orgAdminOnly || isOrgAdmin) &&
 						(!entry.adminOrContextAdmin || isAdmin || isContextAdmin) &&

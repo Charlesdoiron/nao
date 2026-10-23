@@ -800,9 +800,8 @@ function ManagedCreditsBanner({
 	const canManageAccess = canAddProviderKey || canAddCredits;
 
 	return (
-		<div className='relative mb-3 overflow-hidden rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200'>
-			<div className='pointer-events-none absolute -right-12 -top-16 size-40 rounded-full bg-primary-muted/20 blur-3xl' />
-			<div className='relative min-w-0'>
+		<div className='mb-3 rounded-2xl border border-primary/20 bg-background p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200'>
+			<div className='min-w-0'>
 				<p className='font-semibold text-foreground'>
 					{canManageAccess
 						? 'Your nao credits have been used'
@@ -819,6 +818,7 @@ function ManagedCreditsBanner({
 							<Button
 								size='sm'
 								variant='primary-gradient'
+								className='rounded-full'
 								onClick={() => void openOrganizationBilling(creditOrganizationId)}
 							>
 								<WalletCards />
@@ -826,7 +826,12 @@ function ManagedCreditsBanner({
 							</Button>
 						)}
 						{canAddProviderKey && (
-							<Button asChild size='sm' variant='outline' className='border-primary/20 bg-background/80'>
+							<Button
+								asChild
+								size='sm'
+								variant='outline'
+								className='rounded-full border-primary/20 bg-background/80'
+							>
 								<Link to='/settings/project/agent' search={{ tab: 'models' }}>
 									<KeyRound />
 									Add your API key

@@ -69,25 +69,6 @@ export async function requireContextAdminOrAdmin() {
 	}
 }
 
-export async function requireUsageAdminAccess() {
-	const [project, config] = await Promise.all([
-		queryClient.ensureQueryData(trpc.project.getCurrent.queryOptions()),
-		queryClient.ensureQueryData(trpc.system.getPublicConfig.queryOptions()),
-	]);
-	if (project && (project.userRole === 'admin' || project.userRole === 'context_admin')) {
-		return;
-	}
-
-	if (config.naoMode === 'cloud') {
-		const organization = await queryClient.ensureQueryData(trpc.organization.get.queryOptions());
-		if (organization.role === 'admin') {
-			return;
-		}
-	}
-
-	throw redirect({ to: '/settings/account' });
-}
-
 export async function requireNonViewer() {
 	const project = await queryClient.ensureQueryData(trpc.project.getCurrent.queryOptions());
 	if (!project || project.userRole === 'viewer') {

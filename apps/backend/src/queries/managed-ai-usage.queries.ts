@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import s, { type DBManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -7,7 +7,7 @@ import * as userQueries from './user.queries';
 export async function listManagedAiUsage(
 	scope: { orgId: string; userId?: string },
 	input: { cursor?: ManagedAiUsageCursor; limit: number },
-): Promise<{ runs: ManagedAiUsageRun[]; nextCursor: ManagedAiUsageCursor | null }> {
+): Promise<{ runs: ManagedAiUsageRun[]; nextCursor: ManagedAiUsageCursor | null; totalCount: number }> {
 	const runId = s.managedAiUsage.runId;
 	const latestStartedAt = sql<Date>`max(${s.managedAiUsage.startedAt})`.mapWith(s.managedAiUsage.startedAt);
 	const cursorStartedAt = input.cursor && sql.param(input.cursor.startedAt, s.managedAiUsage.startedAt);
@@ -16,18 +16,24 @@ export async function listManagedAiUsage(
 		eq(s.managedAiUsage.orgId, scope.orgId),
 		scope.userId ? eq(s.managedAiUsage.userId, scope.userId) : undefined,
 	);
-	const runRows = await db
-		.select({ id: runId, startedAt: latestStartedAt })
-		.from(s.managedAiUsage)
-		.where(scopeFilter)
-		.groupBy(runId)
-		.having(
-			input.cursor
-				? sql`(${latestStartedAt} < ${cursorStartedAt} or (${latestStartedAt} = ${cursorStartedAt} and ${runId} < ${input.cursor.id}))`
-				: undefined,
-		)
-		.orderBy(desc(latestStartedAt), desc(runId))
-		.limit(input.limit + 1);
+	const [runRows, [countRow]] = await Promise.all([
+		db
+			.select({ id: runId, startedAt: latestStartedAt })
+			.from(s.managedAiUsage)
+			.where(scopeFilter)
+			.groupBy(runId)
+			.having(
+				input.cursor
+					? sql`(${latestStartedAt} < ${cursorStartedAt} or (${latestStartedAt} = ${cursorStartedAt} and ${runId} < ${input.cursor.id}))`
+					: undefined,
+			)
+			.orderBy(desc(latestStartedAt), desc(runId))
+			.limit(input.limit + 1),
+		db
+			.select({ totalCount: countDistinct(runId) })
+			.from(s.managedAiUsage)
+			.where(scopeFilter),
+	]);
 	const hasNext = runRows.length > input.limit;
 	const page = runRows.slice(0, input.limit);
 	const events =
@@ -81,6 +87,7 @@ export async function listManagedAiUsage(
 	return {
 		runs,
 		nextCursor: hasNext && last ? { startedAt: last.startedAt, id: last.id } : null,
+		totalCount: countRow?.totalCount ?? 0,
 	};
 }
 

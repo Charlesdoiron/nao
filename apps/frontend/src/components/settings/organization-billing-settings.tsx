@@ -1,10 +1,12 @@
 import type { BillingInterval, OrganizationBillingSearch } from '@/hooks/use-organization-billing';
+import type { OrganizationCreditsTab } from '@/components/settings/credits-wallet-content';
 
 import { OrganizationCreditsContent } from '@/components/settings/credits-wallet-content';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SettingsCard, SettingsPageWrapper } from '@/components/ui/settings-card';
 import { useOrganizationBilling } from '@/hooks/use-organization-billing';
+import { usePermissions } from '@/hooks/use-permissions';
 import {
 	formatBillingDate,
 	formatBillingInterval,
@@ -17,11 +19,18 @@ import {
 
 type BillingState = ReturnType<typeof useOrganizationBilling>;
 
-export function OrganizationBillingSettings({ search }: { search: OrganizationBillingSearch }) {
+export function OrganizationBillingSettings({
+	search,
+	onCreditsTabChange,
+}: {
+	search: OrganizationBillingSearch;
+	onCreditsTabChange?: (tab: OrganizationCreditsTab) => void;
+}) {
 	const billingState = useOrganizationBilling(search);
+	const { canViewChatReplay } = usePermissions();
 
 	return (
-		<SettingsPageWrapper>
+		<SettingsPageWrapper wide>
 			<div className='flex flex-col gap-5'>
 				<div>
 					<h1 className='text-lg font-semibold text-foreground'>Billing & Credits</h1>
@@ -42,7 +51,12 @@ export function OrganizationBillingSettings({ search }: { search: OrganizationBi
 								Fund and review the shared nao AI wallet for this organization.
 							</p>
 						</div>
-						<OrganizationCreditsContent creditCheckout={search.creditCheckout} />
+						<OrganizationCreditsContent
+							creditCheckout={search.creditCheckout}
+							canViewReplay={canViewChatReplay}
+							activeTab={search.creditsTab ?? 'history'}
+							onTabChange={onCreditsTabChange}
+						/>
 					</section>
 					<PlanDetailsCard billingState={billingState} />
 					<InvoicesCard billingState={billingState} />

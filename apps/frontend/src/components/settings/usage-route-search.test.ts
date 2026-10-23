@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	DEFAULT_USAGE_SEARCH,
-	getAvailableUsageTabs,
 	readStoredUsagePeriodSelection,
 	saveUsageFilters,
 	validateUsageSearch,
@@ -42,43 +41,20 @@ describe('validateUsageSearch', () => {
 	});
 
 	it('accepts only supported tabs', () => {
-		expect(validateUsageSearch({ tab: 'managed-ai' }).tab).toBe('managed-ai');
+		expect(validateUsageSearch({ tab: 'usage' }).tab).toBe('usage');
+		expect(validateUsageSearch({ tab: 'managed-ai' }).tab).toBeUndefined();
 		expect(validateUsageSearch({ tab: 'wallet' }).tab).toBeUndefined();
 		expect(validateUsageSearch({ tab: 'replay' }).tab).toBeUndefined();
 		expect(validateUsageSearch({ tab: 'other' }).tab).toBeUndefined();
 	});
 
 	it('does not persist the selected tab with project filters', () => {
-		saveUsageFilters({ ...DEFAULT_USAGE_SEARCH, tab: 'managed-ai', provider: 'openai' });
+		saveUsageFilters({ ...DEFAULT_USAGE_SEARCH, tab: 'usage', provider: 'openai' });
 
 		expect(validateUsageSearchWithStoredFilters({})).toMatchObject({
 			tab: undefined,
 			provider: 'openai',
 		});
-	});
-
-	it('orders tabs by the capabilities available to the current user', () => {
-		expect(
-			getAvailableUsageTabs({
-				canViewUsage: true,
-				canViewManagedAi: true,
-				canViewChatReplay: true,
-			}),
-		).toEqual(['usage', 'managed-ai']);
-		expect(
-			getAvailableUsageTabs({
-				canViewUsage: false,
-				canViewManagedAi: true,
-				canViewChatReplay: false,
-			}),
-		).toEqual(['managed-ai']);
-		expect(
-			getAvailableUsageTabs({
-				canViewUsage: false,
-				canViewManagedAi: false,
-				canViewChatReplay: true,
-			}),
-		).toEqual(['usage']);
 	});
 
 	it('parses the split per user toggle and persists it with the other filters', () => {

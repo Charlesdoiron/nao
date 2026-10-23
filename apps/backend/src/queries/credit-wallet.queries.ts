@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -87,24 +87,33 @@ export async function getCreditSummary(orgId: string): Promise<{
 export async function listCreditLedger(
 	orgId: string,
 	input: { cursor?: CreditLedgerCursor; limit: number },
-): Promise<{ groups: CreditLedgerGroup[]; nextCursor: CreditLedgerCursor | null }> {
+): Promise<{ groups: CreditLedgerGroup[]; nextCursor: CreditLedgerCursor | null; totalCount: number }> {
 	const groupId = sql<string>`coalesce(${s.managedAiUsage.runId}, ${s.creditLedger.id})`;
 	const latestCreatedAt = sql<Date>`max(${s.creditLedger.createdAt})`.mapWith(s.creditLedger.createdAt);
 	const cursorCreatedAt = input.cursor && sql.param(input.cursor.createdAt, s.creditLedger.createdAt);
-	const groupRows = await db
-		.select({ id: groupId, createdAt: latestCreatedAt })
-		.from(s.creditLedger)
-		.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
-		.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
-		.where(and(eq(s.creditWallet.orgId, orgId), ne(s.creditLedger.entryType, 'reservation')))
-		.groupBy(groupId)
-		.having(
-			input.cursor
-				? sql`(${latestCreatedAt} < ${cursorCreatedAt} or (${latestCreatedAt} = ${cursorCreatedAt} and ${groupId} < ${input.cursor.id}))`
-				: undefined,
-		)
-		.orderBy(desc(latestCreatedAt), desc(groupId))
-		.limit(input.limit + 1);
+	const ledgerFilter = and(eq(s.creditWallet.orgId, orgId), ne(s.creditLedger.entryType, 'reservation'));
+	const [groupRows, [countRow]] = await Promise.all([
+		db
+			.select({ id: groupId, createdAt: latestCreatedAt })
+			.from(s.creditLedger)
+			.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
+			.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
+			.where(ledgerFilter)
+			.groupBy(groupId)
+			.having(
+				input.cursor
+					? sql`(${latestCreatedAt} < ${cursorCreatedAt} or (${latestCreatedAt} = ${cursorCreatedAt} and ${groupId} < ${input.cursor.id}))`
+					: undefined,
+			)
+			.orderBy(desc(latestCreatedAt), desc(groupId))
+			.limit(input.limit + 1),
+		db
+			.select({ totalCount: countDistinct(groupId) })
+			.from(s.creditLedger)
+			.innerJoin(s.creditWallet, eq(s.creditLedger.walletId, s.creditWallet.id))
+			.leftJoin(s.managedAiUsage, eq(s.creditLedger.usageId, s.managedAiUsage.id))
+			.where(ledgerFilter),
+	]);
 	const hasNext = groupRows.length > input.limit;
 	const page = groupRows.slice(0, input.limit);
 	const rows =
@@ -167,6 +176,7 @@ export async function listCreditLedger(
 	return {
 		groups,
 		nextCursor: hasNext && last ? { createdAt: last.createdAt, id: last.id } : null,
+		totalCount: countRow?.totalCount ?? 0,
 	};
 }
 

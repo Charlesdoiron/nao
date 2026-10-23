@@ -8,7 +8,7 @@ import { getActiveProjectId } from '@/lib/active-project';
 
 export type TokenChartDisplayMode = 'tokens' | 'dollars';
 
-export type UsageTab = 'usage' | 'managed-ai';
+export type UsageTab = 'usage';
 
 export type ReplayHighlight = 'tool-error' | 'feedback';
 
@@ -54,23 +54,8 @@ export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
 	recoTab: undefined,
 };
 
-export function getAvailableUsageTabs({
-	canViewUsage,
-	canViewManagedAi,
-	canViewChatReplay,
-}: {
-	canViewUsage: boolean;
-	canViewManagedAi: boolean;
-	canViewChatReplay: boolean;
-}): UsageTab[] {
-	return [
-		...(canViewUsage || canViewChatReplay ? (['usage'] as const) : []),
-		...(canViewManagedAi ? (['managed-ai'] as const) : []),
-	];
-}
-
 const tokenViews = ['tokens', 'dollars'] as const satisfies readonly TokenChartDisplayMode[];
-const usageTabs = ['usage', 'managed-ai'] as const satisfies readonly UsageTab[];
+const usageTabs = ['usage'] as const satisfies readonly UsageTab[];
 const filterSearchKeys = ['provider', 'users', 'feedback', 'tools', 'sources', 'splitByUser'] as const;
 const periodSearchKeys = [
 	'periodMode',

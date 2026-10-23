@@ -63,8 +63,8 @@ describe('account wallet activity authorization', () => {
 			id: 'setup-grant-id',
 			amountMicroUsd: 20_000_000,
 		});
-		mocks.listCreditLedger.mockResolvedValue({ groups: [], nextCursor: null });
-		mocks.listManagedAiUsage.mockResolvedValue({ runs: [], nextCursor: null });
+		mocks.listCreditLedger.mockResolvedValue({ groups: [], nextCursor: null, totalCount: 0 });
+		mocks.listManagedAiUsage.mockResolvedValue({ runs: [], nextCursor: null, totalCount: 0 });
 	});
 
 	it('keeps wallet activity private while returning only the member usage', async () => {
@@ -82,6 +82,7 @@ describe('account wallet activity authorization', () => {
 		await expect(caller().account.listManagedAiUsage({ limit: 10 })).resolves.toEqual({
 			runs: [],
 			nextCursor: null,
+			totalCount: 0,
 		});
 		expect(mocks.getCreditSummary).not.toHaveBeenCalled();
 		expect(mocks.getOrganizationSetupCreditGrant).not.toHaveBeenCalled();
@@ -103,10 +104,12 @@ describe('account wallet activity authorization', () => {
 		await expect(caller().account.listCreditLedger({ limit: 10 })).resolves.toEqual({
 			groups: [],
 			nextCursor: null,
+			totalCount: 0,
 		});
 		await expect(caller().account.listManagedAiUsage({ limit: 10 })).resolves.toEqual({
 			runs: [],
 			nextCursor: null,
+			totalCount: 0,
 		});
 		expect(mocks.listCreditLedger).toHaveBeenCalledWith('org-id', {
 			cursor: undefined,

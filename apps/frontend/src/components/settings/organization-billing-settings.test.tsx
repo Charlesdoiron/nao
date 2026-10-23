@@ -43,6 +43,10 @@ vi.mock('@/hooks/use-organization-billing', () => ({
 	useOrganizationBilling: (): BillingState => billingState(),
 }));
 
+vi.mock('@/hooks/use-permissions', () => ({
+	usePermissions: () => ({ canViewChatReplay: true }),
+}));
+
 vi.mock('@/components/settings/credits-wallet-content', () => ({
 	OrganizationCreditsContent: () => null,
 }));

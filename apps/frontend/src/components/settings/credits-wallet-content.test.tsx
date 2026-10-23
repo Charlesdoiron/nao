@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ManagedAiChargesContent, OrganizationCreditsContent } from './credits-wallet-content';
 import type { AnchorHTMLAttributes } from 'react';
@@ -24,11 +24,17 @@ vi.mock('@/main', () => ({
 			},
 			getManagedCreditStatus: { queryKey: () => ['managed-credit-status'] },
 			listCreditLedger: {
-				queryOptions: () => ({ queryKey: ['credit-ledger'], queryFn: mocks.listLedger }),
+				queryOptions: (input: object) => ({
+					queryKey: ['credit-ledger', input],
+					queryFn: () => mocks.listLedger(input),
+				}),
 				queryKey: () => ['credit-ledger'],
 			},
 			listManagedAiUsage: {
-				queryOptions: () => ({ queryKey: ['managed-ai-usage'], queryFn: mocks.listUsage }),
+				queryOptions: (input: object) => ({
+					queryKey: ['managed-ai-usage', input],
+					queryFn: () => mocks.listUsage(input),
+				}),
 				queryKey: () => ['managed-ai-usage'],
 			},
 		},
@@ -63,6 +69,11 @@ vi.mock('@tanstack/react-router', () => ({
 }));
 
 describe('credit settings content', () => {
+	beforeEach(() => {
+		Element.prototype.scrollIntoView = vi.fn();
+		mocks.listUsage.mockResolvedValue({ runs: [], nextCursor: null });
+	});
+
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
@@ -153,11 +164,21 @@ describe('credit settings content', () => {
 		expect(
 			screen.getByText((_, element) => element?.tagName === 'TD' && element.textContent?.trim() === '$23.00'),
 		).toBeTruthy();
-		expect(screen.getByRole('link', { name: 'More details' })).toBeTruthy();
+		expect(screen.getByRole('tab', { name: 'Credit history' }).getAttribute('aria-selected')).toBe('true');
+		expect(screen.getByRole('tab', { name: 'nao AI usage' })).toBeTruthy();
+		expect(screen.queryByText('Organization-wide model calls paid with nao credits.')).toBeNull();
+		expect(screen.queryByRole('link', { name: 'More details' })).toBeNull();
 		expect(screen.queryByText(/You gave your \$5 welcome credit/)).toBeNull();
 	});
 
-	it('shows nao AI usage details and replay links', async () => {
+	it('switches from credit history to organization-wide nao AI usage details', async () => {
+		mocks.getSummary.mockResolvedValue({
+			balanceMicroUsd: 23_000_000,
+			lifetimeCreditedMicroUsd: 25_000_000,
+			lifetimeDebitedMicroUsd: 2_000_000,
+			enabled: true,
+		});
+		mocks.listLedger.mockResolvedValue({ groups: [], nextCursor: null });
 		mocks.listUsage.mockResolvedValue({
 			runs: [
 				{
@@ -184,9 +205,12 @@ describe('credit settings content', () => {
 			nextCursor: null,
 		});
 
-		renderManagedAiChargesContent(true);
+		renderOrganizationCreditsContent(undefined, true, true);
+		fireEvent.click(await screen.findByRole('tab', { name: 'nao AI usage' }));
 
-		expect(await screen.findByText('Your model calls paid with nao credits.')).toBeTruthy();
+		expect(await screen.findByText('Organization-wide model calls paid with nao credits.')).toBeTruthy();
+		expect(screen.getByRole('tab', { name: 'nao AI usage' }).getAttribute('aria-selected')).toBe('true');
+		expect(screen.queryByRole('columnheader', { name: 'Balance' })).toBeNull();
 		expect(await screen.findByText(/Managed User · .* · gpt-5\.6/)).toBeTruthy();
 		expect(screen.getByRole('link', { name: 'Open chat replay' })).toBeTruthy();
 	});
@@ -211,7 +235,7 @@ describe('credit settings content', () => {
 		expect(screen.getByText(/^Partially aborted/)).toBeTruthy();
 	});
 
-	it('does not offer older pages before cursors load', async () => {
+	it('disables pagination until cursors load', async () => {
 		mocks.getSummary.mockResolvedValue({
 			balanceMicroUsd: 0,
 			lifetimeCreditedMicroUsd: 0,
@@ -223,7 +247,50 @@ describe('credit settings content', () => {
 		renderOrganizationCreditsContent();
 
 		await screen.findByText('Available');
-		expect(screen.queryByRole('button', { name: 'Older' })).toBeNull();
+		expect(screen.getByRole('combobox', { name: 'Rows per page' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Previous' }).hasAttribute('disabled')).toBe(true);
+		expect(screen.getByRole('button', { name: 'Next' }).hasAttribute('disabled')).toBe(true);
+	});
+
+	it('navigates credit history pages and changes the row count', async () => {
+		const nextCursor = { createdAt: new Date(), id: 'next-page' };
+		mocks.getSummary.mockResolvedValue({
+			balanceMicroUsd: 0,
+			lifetimeCreditedMicroUsd: 0,
+			lifetimeDebitedMicroUsd: 0,
+			enabled: true,
+		});
+		mocks.listLedger.mockImplementation(({ cursor, limit }) =>
+			Promise.resolve({
+				groups: [],
+				nextCursor: cursor || limit === 25 ? null : nextCursor,
+				totalCount: 11,
+			}),
+		);
+
+		renderOrganizationCreditsContent();
+
+		const next = await screen.findByRole('button', { name: 'Next' });
+		expect(await screen.findByText('1/2')).toBeTruthy();
+		await waitFor(() => expect(next.hasAttribute('disabled')).toBe(false));
+		fireEvent.click(next);
+		await waitFor(() =>
+			expect(mocks.listLedger).toHaveBeenCalledWith(expect.objectContaining({ cursor: nextCursor, limit: 10 })),
+		);
+		expect(screen.getByText('2/2')).toBeTruthy();
+
+		const previous = screen.getByRole('button', { name: 'Previous' });
+		await waitFor(() => expect(previous.hasAttribute('disabled')).toBe(false));
+		fireEvent.click(previous);
+		await waitFor(() => expect(previous.hasAttribute('disabled')).toBe(true));
+		expect(screen.getByText('1/2')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('combobox', { name: 'Rows per page' }));
+		fireEvent.click(await screen.findByRole('option', { name: '25' }));
+		await waitFor(() =>
+			expect(mocks.listLedger).toHaveBeenCalledWith(expect.objectContaining({ cursor: undefined, limit: 25 })),
+		);
+		expect(screen.getByText('1/1')).toBeTruthy();
 	});
 
 	it('shows wallet activity without offering top-ups in read-only mode', async () => {
@@ -331,11 +398,15 @@ function usageRun(id: string, statuses: ('completed' | 'failed' | 'aborted')[]) 
 	};
 }
 
-function renderOrganizationCreditsContent(creditCheckout?: string, canTopUp = true) {
+function renderOrganizationCreditsContent(creditCheckout?: string, canTopUp = true, canViewReplay = false) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<OrganizationCreditsContent creditCheckout={creditCheckout} canTopUp={canTopUp} />
+			<OrganizationCreditsContent
+				creditCheckout={creditCheckout}
+				canTopUp={canTopUp}
+				canViewReplay={canViewReplay}
+			/>
 		</QueryClientProvider>,
 	);
 }

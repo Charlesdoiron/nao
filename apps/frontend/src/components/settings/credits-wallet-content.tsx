@@ -19,31 +19,48 @@ import {
 	DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SettingsCard } from '@/components/ui/settings-card';
+import { TabBar, TabPanel } from '@/components/ui/tab-bar';
 import { useCreditTopUp } from '@/hooks/use-credit-top-up';
 import { trpc } from '@/main';
 
 type CreditLedgerCursor = { createdAt: Date; id: string };
 type ManagedAiUsageCursor = { startedAt: Date; id: string };
+export type OrganizationCreditsTab = 'history' | 'usage';
+
+const pageSizes = [10, 25, 50, 100] as const;
+type PageSize = (typeof pageSizes)[number];
+
+const organizationCreditsTabs = [
+	{ id: 'history', label: 'Credit history' },
+	{ id: 'usage', label: 'nao AI usage' },
+] satisfies { id: OrganizationCreditsTab; label: string }[];
 
 export function OrganizationCreditsContent({
 	creditCheckout,
 	canTopUp = true,
+	canViewReplay = false,
+	activeTab,
+	onTabChange,
 }: {
 	creditCheckout?: string;
 	canTopUp?: boolean;
+	canViewReplay?: boolean;
+	activeTab?: OrganizationCreditsTab;
+	onTabChange?: (tab: OrganizationCreditsTab) => void;
 }) {
 	const summary = useQuery(trpc.account.getCreditSummary.queryOptions());
 	const topUp = useCreditTopUp(canTopUp ? creditCheckout : undefined);
 	const [topUpAmount, setTopUpAmount] = useState('20');
-	const [ledgerCursor, setLedgerCursor] = useState<CreditLedgerCursor>();
+	const [localActiveTab, setLocalActiveTab] = useState<OrganizationCreditsTab>('history');
+	const selectedTab = activeTab ?? localActiveTab;
 	const topUpAmountCents = parseUsdCents(topUpAmount);
 	const topUpBreakdown = topUpAmountCents === null ? null : calculateCreditTopUp(topUpAmountCents);
-	const ledger = useQuery({
-		...trpc.account.listCreditLedger.queryOptions({ cursor: ledgerCursor, limit: 10 }),
-		placeholderData: keepPreviousData,
-		enabled: summary.data?.enabled === true,
-	});
+	const selectTab = (tab: OrganizationCreditsTab) => {
+		setLocalActiveTab(tab);
+		onTabChange?.(tab);
+	};
 
 	return (
 		<div className='flex flex-col gap-4'>
@@ -82,97 +99,131 @@ export function OrganizationCreditsContent({
 						</div>
 					</SettingsCard>
 
-					<SettingsCard title='Credit history'>
-						<div className='overflow-x-auto'>
-							<table className='w-full text-sm'>
-								<thead className='text-left text-muted-foreground'>
-									<tr>
-										<th className='py-2 font-medium'>Date</th>
-										<th className='py-2 font-medium'>Description</th>
-										<th className='py-2 text-right font-medium'>Change</th>
-										<th className='py-2 text-right font-medium'>Balance</th>
-									</tr>
-								</thead>
-								<tbody>
-									{ledger.data?.groups.map((group) => {
-										const entry = summarizeLedgerGroup(group);
-										const grantType = getGrantType(group);
-										return (
-											<tr key={group.id} className='border-t border-border'>
-												<td className='py-2'>{formatDate(group.createdAt)}</td>
-												<td className='py-2'>
-													{ledgerLabel(
-														entry.entryType,
-														entry.deltaMicroUsd,
-														grantType,
-														group,
-													)}
-													{entry.entryType === 'gift' &&
-														grantType !== 'organization_setup' && (
-															<span className='ml-2 text-muted-foreground'>
-																{' '}
-																{group.grantedForUserName ?? 'Former user'}
-															</span>
-														)}
-													{entry.entryType === 'usage' && (
-														<span className='ml-2 text-muted-foreground'>
-															{' '}
-															{group.entries.length}{' '}
-															{group.entries.length === 1 ? 'call' : 'calls'}
-														</span>
-													)}
-												</td>
-												<td className='py-2 text-right font-mono'>
-													{formatSignedUsd(entry.deltaMicroUsd)}
-												</td>
-												<td className='py-2 text-right font-mono'>
-													{formatUsd(entry.balanceAfterMicroUsd)}
-												</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
-						<PageControls
-							hasPrevious={ledgerCursor !== undefined}
-							hasNext={ledger.data?.nextCursor !== null && ledger.data?.nextCursor !== undefined}
-							onPrevious={() => setLedgerCursor(undefined)}
-							onNext={() => setLedgerCursor(ledger.data?.nextCursor ?? undefined)}
+					<div>
+						<TabBar
+							tabs={organizationCreditsTabs}
+							activeTab={selectedTab}
+							onTabChange={selectTab}
+							idBase='organization-credits'
+							className='border-b'
 						/>
-						<div className='mt-1 flex justify-end'>
-							<Link
-								to='/settings/usage'
-								search={{ ...DEFAULT_USAGE_SEARCH, tab: 'managed-ai' }}
-								className='inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground'
-							>
-								More details
-								<ArrowUpRight aria-hidden='true' className='size-3.5' />
-							</Link>
-						</div>
-					</SettingsCard>
+						{selectedTab === 'history' && (
+							<TabPanel idBase='organization-credits' tabId='history' className='pt-4'>
+								<CreditHistoryContent />
+							</TabPanel>
+						)}
+						{selectedTab === 'usage' && (
+							<TabPanel idBase='organization-credits' tabId='usage' className='pt-4'>
+								<ManagedAiChargesContent
+									canViewReplay={canViewReplay}
+									organizationWide
+									showTitle={false}
+								/>
+							</TabPanel>
+						)}
+					</div>
 				</>
 			)}
 		</div>
 	);
 }
 
+function CreditHistoryContent() {
+	const pagination = useCursorPagination<CreditLedgerCursor>();
+	const ledger = useQuery({
+		...trpc.account.listCreditLedger.queryOptions({
+			cursor: pagination.cursor,
+			limit: pagination.pageSize,
+		}),
+		placeholderData: keepPreviousData,
+	});
+
+	return (
+		<SettingsCard>
+			<div className='overflow-x-auto'>
+				<table className='w-full text-sm'>
+					<thead className='text-left text-muted-foreground'>
+						<tr>
+							<th className='py-2 font-medium'>Date</th>
+							<th className='py-2 font-medium'>Description</th>
+							<th className='py-2 text-right font-medium'>Change</th>
+							<th className='py-2 text-right font-medium'>Balance</th>
+						</tr>
+					</thead>
+					<tbody>
+						{ledger.data?.groups.map((group) => {
+							const entry = summarizeLedgerGroup(group);
+							const grantType = getGrantType(group);
+							return (
+								<tr key={group.id} className='border-t border-border'>
+									<td className='py-2'>{formatDate(group.createdAt)}</td>
+									<td className='py-2'>
+										{ledgerLabel(entry.entryType, entry.deltaMicroUsd, grantType, group)}
+										{entry.entryType === 'gift' && grantType !== 'organization_setup' && (
+											<span className='ml-2 text-muted-foreground'>
+												{' '}
+												{group.grantedForUserName ?? 'Former user'}
+											</span>
+										)}
+										{entry.entryType === 'usage' && (
+											<span className='ml-2 text-muted-foreground'>
+												{' '}
+												{group.entries.length} {group.entries.length === 1 ? 'call' : 'calls'}
+											</span>
+										)}
+									</td>
+									<td className='py-2 text-right font-mono'>
+										{formatSignedUsd(entry.deltaMicroUsd)}
+									</td>
+									<td className='py-2 text-right font-mono'>
+										{formatUsd(entry.balanceAfterMicroUsd)}
+									</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			</div>
+			<PageControls
+				pageSize={pagination.pageSize}
+				pageNumber={pagination.pageNumber}
+				totalPages={getTotalPages(ledger.data?.totalCount, pagination.pageSize)}
+				hasPrevious={pagination.hasPrevious}
+				hasNext={ledger.data?.nextCursor !== null && ledger.data?.nextCursor !== undefined}
+				isFetching={ledger.isFetching}
+				onPageSizeChange={pagination.changePageSize}
+				onPrevious={pagination.previous}
+				onNext={() => {
+					if (ledger.data?.nextCursor) {
+						pagination.next(ledger.data.nextCursor);
+					}
+				}}
+			/>
+		</SettingsCard>
+	);
+}
+
 export function ManagedAiChargesContent({
 	canViewReplay,
 	organizationWide = false,
+	showTitle = true,
 }: {
 	canViewReplay: boolean;
 	organizationWide?: boolean;
+	showTitle?: boolean;
 }) {
-	const [usageCursor, setUsageCursor] = useState<ManagedAiUsageCursor>();
+	const pagination = useCursorPagination<ManagedAiUsageCursor>();
 	const usage = useQuery({
-		...trpc.account.listManagedAiUsage.queryOptions({ cursor: usageCursor, limit: 10 }),
+		...trpc.account.listManagedAiUsage.queryOptions({
+			cursor: pagination.cursor,
+			limit: pagination.pageSize,
+		}),
 		placeholderData: keepPreviousData,
 	});
 
 	return (
 		<div className='flex flex-col gap-4'>
-			<SettingsCard title='nao AI usage'>
+			<SettingsCard title={showTitle ? 'nao AI usage' : undefined}>
 				<p className='mb-3 text-sm text-muted-foreground'>
 					{organizationWide
 						? 'Organization-wide model calls paid with nao credits.'
@@ -184,10 +235,19 @@ export function ManagedAiChargesContent({
 					))}
 				</div>
 				<PageControls
-					hasPrevious={usageCursor !== undefined}
+					pageSize={pagination.pageSize}
+					pageNumber={pagination.pageNumber}
+					totalPages={getTotalPages(usage.data?.totalCount, pagination.pageSize)}
+					hasPrevious={pagination.hasPrevious}
 					hasNext={usage.data?.nextCursor !== null && usage.data?.nextCursor !== undefined}
-					onPrevious={() => setUsageCursor(undefined)}
-					onNext={() => setUsageCursor(usage.data?.nextCursor ?? undefined)}
+					isFetching={usage.isFetching}
+					onPageSizeChange={pagination.changePageSize}
+					onPrevious={pagination.previous}
+					onNext={() => {
+						if (usage.data?.nextCursor) {
+							pagination.next(usage.data.nextCursor);
+						}
+					}}
 				/>
 			</SettingsCard>
 		</div>
@@ -436,30 +496,86 @@ function CreditMetric({ label, value }: { label: string; value: number }) {
 	);
 }
 
+function useCursorPagination<Cursor>() {
+	const [pageSize, setPageSize] = useState<PageSize>(10);
+	const [cursorHistory, setCursorHistory] = useState<(Cursor | undefined)[]>([undefined]);
+
+	return {
+		pageSize,
+		pageNumber: cursorHistory.length,
+		cursor: cursorHistory.at(-1),
+		hasPrevious: cursorHistory.length > 1,
+		changePageSize: (nextPageSize: PageSize) => {
+			setPageSize(nextPageSize);
+			setCursorHistory([undefined]);
+		},
+		previous: () => {
+			setCursorHistory((history) => (history.length > 1 ? history.slice(0, -1) : history));
+		},
+		next: (cursor: Cursor) => {
+			setCursorHistory((history) => [...history, cursor]);
+		},
+	};
+}
+
 function PageControls({
+	pageSize,
+	pageNumber,
+	totalPages,
 	hasPrevious,
 	hasNext,
+	isFetching,
+	onPageSizeChange,
 	onPrevious,
 	onNext,
 }: {
+	pageSize: PageSize;
+	pageNumber: number;
+	totalPages: number;
 	hasPrevious: boolean;
 	hasNext: boolean;
+	isFetching: boolean;
+	onPageSizeChange: (pageSize: PageSize) => void;
 	onPrevious: () => void;
 	onNext: () => void;
 }) {
-	if (!hasPrevious && !hasNext) {
-		return null;
-	}
 	return (
-		<div className='mt-3 flex justify-end gap-2'>
-			<Button variant='outline' size='sm' disabled={!hasPrevious} onClick={onPrevious}>
-				Latest
-			</Button>
-			<Button variant='outline' size='sm' disabled={!hasNext} onClick={onNext}>
-				Older
-			</Button>
+		<div className='mt-3 flex flex-wrap items-center justify-between gap-3'>
+			<div className='flex items-center gap-2 text-sm text-muted-foreground'>
+				<span>Rows</span>
+				<Select value={String(pageSize)} onValueChange={(value) => onPageSizeChange(Number(value) as PageSize)}>
+					<SelectTrigger size='sm' aria-label='Rows per page'>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{pageSizes.map((size) => (
+							<SelectItem key={size} value={String(size)}>
+								{size}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+			<div className='flex gap-2'>
+				<Button variant='outline' size='sm' disabled={!hasPrevious || isFetching} onClick={onPrevious}>
+					Previous
+				</Button>
+				<span
+					className='flex min-w-16 items-center justify-center text-sm text-muted-foreground'
+					aria-current='page'
+				>
+					{pageNumber}/{totalPages}
+				</span>
+				<Button variant='outline' size='sm' disabled={!hasNext || isFetching} onClick={onNext}>
+					Next
+				</Button>
+			</div>
 		</div>
 	);
+}
+
+function getTotalPages(totalCount: number | undefined, pageSize: PageSize): number {
+	return Math.max(1, Math.ceil((totalCount ?? 0) / pageSize));
 }
 
 function ledgerLabel(

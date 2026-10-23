@@ -655,8 +655,12 @@ describe('managed AI usage and organization credits', () => {
 
 		expect(secondUsage.runs.length).toBeGreaterThan(0);
 		expect(secondUsage.runs.map((run) => run.id)).not.toContain(firstUsage.runs[0]?.id);
+		expect(firstUsage.totalCount).toBe(firstUsage.runs.length + secondUsage.runs.length);
+		expect(secondUsage.totalCount).toBe(firstUsage.totalCount);
 		expect(secondLedger.groups.length).toBeGreaterThan(0);
 		expect(secondLedger.groups.map((group) => group.id)).not.toContain(firstLedger.groups[0]?.id);
+		expect(firstLedger.totalCount).toBe(firstLedger.groups.length + secondLedger.groups.length);
+		expect(secondLedger.totalCount).toBe(firstLedger.totalCount);
 	});
 });
 

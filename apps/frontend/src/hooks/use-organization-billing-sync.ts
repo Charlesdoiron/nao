@@ -11,6 +11,7 @@ export type OrganizationBillingSearch = {
 	checkout?: 'success' | 'subscribed' | 'canceled';
 	portal?: 'returned';
 	creditCheckout?: string;
+	creditsTab?: 'history' | 'usage';
 };
 
 export function useOrganizationBillingSync(

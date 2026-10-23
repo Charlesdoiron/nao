@@ -10,13 +10,12 @@ import { type LanguageModelMiddleware, wrapLanguageModel } from 'ai';
 import { env } from '../env';
 import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as projectQueries from '../queries/project.queries';
+import { MAX_OUTPUT_TOKENS } from '../services/agent';
 import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
 import type { ModelCosts, ModelSource } from '../types/llm';
 import type { ManagedAiUsageCategory, ManagedAiUsageCostSource, ManagedAiUsageStatus } from '../types/managed-ai-usage';
 import { createProviderModel, getProviderMeta } from './providers';
-
-const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export type ManagedAiUsageContext = {
 	userId?: string;
@@ -331,7 +330,7 @@ function calculateCategoryCost(tokens?: number, rateUsdPerMillion?: number): num
 function calculateReservationMicroUsd(params: LanguageModelV3CallOptions, rates: ModelCosts): number {
 	const estimatedInputTokens = estimateUsage(params, 0).inputTokens.total ?? 0;
 	const highestInputRate = Math.max(rates.inputNoCache ?? 0, rates.inputCacheRead ?? 0, rates.inputCacheWrite ?? 0);
-	const outputTokens = params.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+	const outputTokens = params.maxOutputTokens ?? MAX_OUTPUT_TOKENS;
 	return Math.max(
 		1,
 		calculateCategoryCost(estimatedInputTokens, highestInputRate) +
