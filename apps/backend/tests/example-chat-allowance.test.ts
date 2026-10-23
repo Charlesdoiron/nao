@@ -5,11 +5,17 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 const mocks = vi.hoisted(() => ({
 	handleAgentRoute: vi.fn(),
+	isManagedAiEnabled: vi.fn(() => true),
 }));
 
 vi.mock('../src/handlers/agent', async (importOriginal) => {
 	const actual = (await importOriginal()) as Record<string, unknown>;
 	return { ...actual, handleAgentRoute: mocks.handleAgentRoute };
+});
+
+vi.mock('../src/agents/managed-ai', async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
+	return { ...actual, isManagedAiEnabled: mocks.isManagedAiEnabled };
 });
 
 import s from '../src/db/abstractSchema';
@@ -44,6 +50,8 @@ const ALLOWANCE_USER_ID = 'allowance-user';
 const PROJECT_USER_ID = 'project-user';
 const EXHAUSTED_USER_ID = 'exhausted-user';
 const RECOVERABLE_USER_ID = 'recoverable-user';
+const FALLBACK_EXAMPLE_USER_ID = 'fallback-example-user';
+const FALLBACK_ONBOARDING_USER_ID = 'fallback-onboarding-user';
 
 describe('example chat allowance', () => {
 	beforeAll(async () => {
@@ -52,6 +60,12 @@ describe('example chat allowance', () => {
 			{ id: PROJECT_USER_ID, name: 'Project User', email: 'project@example.com' },
 			{ id: EXHAUSTED_USER_ID, name: 'Exhausted User', email: 'exhausted@example.com' },
 			{ id: RECOVERABLE_USER_ID, name: 'Recoverable User', email: 'recoverable@example.com' },
+			{ id: FALLBACK_EXAMPLE_USER_ID, name: 'Fallback Example User', email: 'fallback-example@example.com' },
+			{
+				id: FALLBACK_ONBOARDING_USER_ID,
+				name: 'Fallback Onboarding User',
+				email: 'fallback-onboarding@example.com',
+			},
 		]);
 		await db.insert(s.project).values({
 			id: SYSTEM_EXAMPLE_PROJECT_ID,
@@ -69,6 +83,8 @@ describe('example chat allowance', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		mocks.handleAgentRoute.mockReset();
+		mocks.isManagedAiEnabled.mockReset();
+		mocks.isManagedAiEnabled.mockReturnValue(true);
 	});
 
 	it('keeps independent lifetime caps for example and onboarding submissions', async () => {
@@ -186,7 +202,41 @@ describe('example chat allowance', () => {
 		expect(upsertMessage).not.toHaveBeenCalled();
 	});
 
-	it('resumes an existing example chat without consuming allowance after project setup', async () => {
+	it.each([
+		{ mode: 'example' as const, userId: FALLBACK_EXAMPLE_USER_ID },
+		{ mode: 'onboarding' as const, userId: FALLBACK_ONBOARDING_USER_ID },
+	])('uses the configured default model for $mode when managed AI is unavailable', async ({ mode, userId }) => {
+		const setupError = new Error('Fallback model reached agent setup');
+		mocks.isManagedAiEnabled.mockReturnValue(false);
+		vi.spyOn(exampleProjectService, 'getSystemExampleProject').mockResolvedValue({
+			id: SYSTEM_EXAMPLE_PROJECT_ID,
+		} as never);
+		mocks.handleAgentRoute.mockRejectedValue(setupError);
+		const post = vi.fn();
+		await agentRoutes({ addHook: vi.fn(), post } as never);
+		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
+
+		await expect(
+			handler(
+				{
+					user: { id: userId },
+					project: undefined,
+					body: { message: { text: 'Use the fallback model' }, mode },
+					headers: {},
+				},
+				{},
+			),
+		).rejects.toBe(setupError);
+		expect(mocks.handleAgentRoute).toHaveBeenCalledWith(
+			expect.objectContaining({
+				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
+				model: undefined,
+				unbilledManagedAiUsage: true,
+			}),
+		);
+	});
+
+	it('does not grant unbilled managed AI usage after project setup', async () => {
 		const orgId = 'project-org';
 		await db.insert(s.organization).values({ id: orgId, name: 'Project Org', slug: orgId });
 		await db.insert(s.orgMember).values({ orgId, userId: PROJECT_USER_ID, role: 'admin' });
@@ -242,7 +292,7 @@ describe('example chat allowance', () => {
 			expect.objectContaining({
 				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
 				model: { provider: 'nao', modelId: 'gpt-6-sol' },
-				unbilledManagedAiUsage: true,
+				unbilledManagedAiUsage: false,
 			}),
 		);
 	});

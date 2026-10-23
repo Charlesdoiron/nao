@@ -38,6 +38,7 @@ const renderAnswer = (text: string, isStreaming = false) => {
 describe('AssistantTextWithCitation', () => {
 	afterEach(() => {
 		cleanup();
+		vi.restoreAllMocks();
 		mocks.copySupportRequest.mockReset();
 		mocks.submitSupportRequest.mockReset();
 	});
@@ -213,10 +214,20 @@ describe('AssistantTextWithCitation', () => {
 	it.each([
 		['Read the docs', 'https://docs.getnao.io'],
 		['Set up your project', '/onboarding'],
-	])('keeps the %s message action as a link', (label, href) => {
+	])('keeps the %s message action as plain markdown', (label, href) => {
 		renderAnswer(`[${label}](${href})`);
 
-		expect(screen.getByRole('link', { name: label }).getAttribute('data-slot')).toBeNull();
+		expect(screen.getByRole('button', { name: label }).getAttribute('data-slot')).toBeNull();
+	});
+
+	it.each([false, true])('keeps Streamdown link safety while streaming is %s', async (isStreaming) => {
+		const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+		renderAnswer('[Read the docs](https://docs.getnao.io)', isStreaming);
+
+		fireEvent.click(screen.getByRole('button', { name: 'Read the docs' }));
+		expect(await screen.findByRole('heading', { name: 'Open external link?' })).toBeDefined();
+		fireEvent.click(screen.getByRole('button', { name: 'Open link' }));
+		expect(open).toHaveBeenCalledWith('https://docs.getnao.io/', '_blank', 'noreferrer');
 	});
 
 	it('clarifies the legacy Jaffle Shop limit message and removes its onboarding action', () => {

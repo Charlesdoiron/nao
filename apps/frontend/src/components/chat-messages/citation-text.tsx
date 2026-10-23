@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import { Streamdown } from 'streamdown';
 import { normalizeCitationMarkers, stripAssistantTags } from '@nao/shared';
-import type { ComponentProps } from 'react';
 
 import { CitationPopover } from '@/components/citation-popover';
 import { MarkdownTable } from '@/components/chat-messages/markdown-table';
@@ -14,20 +13,20 @@ import { markdownLinkSafety } from '@/components/external-link-dialog';
 
 const CLOBBER_PREFIX = 'user-content-';
 const SETTLED_COMPONENTS = {
-	a: MarkdownLinkRenderer,
 	table: MarkdownTableRenderer,
+	'contact-support': ContactSupportRenderer,
 	'citation-number': CitationNumberRenderer,
 	'saved-file': SavedFileRenderer,
 };
 const STREAMING_COMPONENTS = {
-	a: MarkdownLinkRenderer,
 	table: MarkdownTableRenderer,
 };
 const ALLOWED_TAGS = {
+	'contact-support': [],
 	'citation-number': ['id', 'column'],
 	'saved-file': ['path'],
 };
-const LITERAL_TAG_CONTENT = ['citation-number', 'saved-file'];
+const LITERAL_TAG_CONTENT = ['contact-support', 'citation-number', 'saved-file'];
 const INLINE_CODE_PATTERN = /(?<![\\`])`([^`\r\n]+)`(?!`)/g;
 const SAVED_FILE_ELEMENT_PATTERN =
 	/^<saved-file\s+path\s*=\s*(?:"[^"\r\n]+"|'[^'\r\n]+')\s*>[^`\r\n]*?<\/saved-file\s*>$/;
@@ -47,7 +46,7 @@ export const AssistantTextWithCitation = memo(({ text, isStreaming }: { text: st
 			literalTagContent={LITERAL_TAG_CONTENT}
 			components={SETTLED_COMPONENTS}
 		>
-			{unwrapBacktickedSavedFiles(normalizeCitationMarkers(placeMessageActionsLast(text)))}
+			{replaceSupportLinks(unwrapBacktickedSavedFiles(normalizeCitationMarkers(placeMessageActionsLast(text))))}
 		</Streamdown>
 	);
 });
@@ -67,6 +66,15 @@ function placeMessageActionsLast(markdown: string): string {
 function unwrapBacktickedSavedFiles(markdown: string): string {
 	return transformMarkdownOutsideCodeBlocks(markdown, (line) =>
 		line.replace(INLINE_CODE_PATTERN, (match, value: string) => (isSavedFileElement(value) ? value : match)),
+	);
+}
+
+function replaceSupportLinks(markdown: string): string {
+	return transformMarkdownOutsideCodeBlocks(markdown, (line) =>
+		line.replaceAll(
+			'[Contact support](mailto:support@getnao.io)',
+			'<contact-support>Contact support</contact-support>',
+		),
 	);
 }
 
@@ -205,16 +213,8 @@ function MarkdownTableRenderer({ node, className }: any) {
 	return <MarkdownTable node={node} className={className} />;
 }
 
-function MarkdownLinkRenderer({ href, children, node: _, ...props }: ComponentProps<'a'> & { node?: unknown }) {
-	if (href === 'mailto:support@getnao.io') {
-		return <ContactSupportButton>{children}</ContactSupportButton>;
-	}
-
-	return (
-		<a href={href} {...props}>
-			{children}
-		</a>
-	);
+function ContactSupportRenderer({ children }: any) {
+	return <ContactSupportButton>{children}</ContactSupportButton>;
 }
 
 function CitationNumberRenderer({ id, column, children }: any) {

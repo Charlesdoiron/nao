@@ -2,6 +2,7 @@ import type { LlmSelectedModel } from '@nao/shared/types';
 import { JsonToSseTransformStream, UI_MESSAGE_STREAM_HEADERS } from 'ai';
 import type { IncomingHttpHeaders } from 'http';
 
+import { isManagedAiEnabled } from '../agents/managed-ai';
 import type { App } from '../app';
 import { handleAgentRoute } from '../handlers/agent';
 import { authMiddleware } from '../middleware/auth';
@@ -103,9 +104,9 @@ export const agentRoutes = async (app: App) => {
 			userId: user.id,
 			projectId,
 			...body,
-			model: isExampleProject ? EXAMPLE_ALLOWANCE_MODEL : body.model,
+			model: isExampleProject ? (isManagedAiEnabled() ? EXAMPLE_ALLOWANCE_MODEL : undefined) : body.model,
 			isOnboarding,
-			unbilledManagedAiUsage: isExampleProject,
+			unbilledManagedAiUsage: usesExampleAllowance,
 			billingAccessVerifiedProjectId: projectId,
 			adminMode: body.adminMode && canChatWithNaoData,
 			domainHost: getDomainHost(headers),
