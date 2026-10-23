@@ -3,7 +3,7 @@ import { JsonToSseTransformStream, UI_MESSAGE_STREAM_HEADERS } from 'ai';
 import type { IncomingHttpHeaders } from 'http';
 
 import type { App } from '../app';
-import { handleAgentRoute, handleExampleAllowanceExhaustedRoute } from '../handlers/agent';
+import { handleAgentRoute } from '../handlers/agent';
 import { authMiddleware } from '../middleware/auth';
 import * as chatQueries from '../queries/chat.queries';
 import { consumeExampleChatRun, releaseExampleChatRun } from '../queries/example-chat-allowance.queries';
@@ -16,13 +16,13 @@ import {
 } from '../services/example-project';
 import { AgentRequestSchema } from '../types/chat';
 import { trackAgentStreamDisconnect } from '../utils/agent-stream-disconnect';
-import { ExampleAllowanceExhaustedError } from '../utils/error';
+import { ExampleChatAllowanceExhaustedError, OnboardingChatAllowanceExhaustedError } from '../utils/error';
 import { withQueryResultPreviewsInStream } from '../utils/query-result-preview';
 import { withSseKeepAlive } from '../utils/sse-keep-alive';
 
 const DEBUG_CHUNKS = false;
 const KEEP_ALIVE_INTERVAL_MS = 10_000;
-const EXAMPLE_ALLOWANCE_MODEL = { provider: 'nao', modelId: 'gpt-5.6-sol' } satisfies LlmSelectedModel;
+const EXAMPLE_ALLOWANCE_MODEL = { provider: 'nao', modelId: 'gpt-6-sol' } satisfies LlmSelectedModel;
 
 export const agentRoutes = async (app: App) => {
 	app.addHook('preHandler', authMiddleware);
@@ -94,26 +94,7 @@ export const agentRoutes = async (app: App) => {
 			await assertProjectCloudBillingAccess(projectId);
 		}
 
-		let usesExampleAllowance: boolean;
-		try {
-			usesExampleAllowance = await assertExampleChatAllowance({ userId: user.id, projectId, isOnboarding });
-		} catch (error) {
-			if (!(error instanceof ExampleAllowanceExhaustedError) || !projectId) {
-				throw error;
-			}
-			const exhausted = await handleExampleAllowanceExhaustedRoute({
-				userId: user.id,
-				projectId,
-				message: body.message,
-				chatId: body.chatId,
-				messageToEditId: body.messageToEditId,
-				isOnboarding,
-			});
-			const stream = withQueryResultPreviewsInStream(exhausted.stream).pipeThrough(
-				new JsonToSseTransformStream(),
-			);
-			return createAgentStreamResponse(stream);
-		}
+		const usesExampleAllowance = await assertExampleChatAllowance({ userId: user.id, projectId, isOnboarding });
 		if (isExampleProject && !body.chatId && !usesExampleAllowance) {
 			return reply.status(403).send({ error: 'Example conversations are unavailable after project setup' });
 		}
@@ -188,7 +169,7 @@ export async function assertExampleChatAllowance({
 	}
 	const scope = isOnboarding ? 'onboarding' : 'example';
 	if (!(await consumeExampleChatRun(userId, scope))) {
-		throw new ExampleAllowanceExhaustedError(scope);
+		throw isOnboarding ? new OnboardingChatAllowanceExhaustedError() : new ExampleChatAllowanceExhaustedError();
 	}
 	return true;
 }

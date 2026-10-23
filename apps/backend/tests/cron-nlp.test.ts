@@ -34,7 +34,7 @@ describe('naturalLanguageToCron', () => {
 		mocks.getProjectModelProvider.mockResolvedValue('nao');
 		mocks.resolveDefaultModelSelection.mockResolvedValue(null);
 		mocks.resolveProviderModel.mockResolvedValue({
-			model: { modelId: 'gpt-5.6-luna' },
+			model: { modelId: 'gpt-6-luna' },
 			providerOptions: { openai: {} },
 			contextWindow: 400_000,
 		});

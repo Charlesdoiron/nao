@@ -11,6 +11,7 @@ import {
 	Check,
 	WalletCards,
 	KeyRound,
+	MessageCircleOff,
 } from 'lucide-react';
 import { ATTACHMENT_ACCEPT } from '@nao/shared/attachments';
 import { Button, ChatButton, MicButton } from './ui/button';
@@ -19,6 +20,7 @@ import { ChatPrompt, DATABASE_MENTION_TRIGGER, useStoryMentionOptions } from './
 import { ChatInputModelSelect } from './chat-input-model-select';
 import { ChatInputMessageQueue } from './chat-input-message-queue';
 import { ChatInputAttachmentPreview } from './chat-input-attachment-preview';
+import { ContactSupportButton } from './contact-support-dialog';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -29,16 +31,18 @@ import {
 import type { MentionOption, PromptHandle, SelectedMention } from 'prompt-mentions';
 import type { FormEvent } from 'react';
 import type { AgentHelpers } from '@/hooks/use-agent';
+import type { ChatAllowanceExhaustedScope } from '@/lib/ai';
 import { ContextWindowRing } from '@/components/ui/chat-input-context-window-ring';
 import { SimpleTooltip } from '@/components/ui/tooltip';
 
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
+import { Callout } from '@/components/ui/callout';
 import { trpc } from '@/main';
 import { useAgentContext, useAgentMessagesSelector } from '@/contexts/agent.provider';
 import { useRegisterSetChatInputCallback } from '@/contexts/set-chat-input-callback';
 import { useTranscribe } from '@/hooks/use-transcribe';
 import { useAttachmentUpload } from '@/hooks/use-attachment-upload';
-import { parseBudgetError, parseManagedCreditsError } from '@/lib/ai';
+import { parseBudgetError, parseChatAllowanceExhaustedError, parseManagedCreditsError } from '@/lib/ai';
 import { cn } from '@/lib/utils';
 import { useChatId } from '@/hooks/use-chat-id';
 import { useModelSelection } from '@/hooks/use-model-selection';
@@ -52,7 +56,7 @@ import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
 import { useChatPendingCitation } from '@/hooks/use-chat-pending-citation';
 import { useEffectiveUserGroupFeatures } from '@/hooks/use-effective-user-group-features';
 import { SelectionCitationBanner } from '@/components/selection-citation-banner';
-import { ChatInputSuggestions } from '@/components/chat-input-suggestions';
+import { ChatInputSuggestions, SuggestionCard } from '@/components/chat-input-suggestions';
 import { runWithStoryBeforeAgentSend, useStoryBeforeAgentSend } from '@/contexts/story-before-agent-send';
 import { useIsCloud } from '@/hooks/use-nao-mode';
 
@@ -192,8 +196,10 @@ function ChatInputBase({
 		enabled: hasProject && selectedModel?.provider === 'nao',
 		refetchOnWindowFocus: false,
 	});
+	const allowanceExhaustedScope = parseChatAllowanceExhaustedError(error);
 	const isSendBlocked =
 		!!parseBudgetError(error) ||
+		!!allowanceExhaustedScope ||
 		(hasProject && budgetStatus.data?.level === 'exceeded') ||
 		(selectedModel?.provider === 'nao' && !!parseManagedCreditsError(error)) ||
 		(selectedModel?.provider === 'nao' && managedCredit.data?.hasCredits === false);
@@ -439,14 +445,23 @@ function ChatInputBase({
 
 	return (
 		<div ref={dropZoneRef} className={cn('px-3 pb-3 pt-0 md:px-3 md:pb-3 max-w-3xl w-full mx-auto', className)}>
-			<ChatInputMessageQueue onEditMessage={handleEditQueuedMessage} onSubmitNow={submitQueuedMessageWithGuard} />
-			<SelectionCitationBanner />
-			<BudgetBanner />
-			{allowQueueing && !isAdminMode && (
-				<ChatInputSuggestions
-					storyCreationEnabled={storyCreationEnabled}
-					isHidden={inputText.trim().length > 0}
-				/>
+			{allowanceExhaustedScope ? (
+				<ChatAllowanceExhausted scope={allowanceExhaustedScope} />
+			) : (
+				<>
+					<ChatInputMessageQueue
+						onEditMessage={handleEditQueuedMessage}
+						onSubmitNow={submitQueuedMessageWithGuard}
+					/>
+					<SelectionCitationBanner />
+					<BudgetBanner />
+					{allowQueueing && !isAdminMode && (
+						<ChatInputSuggestions
+							storyCreationEnabled={storyCreationEnabled}
+							isHidden={inputText.trim().length > 0}
+						/>
+					)}
+				</>
 			)}
 			{isAdminMode ? <ChatInputAdminBadge /> : variant === 'onboarding' ? <ChatInputOnboardingBadge /> : null}
 
@@ -550,6 +565,31 @@ function ChatInputBase({
 				</InputGroup>
 			</form>
 		</div>
+	);
+}
+
+function ChatAllowanceExhausted({ scope }: { scope: ChatAllowanceExhaustedScope }) {
+	const isOnboarding = scope === 'onboarding';
+	if (!isOnboarding) {
+		return (
+			<div className='pb-2'>
+				<SuggestionCard
+					icon={<MessageCircleOff className='size-4 text-muted-foreground' />}
+					message='Example chat limit reached'
+					description='Set up your own project to keep chatting with your data.'
+				/>
+			</div>
+		);
+	}
+
+	return (
+		<Callout icon={MessageCircleOff} className='mb-3 rounded-2xl px-4 py-3 text-sm shadow-xs' role='status'>
+			<p className='font-medium text-foreground'>Guided setup chat limit reached</p>
+			<p className='mt-1 text-muted-foreground'>
+				Your progress is safe, and setup actions on this page still work. Contact support if you need help.
+			</p>
+			<ContactSupportButton>Contact support</ContactSupportButton>
+		</Callout>
 	);
 }
 

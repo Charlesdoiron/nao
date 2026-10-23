@@ -27,6 +27,7 @@ import {
 	getTextFromUserMessageOrThrow,
 	NEW_CHAT_ID,
 	parseBudgetError,
+	parseChatAllowanceExhaustedError,
 	parseManagedCreditsError,
 	resolveImagesFromMessage,
 } from '@/lib/ai';
@@ -333,7 +334,7 @@ export const useAgent = ({
 	}, [chatId]);
 
 	useEffect(() => {
-		if (!parseBudgetError(error) && !parseManagedCreditsError(error)) {
+		if (!parseBudgetError(error) && !parseManagedCreditsError(error) && !parseChatAllowanceExhaustedError(error)) {
 			return;
 		}
 		const lastMsg = messages.at(-1);
@@ -432,10 +433,13 @@ export const useAgent = ({
 
 	const handleSendMessage = useCallback<UseChatHelpers<UIMessage>['sendMessage']>(
 		async (...args) => {
+			if (parseChatAllowanceExhaustedError(error)) {
+				return;
+			}
 			clearError();
 			return sendMessage(...args);
 		},
-		[sendMessage, clearError],
+		[sendMessage, clearError, error],
 	);
 
 	const queueOrSendMessage = useCallback(

@@ -67,26 +67,25 @@ describe('getProjectAvailableModels', () => {
 		}
 	});
 
-	it('lists the curated nao models only when the project has no other provider', async () => {
+	it('keeps the curated nao models available after BYOK is configured', async () => {
 		enableManagedAi();
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
 		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 480_000 });
 
 		const managed = await getProjectAvailableModels('project-1');
 		expect(managed.map(({ provider, modelId }) => ({ provider, modelId }))).toEqual([
-			{ provider: 'nao', modelId: 'gpt-5.6-luna' },
-			{ provider: 'nao', modelId: 'gpt-5.6-terra' },
-			{ provider: 'nao', modelId: 'gpt-5.6-sol' },
+			{ provider: 'nao', modelId: 'gpt-6-luna' },
+			{ provider: 'nao', modelId: 'gpt-6-sol' },
 		]);
 		expect(mocks.getCreditSummary).toHaveBeenCalledWith('org-1');
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-6-luna', true, {
 				userId: 'user-1',
 				category: 'chat',
 			}),
 		).resolves.not.toBeNull();
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-pro', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-5.6-terra', true, {
 				userId: 'user-1',
 				category: 'chat',
 			}),
@@ -101,17 +100,20 @@ describe('getProjectAvailableModels', () => {
 			},
 		]);
 		const byok = await getProjectAvailableModels('project-1');
-		expect(byok).toHaveLength(1);
-		expect(byok[0]).toMatchObject({ provider: 'openai', modelId: 'gpt-5-mini' });
+		expect(byok.map(({ provider, modelId }) => ({ provider, modelId }))).toEqual([
+			{ provider: 'openai', modelId: 'gpt-5-mini' },
+			{ provider: 'nao', modelId: 'gpt-6-luna' },
+			{ provider: 'nao', modelId: 'gpt-6-sol' },
+		]);
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-6-luna', true, {
 				userId: 'user-1',
 				category: 'chat',
 			}),
-		).resolves.toBeNull();
+		).resolves.not.toBeNull();
 		mocks.getProjectLlmConfigs.mockClear();
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-sol', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-6-sol', true, {
 				userId: 'user-1',
 				category: 'chat',
 				billingMode: 'unbilled',
@@ -139,12 +141,11 @@ describe('getProjectAvailableModels', () => {
 		const models = await getProjectAvailableModels('project-1');
 
 		expect(models.filter(({ provider }) => provider === 'nao').map(({ modelId }) => modelId)).toEqual([
-			'gpt-5.6-luna',
-			'gpt-5.6-terra',
-			'gpt-5.6-sol',
+			'gpt-6-luna',
+			'gpt-6-sol',
 		]);
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-6-luna', true, {
 				userId: 'user-1',
 				category: 'chat',
 			}),
@@ -160,7 +161,7 @@ describe('getProjectAvailableModels', () => {
 		const models = await getProjectAvailableModels('project-1');
 		expect(models.some(({ provider }) => provider === 'nao')).toBe(false);
 		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-luna', true, {
+			resolveProviderModel('project-1', 'nao', 'gpt-6-luna', true, {
 				userId: 'user-1',
 				category: 'chat',
 			}),

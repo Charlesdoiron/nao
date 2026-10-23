@@ -65,12 +65,17 @@ describe('useSettingsSearch', () => {
 
 	afterEach(cleanup);
 
-	it.each(['Messages', 'Tokens', 'Cost'])('only returns %s to roles with usage access', (title) => {
+	it.each(['Messages', 'Tokens', 'Cost'])('only returns %s to admins with usage access', (title) => {
 		const { result, rerender } = renderHook(() => useSettingsSearch(title));
 
 		expect(result.current.some((entry) => entry.title === title)).toBe(false);
 
 		Object.assign(mocks.permissions, { canViewUsage: true, isViewer: false });
+		rerender();
+
+		expect(result.current.some((entry) => entry.title === title)).toBe(false);
+
+		mocks.permissions.isAdmin = true;
 		rerender();
 
 		expect(result.current.some((entry) => entry.title === title)).toBe(true);

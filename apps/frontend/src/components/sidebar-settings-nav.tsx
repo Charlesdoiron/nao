@@ -123,7 +123,8 @@ const settingsNavGroups: NavGroup[] = [
 			{
 				label: 'Usage & Costs',
 				to: '/settings/usage',
-				visible: ({ isViewer, isCloud, isOrgAdmin }) => !isViewer || (isCloud && isOrgAdmin),
+				visible: ({ isAdmin, isContextAdmin, isCloud, isOrgAdmin }) =>
+					isAdmin || isContextAdmin || (isCloud && isOrgAdmin),
 			},
 			{
 				label: 'Server logs',

@@ -711,6 +711,18 @@ export function parseManagedCreditsError(error: Error | undefined): string | nul
 	return parseCodedError(error, 'MANAGED_CREDITS_EXHAUSTED');
 }
 
+export type ChatAllowanceExhaustedScope = 'example' | 'onboarding';
+
+export function parseChatAllowanceExhaustedError(error: Error | undefined): ChatAllowanceExhaustedScope | null {
+	if (parseCodedError(error, 'EXAMPLE_CHAT_ALLOWANCE_EXHAUSTED')) {
+		return 'example';
+	}
+	if (parseCodedError(error, 'ONBOARDING_CHAT_ALLOWANCE_EXHAUSTED')) {
+		return 'onboarding';
+	}
+	return null;
+}
+
 function parseCodedError(error: Error | undefined, code: string): string | null {
 	if (!error) {
 		return null;

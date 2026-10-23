@@ -86,11 +86,8 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 			<DialogContent className='border-violet/20 p-6 sm:max-w-lg sm:p-8'>
 				{isSent ? (
 					<div className='flex flex-col items-center text-center'>
-						<span className='text-[10px] font-semibold uppercase tracking-[0.18em] text-violet'>
-							nao support
-						</span>
-						<DialogHeader className='mt-3 items-center gap-3'>
-							<DialogTitle className='font-borna text-3xl font-medium tracking-tight'>
+						<DialogHeader className='items-center gap-3'>
+							<DialogTitle className='font-borna text-xl font-medium tracking-tight'>
 								Request sent
 							</DialogTitle>
 							<DialogDescription className='max-w-sm text-center leading-relaxed'>
@@ -109,11 +106,8 @@ export function ContactSupportButton({ children }: { children: ReactNode }) {
 					</div>
 				) : (
 					<>
-						<span className='text-[10px] font-semibold uppercase tracking-[0.18em] text-violet'>
-							nao support
-						</span>
-						<DialogHeader className='mt-3'>
-							<DialogTitle className='font-borna text-3xl font-medium tracking-tight'>
+						<DialogHeader>
+							<DialogTitle className='font-borna text-xl font-medium tracking-tight'>
 								How can we help?
 							</DialogTitle>
 							<DialogDescription className='sr-only'>

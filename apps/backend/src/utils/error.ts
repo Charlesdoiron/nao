@@ -1,5 +1,3 @@
-import type { ExampleChatAllowanceScope } from '../types/example-chat-allowance';
-
 export type HandlerErrorCode = 'BAD_REQUEST' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT';
 
 /**
@@ -34,10 +32,17 @@ export class ManagedCreditsExhaustedError extends HandlerError {
 	}
 }
 
-export class ExampleAllowanceExhaustedError extends HandlerError {
-	constructor(readonly scope: ExampleChatAllowanceScope) {
+export class ExampleChatAllowanceExhaustedError extends HandlerError {
+	constructor() {
 		super('FORBIDDEN', 'The example chat allowance has been used.');
-		this.name = 'ExampleAllowanceExhaustedError';
+		this.name = 'ExampleChatAllowanceExhaustedError';
+	}
+}
+
+export class OnboardingChatAllowanceExhaustedError extends HandlerError {
+	constructor() {
+		super('FORBIDDEN', 'The onboarding chat allowance has been used.');
+		this.name = 'OnboardingChatAllowanceExhaustedError';
 	}
 }
 

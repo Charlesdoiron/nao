@@ -141,9 +141,6 @@ export async function resolveProviderModel(
 		modelId,
 		applyUserSettings,
 		usageContext,
-		hasOwnModels() {
-			return hasOwnSelectableModel(projectId);
-		},
 	};
 	for (const source of getSourcesServing(provider)) {
 		const result = await source.resolveModel(request);
@@ -431,19 +428,14 @@ export const getProjectModelNameResolver = async (
 
 /**
  * The model list of every provider available to a project, taking each provider from the first
- * source that declares it. Managed sources are only offered when no other source has a selectable model.
+ * source that declares it.
  */
 async function getProjectModelSources(projectId: string): Promise<ProviderModelSource[]> {
-	const ownProviders = await collectProviders(projectId, { managed: false });
-	if (ownProviders.some(hasSelectableModel)) {
-		return ownProviders;
-	}
-	return [...ownProviders, ...(await collectProviders(projectId, { managed: true }))];
-}
-
-async function hasOwnSelectableModel(projectId: string): Promise<boolean> {
-	const ownProviders = await collectProviders(projectId, { managed: false });
-	return ownProviders.some(hasSelectableModel);
+	const [ownProviders, managedProviders] = await Promise.all([
+		collectProviders(projectId, { managed: false }),
+		collectProviders(projectId, { managed: true }),
+	]);
+	return [...ownProviders, ...managedProviders];
 }
 
 async function collectProviders(projectId: string, { managed }: { managed: boolean }): Promise<ProviderModelSource[]> {
@@ -457,10 +449,6 @@ async function collectProviders(projectId: string, { managed }: { managed: boole
 		}
 	}
 	return collected;
-}
-
-function hasSelectableModel(source: ProviderModelSource): boolean {
-	return source.enabledModels.length > 0 || Boolean(getDefaultModelId(source.provider));
 }
 
 function getSourcesServing(provider: LlmProvider): ModelSource[] {

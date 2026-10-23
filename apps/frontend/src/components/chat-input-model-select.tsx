@@ -19,7 +19,7 @@ const NAO_DEFAULT_VALUE = 'nao-default';
 const NAO_DEFAULT_LABEL = 'Auto';
 const EXAMPLE_MODEL_VALUE = 'example-model';
 const PROJECT_SETUP_VALUE = 'project-setup';
-const EXAMPLE_MODEL_NAME = 'GPT 5.6 Sol';
+const EXAMPLE_MODEL_NAME = 'GPT 6 Sol';
 
 export function ChatInputModelSelect({ isExample = false }: { isExample?: boolean }) {
 	const navigate = useNavigate();

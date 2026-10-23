@@ -106,10 +106,7 @@ export type ModelSettingsMap = z.infer<typeof modelSettingsMapSchema>;
 
 /** Where a project's models and their credentials come from: its database config, nao_config.yaml, the environment, or nao. */
 export type ModelSource = {
-	/**
-	 * Serves the providers nao runs on its own keys. A managed source is only listed when no other
-	 * source offers a selectable model.
-	 */
+	/** Serves the providers nao runs on its own keys. */
 	readonly managed?: boolean;
 	listProviders(projectId: string): Promise<ProviderModelSource[]>;
 	resolveModel(request: ModelRequest): Promise<ProviderModelResult | null>;
@@ -130,8 +127,6 @@ export type ModelRequest = {
 	modelId: string;
 	applyUserSettings: boolean;
 	usageContext?: ManagedAiUsageContext;
-	/** Whether a source that isn't managed offers the project a selectable model. */
-	hasOwnModels(): Promise<boolean>;
 };
 
 /** How a model exposes "thinking"/reasoning control, if at all. */

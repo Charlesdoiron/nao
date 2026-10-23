@@ -48,7 +48,7 @@ it('shows the example model instead of setup for a project-less user', () => {
 
 	expect(screen.getByLabelText('nao model')).toBeTruthy();
 	expect(screen.queryByText('Auto')).toBeNull();
-	expect(screen.getByText('GPT 5.6 Sol')).toBeTruthy();
+	expect(screen.getByText('GPT 6 Sol')).toBeTruthy();
 	expect(screen.queryByText('Configure a model')).toBeNull();
 
 	fireEvent.keyDown(screen.getByRole('combobox', { name: 'Model' }), { key: 'Enter' });
@@ -63,6 +63,6 @@ it('shows the example model for an example chat when the user has a project', ()
 
 	render(<ChatInputModelSelect isExample />);
 
-	expect(screen.getByText('GPT 5.6 Sol')).toBeTruthy();
+	expect(screen.getByText('GPT 6 Sol')).toBeTruthy();
 	expect(screen.queryByText('Configure a model')).toBeNull();
 });

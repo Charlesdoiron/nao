@@ -47,12 +47,9 @@ export const managedAiSource: ModelSource = {
 		return [{ provider: 'nao', enabledModels, customModels: [], baseUrl: null }];
 	},
 
-	async resolveModel({ projectId, provider, modelId, usageContext, hasOwnModels }) {
+	async resolveModel({ projectId, provider, modelId, usageContext }) {
 		const apiKey = env.NAO_MANAGED_OPENAI_API_KEY;
 		if (!isManagedAiEnabled() || !apiKey || !usageContext?.userId || !isManagedModel(provider, modelId)) {
-			return null;
-		}
-		if (usageContext.billingMode !== 'unbilled' && (await hasOwnModels())) {
 			return null;
 		}
 		const orgId = usageContext.orgId ?? (await projectQueries.getProjectById(projectId))?.orgId ?? undefined;

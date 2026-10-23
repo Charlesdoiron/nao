@@ -24,13 +24,13 @@ import { useIsCloud } from '@/hooks/use-nao-mode';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useUsagePeriodSettings } from '@/hooks/use-usage-period-settings';
 import { trpc } from '@/main';
-import { requireUsageOrManagedAiAccess } from '@/lib/route-guards';
+import { requireUsageAdminAccess } from '@/lib/route-guards';
 import { buildUserUsageChart } from '@/lib/usage-by-user';
 import { formatUsageBucketLabel } from '@/lib/usage-date';
 import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/_sidebar-layout/settings/usage')({
-	beforeLoad: requireUsageOrManagedAiAccess,
+	beforeLoad: requireUsageAdminAccess,
 	validateSearch: validateUsageSearchWithStoredFilters,
 	component: UsagePage,
 });
@@ -131,16 +131,12 @@ function UsagePage() {
 	return (
 		<div className='flex min-h-0 flex-1 flex-col overflow-hidden bg-background'>
 			<div className='shrink-0 px-4 pt-4 md:px-8 md:pt-8'>
-				<h1 className='text-lg font-semibold text-foreground'>Usage & Costs</h1>
-				<p className='text-sm text-muted-foreground'>
-					{getTabDescription(activeTab, activeTab === 'managed-ai' ? isOrgAdmin : canViewChatReplay)}
-				</p>
 				<TabBar
 					tabs={availableTabs.map((tab) => ({ id: tab, label: usageTabLabels[tab] }))}
 					activeTab={activeTab}
 					onTabChange={(tab) => updateSearch({ tab })}
 					idBase='usage-costs'
-					className='mt-3 border-b'
+					className='border-b'
 				/>
 			</div>
 			<TabPanel idBase='usage-costs' tabId={activeTab} className='flex min-h-0 flex-1 flex-col overflow-hidden'>
@@ -162,19 +158,6 @@ function UsagePage() {
 			</TabPanel>
 		</div>
 	);
-}
-
-function getTabDescription(tab: UsageTab, organizationWide: boolean): string {
-	switch (tab) {
-		case 'usage':
-			return organizationWide
-				? 'Current project usage, estimated provider costs, and chat replay.'
-				: 'Your current project usage and estimated provider costs.';
-		case 'managed-ai':
-			return organizationWide
-				? 'Organization-wide nao AI calls and credit charges.'
-				: 'Your nao AI calls and charges.';
-	}
 }
 
 function UsageOverview({
