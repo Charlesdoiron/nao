@@ -30,6 +30,7 @@ interface StoryTabbedContentProps {
 	baselineQueryData?: QueryDataMap | null;
 	filterApi?: StoryFilterApi | null;
 	theme?: StoryTheme | null;
+	header?: React.ReactNode;
 }
 
 export function StoryTabbedContent({
@@ -41,6 +42,7 @@ export function StoryTabbedContent({
 	baselineQueryData,
 	filterApi,
 	theme,
+	header,
 }: StoryTabbedContentProps) {
 	const tabs = useMemo(() => parseStoryTabs(code), [code]);
 	const [activeIndex, setActiveIndex] = useState(0);
@@ -81,6 +83,7 @@ export function StoryTabbedContent({
 				)}
 				<div className='flex-1 overflow-auto'>
 					<div className={contentClassName}>
+						{header}
 						<StoryFilterBar
 							filters={storyFilters.filters}
 							selections={storyFilters.selections}
