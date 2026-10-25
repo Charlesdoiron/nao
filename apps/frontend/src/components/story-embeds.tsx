@@ -9,6 +9,7 @@ import { StoryChartEmbedShell } from '@/components/side-panel/story-chart-embed'
 import { StoryMapEmbedShell } from '@/components/side-panel/story-map-embed';
 import { StoryTableEditControls } from '@/components/side-panel/story-table-embed';
 import { StoryMapRender } from '@/components/story-map-embed';
+import { StoryQueryErrorBadge } from '@/components/story-query-error-badge';
 import { ChartDisplay } from '@/components/tool-calls/display-chart';
 import { useSourceQuery } from '@/hooks/use-source-query';
 import { sortByDateKey } from '@/lib/charts.utils';
@@ -255,14 +256,23 @@ export const StoryTableEmbed = memo(function StoryTableEmbed({
 
 	const columns = resolvedResult.columns ?? [];
 	return (
-		<EmbedRefreshing isRefreshing={showRefreshing}>
-			<DataTableCard
-				data={resolvedResult.data}
-				columns={columns}
-				title={table.title}
-				conditionalFormats={table.conditionalFormats}
-				headerActions={<StoryTableEditControls table={table} data={resolvedResult.data} columns={columns} />}
-			/>
-		</EmbedRefreshing>
+		<div data-story-query-id={table.queryId}>
+			<EmbedRefreshing isRefreshing={showRefreshing}>
+				<DataTableCard
+					data={resolvedResult.data}
+					columns={columns}
+					title={table.title}
+					conditionalFormats={table.conditionalFormats}
+					titleAccessory={
+						<span className='ml-1 flex empty:hidden'>
+							<StoryQueryErrorBadge queryId={table.queryId} />
+						</span>
+					}
+					headerActions={
+						<StoryTableEditControls table={table} data={resolvedResult.data} columns={columns} />
+					}
+				/>
+			</EmbedRefreshing>
+		</div>
 	);
 });

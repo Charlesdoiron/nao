@@ -9,6 +9,7 @@ import type { displayChart } from '@nao/shared/tools';
 
 import type { ChartEditorView } from '@/components/tool-calls/display-chart-edit-dialog';
 import { StoryChartQueryView } from '@/components/side-panel/story-chart-query';
+import { StoryQueryErrorBadge } from '@/components/story-query-error-badge';
 import { ChartDisplay } from '@/components/tool-calls/display-chart';
 import { ChartConfigEditDialog, resolveChartPaletteHexes } from '@/components/tool-calls/display-chart-edit-dialog';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { useStoryChartEdit } from '@/contexts/story-chart-edit';
 import { useStoryEmbedData } from '@/contexts/story-embed-data';
 import { useIsDarkMode } from '@/contexts/theme.provider';
 import { useStoryQuerySql } from '@/contexts/story-query-sql';
+import { useStoryQueryFailure } from '@/contexts/story-refresh-history';
 import { useSourceQuery } from '@/hooks/use-source-query';
 import { useStoryChartSourceQuery } from '@/hooks/use-story-chart-source-query';
 import { sortByDateKey } from '@/lib/charts.utils';
@@ -176,6 +178,7 @@ export function StoryChartEmbedShell({
 	);
 
 	const isKpi = chart.chartType === 'kpi_card';
+	const hasRefreshFailure = useStoryQueryFailure(chart.queryId) !== null;
 	const openEditor = (view: ChartEditorView) => {
 		setEditorView(view);
 		setPalette(resolveChartPaletteHexes(paletteScopeRef.current));
@@ -211,14 +214,19 @@ export function StoryChartEmbedShell({
 	) : null;
 
 	return (
-		<div ref={paletteScopeRef} className='my-2 flex flex-col gap-4'>
-			{!isKpi && (canEdit || canViewQuery || dragHandle != null || chart.title) && (
+		<div ref={paletteScopeRef} data-story-query-id={chart.queryId} className='my-2 flex flex-col gap-4'>
+			{!isKpi && (canEdit || canViewQuery || dragHandle != null || chart.title || hasRefreshFailure) && (
 				<div className='flex w-full items-center justify-between gap-2'>
 					<div className='flex min-w-0 flex-1 items-center gap-1'>
 						{dragHandlePlacement === 'leading' ? dragHandle : null}
 						{chart.title ? (
 							<span className='text-sm font-medium text-foreground min-w-0 truncate'>{chart.title}</span>
 						) : null}
+						{hasRefreshFailure && (
+							<span className='ml-1 flex'>
+								<StoryQueryErrorBadge queryId={chart.queryId} />
+							</span>
+						)}
 					</div>
 					<div className='flex shrink-0 items-center gap-1'>
 						{dragHandlePlacement === 'leading' ? null : dragHandle}
@@ -233,13 +241,18 @@ export function StoryChartEmbedShell({
 				) : (
 					children
 				)}
-				{isKpi && ((dragHandlePlacement !== 'leading' && dragHandle != null) || canViewQuery || canEdit) && (
-					<div className='absolute top-0 right-0 z-10 flex items-center gap-1'>
-						{dragHandlePlacement === 'leading' ? null : dragHandle}
-						{queryButton}
-						{editButton}
-					</div>
-				)}
+				{isKpi &&
+					((dragHandlePlacement !== 'leading' && dragHandle != null) ||
+						canViewQuery ||
+						canEdit ||
+						hasRefreshFailure) && (
+						<div className='absolute top-0 right-0 z-10 flex items-center gap-1'>
+							<StoryQueryErrorBadge queryId={chart.queryId} />
+							{dragHandlePlacement === 'leading' ? null : dragHandle}
+							{queryButton}
+							{editButton}
+						</div>
+					)}
 			</div>
 			{canEdit && edit && chart.rawTag && (
 				<ChartConfigEditDialog

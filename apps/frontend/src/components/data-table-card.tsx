@@ -23,6 +23,7 @@ interface DataTableCardProps {
 	chatId?: string;
 	conditionalFormats?: ColumnConditionalFormats;
 	leadingHeader?: ReactNode;
+	titleAccessory?: ReactNode;
 	/** Extra toolbar controls rendered before the copy/download/fullscreen actions. */
 	headerActions?: ReactNode;
 }
@@ -38,6 +39,7 @@ export const DataTableCard = memo(
 		chatId,
 		conditionalFormats,
 		leadingHeader,
+		titleAccessory,
 		headerActions,
 	}: DataTableCardProps) => {
 		const [isFullscreen, setIsFullscreen] = useState(false);
@@ -69,6 +71,7 @@ export const DataTableCard = memo(
 						<div className='flex min-w-0 items-center gap-1'>
 							{leadingHeader}
 							{title ? <span className='text-sm font-medium truncate'>{title}</span> : null}
+							{titleAccessory}
 						</div>
 					) : null}
 					<div className='flex items-center gap-1'>
