@@ -7,9 +7,11 @@ import { SharedStoryPage } from '@/components/shared-story-page';
 import { StandaloneStoryPage } from '@/components/standalone-story-page';
 import { StoryContentLoading } from '@/components/side-panel/story-content-loading';
 import { StoryRouteError } from '@/components/story-access-error';
+import { validateStoryPageSearch } from '@/hooks/use-story-page-view';
 import { trpc } from '@/main';
 
 export const Route = createFileRoute('/_sidebar-layout/stories/$storyId')({
+	validateSearch: validateStoryPageSearch,
 	component: StoryPage,
 	pendingComponent: StoryContentLoading,
 	errorComponent: StoryRouteError,

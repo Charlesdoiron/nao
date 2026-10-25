@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/shared/story-segments';
 import type { LiveQueryConfig, QueryDataMap } from '@/components/story-embeds';
 import type { SelectionData } from '@/components/highlight-bubble';
+import type { StoryQueryRefreshFailure } from '@/lib/story-refresh-history';
 import { StoryChartEmbed, StoryMapEmbed, StoryTableEmbed } from '@/components/story-embeds';
 import { HighlightBubble } from '@/components/highlight-bubble';
 import { StoryTabbedContent } from '@/components/story-tabbed-content';
@@ -18,14 +19,21 @@ import { useStoryViewerLiveSettings } from '@/components/side-panel/hooks/use-st
 import { ShareStoryDialog } from '@/components/share-dialog.story';
 import { StoryPageBody } from '@/components/story-page-body';
 import { StoryPageHeader } from '@/components/story-page-header';
+import { StoryEmbedRefreshError } from '@/components/story-embed-refresh-error';
+import { StoryRefreshHistory } from '@/components/story-refresh-history';
+import { StoryViewTabs } from '@/components/story-view-tabs';
 import { SelectionProvider } from '@/contexts/text-selection';
 import { StoryChartEditProvider } from '@/contexts/story-chart-edit';
 import { StoryMapEditProvider } from '@/contexts/story-map-edit';
 import { StoryTableEditProvider } from '@/contexts/story-table-edit';
+import { StoryRefreshFailuresProvider } from '@/contexts/story-refresh-failures';
 import { chatPendingCitationStore } from '@/stores/chat-pending-citation';
 import { useChatActivity } from '@/hooks/use-chat-activity';
+import { useFixStoryQueryWithNao } from '@/hooks/use-fix-story-query-with-nao';
 import { useRetryStaleStoryRefresh } from '@/hooks/use-retry-stale-story-refresh';
 import { useStoryPageEditor } from '@/hooks/use-story-page-editor';
+import { useStoryPageView } from '@/hooks/use-story-page-view';
+import { useStoryRefreshHistory } from '@/hooks/use-story-refresh-history';
 import { useStoryVersionQueryData } from '@/hooks/use-story-version-query-data';
 import { useTrackViewDuration } from '@/hooks/use-track-view-duration';
 
@@ -75,6 +83,39 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 		isViewingLatest: editor.versionNav.isViewingLatest,
 		latestQueryData: story.queryData as QueryDataMap | null,
 	});
+
+	const pageView = useStoryPageView();
+	const refreshHistory = useStoryRefreshHistory({
+		code: story.code,
+		queryData: story.queryData as QueryDataMap | null,
+		cachedAt: story.cachedAt,
+		scheduleDescription: cacheScheduleDescription,
+		enabled: isLive,
+	});
+	const fixQueryWithNao = useFixStoryQueryWithNao({ chatId, storySlug });
+	const isPreviewMode = editor.viewMode === 'preview';
+	const showRefreshHistory = isLive && isPreviewMode && pageView.view === 'refresh-history';
+	const { selectedQueryId, showRefreshHistory: openRefreshHistory } = pageView;
+	const refreshFailures = useMemo(
+		() =>
+			isLive && editor.versionNav.isViewingLatest
+				? {
+						failures: refreshHistory.latestFailures,
+						focusedQueryId: selectedQueryId,
+						onShowDetails: (failure: StoryQueryRefreshFailure) =>
+							openRefreshHistory({ runId: failure.run.id, queryId: failure.query.queryId }),
+						onFix: (failure: StoryQueryRefreshFailure) => fixQueryWithNao(failure.run, failure.query),
+					}
+				: null,
+		[
+			isLive,
+			editor.versionNav.isViewingLatest,
+			refreshHistory.latestFailures,
+			selectedQueryId,
+			openRefreshHistory,
+			fixQueryWithNao,
+		],
+	);
 
 	const handleSelectionAsk = useCallback(
 		(data: SelectionData) => {
@@ -158,31 +199,56 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 				</div>
 			)}
 
-			<StoryPageBody
-				editor={editor}
-				queryData={queryData}
-				theme={storyTheme}
-				preview={
-					<SelectionProvider key={storySlug}>
-						<HighlightBubble onAsk={handleSelectionAsk} disabled={isChatRunning} />
-						{renderWithChartEditProvider(
-							canEditCharts && editor.versionNav.isViewingLatest && !isChatRunning,
-							{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
-							<PreviewContent
-								code={editor.code}
-								queryData={queryData}
-								theme={storyTheme}
-								chatId={chatId}
-								storySlug={storySlug}
-								cacheSchedule={story.cacheSchedule}
-								filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
-								isDataPending={isQueryDataPending}
-								isViewingLatest={editor.versionNav.isViewingLatest}
-							/>,
-						)}
-					</SelectionProvider>
-				}
-			/>
+			{isLive && isPreviewMode && (
+				<StoryViewTabs
+					activeView={pageView.view}
+					latestRun={refreshHistory.latestRun}
+					onShowStory={() => pageView.showStory()}
+					onShowRefreshHistory={pageView.showRefreshHistory}
+				/>
+			)}
+
+			{showRefreshHistory ? (
+				<StoryRefreshHistory
+					runs={refreshHistory.runs}
+					selectedRunId={pageView.selectedRunId}
+					selectedQueryId={pageView.selectedQueryId}
+					scheduleDescription={cacheScheduleDescription}
+					isRefreshing={isRefreshing}
+					onSelectRun={(runId) => pageView.showRefreshHistory({ runId })}
+					onViewQueryOnStory={pageView.showStory}
+					onFixQuery={fixQueryWithNao}
+					onRefresh={() => handleRefreshData()}
+				/>
+			) : (
+				<StoryPageBody
+					editor={editor}
+					queryData={queryData}
+					theme={storyTheme}
+					preview={
+						<StoryRefreshFailuresProvider value={refreshFailures}>
+							<SelectionProvider key={storySlug}>
+								<HighlightBubble onAsk={handleSelectionAsk} disabled={isChatRunning} />
+								{renderWithChartEditProvider(
+									canEditCharts && editor.versionNav.isViewingLatest && !isChatRunning,
+									{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
+									<PreviewContent
+										code={editor.code}
+										queryData={queryData}
+										theme={storyTheme}
+										chatId={chatId}
+										storySlug={storySlug}
+										cacheSchedule={story.cacheSchedule}
+										filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
+										isDataPending={isQueryDataPending}
+										isViewingLatest={editor.versionNav.isViewingLatest}
+									/>,
+								)}
+							</SelectionProvider>
+						</StoryRefreshFailuresProvider>
+					}
+				/>
+			)}
 
 			<LiveStorySettingsDialog
 				open={isLiveSettingsOpen}
@@ -299,14 +365,16 @@ function PreviewContent({
 				isRefreshing: boolean;
 			},
 		) => (
-			<StoryChartEmbed
-				chart={chart}
-				queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
-				liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
-				hasActiveFilters={hasActiveFilters}
-				isRefreshing={isRefreshing}
-				isDataPending={isDataPending}
-			/>
+			<StoryEmbedRefreshError queryId={chart.queryId}>
+				<StoryChartEmbed
+					chart={chart}
+					queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
+					liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
+					hasActiveFilters={hasActiveFilters}
+					isRefreshing={isRefreshing}
+					isDataPending={isDataPending}
+				/>
+			</StoryEmbedRefreshError>
 		),
 		[isDataPending, noCacheQuery, useLiveUnfiltered],
 	);
@@ -320,14 +388,16 @@ function PreviewContent({
 				isRefreshing,
 			}: { queryData: QueryDataMap | null; hasActiveFilters: boolean; isRefreshing: boolean },
 		) => (
-			<StoryTableEmbed
-				table={table}
-				queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
-				liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
-				hasActiveFilters={hasActiveFilters}
-				isRefreshing={isRefreshing}
-				isDataPending={isDataPending}
-			/>
+			<StoryEmbedRefreshError queryId={table.queryId}>
+				<StoryTableEmbed
+					table={table}
+					queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
+					liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
+					hasActiveFilters={hasActiveFilters}
+					isRefreshing={isRefreshing}
+					isDataPending={isDataPending}
+				/>
+			</StoryEmbedRefreshError>
 		),
 		[isDataPending, noCacheQuery, useLiveUnfiltered],
 	);
@@ -341,15 +411,17 @@ function PreviewContent({
 				isRefreshing,
 			}: { queryData: QueryDataMap | null; hasActiveFilters: boolean; isRefreshing: boolean },
 		) => (
-			<StoryMapEmbed
-				map={map}
-				queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
-				liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
-				hasActiveFilters={hasActiveFilters}
-				isRefreshing={isRefreshing}
-				isDataPending={isDataPending}
-				allowExpand
-			/>
+			<StoryEmbedRefreshError queryId={map.queryId}>
+				<StoryMapEmbed
+					map={map}
+					queryData={useLiveUnfiltered && !hasActiveFilters ? undefined : data}
+					liveQuery={useLiveUnfiltered && !hasActiveFilters ? noCacheQuery : undefined}
+					hasActiveFilters={hasActiveFilters}
+					isRefreshing={isRefreshing}
+					isDataPending={isDataPending}
+					allowExpand
+				/>
+			</StoryEmbedRefreshError>
 		),
 		[isDataPending, noCacheQuery, useLiveUnfiltered],
 	);
