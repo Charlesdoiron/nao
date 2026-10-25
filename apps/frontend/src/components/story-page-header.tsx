@@ -4,6 +4,7 @@ import {
 	Code,
 	Ellipsis,
 	Eye,
+	History,
 	Info,
 	Loader2,
 	MessageSquare,
@@ -15,6 +16,7 @@ import {
 
 import type { StoryViewMode } from '@/components/side-panel/story-viewer.types';
 import type { StoryDownloadOptions } from '@/components/story-download';
+import type { StoryRefreshRunStatus } from '@/lib/story-refresh-history';
 import type { CustomStoryViewModeControls } from '@/components/custom-story/custom-story-view-mode';
 import { CustomStoryViewModeToggle, isCustomStoryViewMode } from '@/components/custom-story/custom-story-view-mode';
 import { EditableStoryTitle } from '@/components/editable-story-title';
@@ -74,6 +76,13 @@ interface ClassicViewModeControls {
 
 type ViewModeControls = ClassicViewModeControls | CustomStoryViewModeControls;
 
+export interface RefreshHistoryControls {
+	isOpen: boolean;
+	onToggle: () => void;
+	latestRun?: { status: StoryRefreshRunStatus; startedAt: Date; failedCount: number; totalCount: number };
+	onViewLatestRun: () => void;
+}
+
 interface VersionControls {
 	currentVersion: number;
 	versionDates: (string | Date)[];
@@ -98,6 +107,7 @@ export interface StoryPageHeaderProps {
 	onOpenAnalytics?: () => void;
 	viewModeControls?: ViewModeControls;
 	versionControls?: VersionControls;
+	refreshHistory?: RefreshHistoryControls;
 }
 
 export function StoryPageHeader({
@@ -115,6 +125,7 @@ export function StoryPageHeader({
 	onOpenAnalytics,
 	viewModeControls,
 	versionControls,
+	refreshHistory,
 }: StoryPageHeaderProps) {
 	useKeyboardShortcuts({
 		'toggle-story-chat': onOpenChat && !isOpeningChat ? onOpenChat : undefined,
@@ -178,6 +189,8 @@ export function StoryPageHeader({
 
 					{live && <LiveStoryControls live={live} />}
 
+					{refreshHistory && <RefreshHistoryButton controls={refreshHistory} />}
+
 					{storyId && <StoryFeedbackButtons storyId={storyId} />}
 
 					{storyId && <StoryFavoritedButton storyId={storyId} />}
@@ -212,8 +225,12 @@ export function StoryPageHeader({
 				</div>
 			</header>
 
-			{live?.lastRefreshFailure && (
-				<StoryRefreshFailureBanner failure={live.lastRefreshFailure} isRetrying={live.isRefreshing} />
+			{refreshHistory?.latestRun && refreshHistory.latestRun.status !== 'success' ? (
+				<StoryPartialRefreshBanner controls={refreshHistory} />
+			) : (
+				live?.lastRefreshFailure && (
+					<StoryRefreshFailureBanner failure={live.lastRefreshFailure} isRetrying={live.isRefreshing} />
+				)
 			)}
 			<StorySubHeader viewModeControls={viewModeControls} versionControls={versionControls} />
 		</div>
@@ -443,6 +460,82 @@ export function StoryRefreshButton({ isRefreshing, onRefresh }: { isRefreshing: 
 			</TooltipTrigger>
 			<TooltipContent>{isRefreshing ? 'Story is refreshing' : 'Refresh data'}</TooltipContent>
 		</Tooltip>
+	);
+}
+
+function RefreshHistoryButton({ controls }: { controls: RefreshHistoryControls }) {
+	const { isOpen, onToggle, latestRun } = controls;
+	const hasLatestFailure = latestRun !== undefined && latestRun.status !== 'success';
+
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					variant='ghost'
+					size='icon-sm'
+					className={cn('relative hover:rounded-full', isOpen && 'rounded-full bg-accent')}
+					onClick={onToggle}
+					aria-label='Refresh history'
+					aria-pressed={isOpen}
+				>
+					<History className='size-3.5' strokeWidth={2.25} />
+					{hasLatestFailure && (
+						<span
+							className={cn(
+								'absolute top-1 right-1 size-1.5 rounded-full ring-2 ring-background',
+								latestRun.status === 'failed' ? 'bg-destructive' : 'bg-amber-500',
+							)}
+						/>
+					)}
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent>
+				{hasLatestFailure ? 'Refresh history · last refresh had errors' : 'Refresh history'}
+			</TooltipContent>
+		</Tooltip>
+	);
+}
+
+function StoryPartialRefreshBanner({ controls }: { controls: RefreshHistoryControls }) {
+	const { latestRun, onViewLatestRun } = controls;
+	const timeAgo = useTimeAgo(latestRun?.startedAt.getTime() ?? Date.now());
+	if (!latestRun) {
+		return null;
+	}
+
+	const isPartial = latestRun.status === 'partial';
+
+	return (
+		<div
+			role='alert'
+			className={cn(
+				'flex items-center gap-2 border-b px-4 py-2 text-xs md:px-6',
+				isPartial ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-destructive/10 text-destructive',
+			)}
+		>
+			<CircleAlert className='size-3.5 shrink-0' />
+			<div className='min-w-0 flex-1'>
+				<span className='font-medium'>
+					{isPartial
+						? `${latestRun.failedCount} of ${latestRun.totalCount} queries failed in the last refresh.`
+						: `The last refresh failed: none of the ${latestRun.totalCount} queries refreshed.`}
+				</span>{' '}
+				<span>
+					{isPartial
+						? 'The other blocks are up to date; failed blocks keep their last data.'
+						: 'All blocks keep their last data.'}
+				</span>
+				<span className='ml-1 opacity-70'>{timeAgo.humanReadable}</span>
+			</div>
+			<Button
+				variant='ghost'
+				size='sm'
+				className='h-6 shrink-0 rounded-full px-2 text-xs hover:bg-current/10'
+				onClick={onViewLatestRun}
+			>
+				View details
+			</Button>
+		</div>
 	);
 }
 

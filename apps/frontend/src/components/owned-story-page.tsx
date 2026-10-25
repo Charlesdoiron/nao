@@ -6,6 +6,8 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ParsedChartBlock, ParsedMapBlock, ParsedTableBlock } from '@nao/shared/story-segments';
 import type { LiveQueryConfig, QueryDataMap } from '@/components/story-embeds';
 import type { SelectionData } from '@/components/highlight-bubble';
+import type { RefreshHistoryControls } from '@/components/story-page-header';
+import type { StoryRefreshHistoryValue } from '@/contexts/story-refresh-history';
 import { StoryChartEmbed, StoryMapEmbed, StoryTableEmbed } from '@/components/story-embeds';
 import { HighlightBubble } from '@/components/highlight-bubble';
 import { StoryTabbedContent } from '@/components/story-tabbed-content';
@@ -18,6 +20,10 @@ import { useStoryViewerLiveSettings } from '@/components/side-panel/hooks/use-st
 import { ShareStoryDialog } from '@/components/share-dialog.story';
 import { StoryPageBody } from '@/components/story-page-body';
 import { StoryPageHeader } from '@/components/story-page-header';
+import { StoryRefreshHistoryPanel } from '@/components/story-refresh-history-panel';
+import { StoryRefreshHistoryContext } from '@/contexts/story-refresh-history';
+import { useStoryRefreshHistoryController } from '@/hooks/use-story-refresh-history';
+import { countRunQueries } from '@/lib/story-refresh-history';
 import { SelectionProvider } from '@/contexts/text-selection';
 import { StoryChartEditProvider } from '@/contexts/story-chart-edit';
 import { StoryMapEditProvider } from '@/contexts/story-map-edit';
@@ -100,119 +106,158 @@ export function OwnedStoryPage({ chatId, storySlug }: { chatId: string; storySlu
 
 	const canEditCharts = !story.archivedAt;
 	const storyTheme = useStoryThemeForCurrentMode(story.theme);
+	const refreshHistory = useStoryRefreshHistoryController({
+		chatId,
+		storySlug,
+		code: editor.code,
+		queryData,
+		scheduleDescription: cacheScheduleDescription,
+	});
+	const refreshHistoryControls = useRefreshHistoryControls(refreshHistory);
 
 	return (
-		<div className='flex flex-col flex-1 h-full overflow-hidden bg-background min-w-0'>
-			<StoryPageHeader
-				title={story.title}
-				onOpenChat={handleOpenChat}
-				live={{
-					isLive,
-					cachedAt: story.cachedAt,
-					lastRefreshFailure: story.lastRefreshFailure,
-					isRefreshing,
-					isUpdating,
-					onRefresh: () => handleRefreshData(),
-					onOpenSettings: () => setIsLiveSettingsOpen(true),
-				}}
-				download={{ chatId, storySlug, isOwner: true }}
-				storyId={storyId}
-				canRename
-				isShared={isShared}
-				onShare={() => setIsShareDialogOpen(true)}
-				onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-				viewModeControls={{
-					viewMode: editor.viewMode,
-					onViewModeChange: editor.setViewMode,
-					canEdit: canEditCharts,
-					isAgentRunning: isChatRunning,
-					isCodeDirty: editor.isCodeDirty,
-					isCodeValid: editor.isCodeValid,
-					onSave: editor.handleSave,
-					onCancel: editor.handleCancel,
-					isSaving: editor.isSaving,
-				}}
-				versionControls={{
-					currentVersion: editor.versionNav.currentVersion,
-					versionDates: editor.versionNav.versionDates,
-					versionDate: editor.versionNav.versionDate,
-					isViewingLatest: editor.versionNav.isViewingLatest,
-					onSelectVersion: editor.versionNav.goToVersion,
-					onRestore: editor.handleRestore,
-				}}
-			/>
+		<StoryRefreshHistoryContext.Provider value={refreshHistory}>
+			<div className='flex flex-col flex-1 h-full overflow-hidden bg-background min-w-0'>
+				<StoryPageHeader
+					title={story.title}
+					onOpenChat={handleOpenChat}
+					live={{
+						isLive,
+						cachedAt: story.cachedAt,
+						lastRefreshFailure: story.lastRefreshFailure,
+						isRefreshing,
+						isUpdating,
+						onRefresh: () => handleRefreshData(),
+						onOpenSettings: () => setIsLiveSettingsOpen(true),
+					}}
+					download={{ chatId, storySlug, isOwner: true }}
+					storyId={storyId}
+					canRename
+					isShared={isShared}
+					onShare={() => setIsShareDialogOpen(true)}
+					onOpenAnalytics={() => setIsAnalyticsOpen(true)}
+					viewModeControls={{
+						viewMode: editor.viewMode,
+						onViewModeChange: editor.setViewMode,
+						canEdit: canEditCharts,
+						isAgentRunning: isChatRunning,
+						isCodeDirty: editor.isCodeDirty,
+						isCodeValid: editor.isCodeValid,
+						onSave: editor.handleSave,
+						onCancel: editor.handleCancel,
+						isSaving: editor.isSaving,
+					}}
+					versionControls={{
+						currentVersion: editor.versionNav.currentVersion,
+						versionDates: editor.versionNav.versionDates,
+						versionDate: editor.versionNav.versionDate,
+						isViewingLatest: editor.versionNav.isViewingLatest,
+						onSelectVersion: editor.versionNav.goToVersion,
+						onRestore: editor.handleRestore,
+					}}
+					refreshHistory={refreshHistoryControls}
+				/>
 
-			{story.archivedAt && (
-				<div className='flex items-center justify-between gap-3 border-b bg-muted/50 px-4 py-2 md:px-6'>
-					<span className='text-xs text-muted-foreground'>This story has been archived.</span>
-					<Button
-						variant='outline'
-						size='sm'
-						className='gap-1.5 shrink-0 rounded-full'
-						onClick={() => unarchiveMutation.mutate({ chatId, storySlug })}
-						disabled={unarchiveMutation.isPending}
-					>
-						<ArchiveRestoreIcon className='size-3' />
-						<span>Unarchive</span>
-					</Button>
-				</div>
-			)}
-
-			<StoryPageBody
-				editor={editor}
-				queryData={queryData}
-				theme={storyTheme}
-				preview={
-					<SelectionProvider key={storySlug}>
-						<HighlightBubble onAsk={handleSelectionAsk} disabled={isChatRunning} />
-						{renderWithChartEditProvider(
-							canEditCharts && editor.versionNav.isViewingLatest && !isChatRunning,
-							{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
-							<PreviewContent
-								code={editor.code}
-								queryData={queryData}
-								theme={storyTheme}
-								chatId={chatId}
-								storySlug={storySlug}
-								cacheSchedule={story.cacheSchedule}
-								filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
-								isDataPending={isQueryDataPending}
-								isViewingLatest={editor.versionNav.isViewingLatest}
-							/>,
+				<div className='flex flex-1 min-h-0'>
+					<div className='flex flex-1 min-w-0 flex-col'>
+						{story.archivedAt && (
+							<div className='flex items-center justify-between gap-3 border-b bg-muted/50 px-4 py-2 md:px-6'>
+								<span className='text-xs text-muted-foreground'>This story has been archived.</span>
+								<Button
+									variant='outline'
+									size='sm'
+									className='gap-1.5 shrink-0 rounded-full'
+									onClick={() => unarchiveMutation.mutate({ chatId, storySlug })}
+									disabled={unarchiveMutation.isPending}
+								>
+									<ArchiveRestoreIcon className='size-3' />
+									<span>Unarchive</span>
+								</Button>
+							</div>
 						)}
-					</SelectionProvider>
-				}
-			/>
 
-			<LiveStorySettingsDialog
-				open={isLiveSettingsOpen}
-				onOpenChange={setIsLiveSettingsOpen}
-				chatId={chatId}
-				storySlug={storySlug}
-				isLive={isLive}
-				isLiveTextDynamic={isLiveTextDynamic}
-				cacheSchedule={liveCacheSchedule}
-				cacheScheduleDescription={cacheScheduleDescription}
-				isUpdating={isUpdating}
-				onSaveSettings={handleSaveSettings}
-			/>
+						<StoryPageBody
+							editor={editor}
+							queryData={queryData}
+							theme={storyTheme}
+							preview={
+								<SelectionProvider key={storySlug}>
+									<HighlightBubble onAsk={handleSelectionAsk} disabled={isChatRunning} />
+									{renderWithChartEditProvider(
+										canEditCharts && editor.versionNav.isViewingLatest && !isChatRunning,
+										{ chatId, storySlug, storyTitle: story.title, storyCode: editor.code },
+										<PreviewContent
+											code={editor.code}
+											queryData={queryData}
+											theme={storyTheme}
+											chatId={chatId}
+											storySlug={storySlug}
+											cacheSchedule={story.cacheSchedule}
+											filtersEnabled={editor.versionNav.isViewingLatest && !editor.isCodeDirty}
+											isDataPending={isQueryDataPending}
+											isViewingLatest={editor.versionNav.isViewingLatest}
+										/>,
+									)}
+								</SelectionProvider>
+							}
+						/>
+					</div>
+					{refreshHistory.isOpen && <StoryRefreshHistoryPanel history={refreshHistory} />}
+				</div>
 
-			<ShareStoryDialog
-				open={isShareDialogOpen}
-				onOpenChange={setIsShareDialogOpen}
-				chatId={chatId}
-				storySlug={storySlug}
-			/>
+				<LiveStorySettingsDialog
+					open={isLiveSettingsOpen}
+					onOpenChange={setIsLiveSettingsOpen}
+					chatId={chatId}
+					storySlug={storySlug}
+					isLive={isLive}
+					isLiveTextDynamic={isLiveTextDynamic}
+					cacheSchedule={liveCacheSchedule}
+					cacheScheduleDescription={cacheScheduleDescription}
+					isUpdating={isUpdating}
+					onSaveSettings={handleSaveSettings}
+				/>
 
-			<AssetAnalyticsDialog
-				open={isAnalyticsOpen}
-				onOpenChange={setIsAnalyticsOpen}
-				assetType='story'
-				storyId={storyId ?? undefined}
-				chatId={chatId}
-			/>
-		</div>
+				<ShareStoryDialog
+					open={isShareDialogOpen}
+					onOpenChange={setIsShareDialogOpen}
+					chatId={chatId}
+					storySlug={storySlug}
+				/>
+
+				<AssetAnalyticsDialog
+					open={isAnalyticsOpen}
+					onOpenChange={setIsAnalyticsOpen}
+					assetType='story'
+					storyId={storyId ?? undefined}
+					chatId={chatId}
+				/>
+			</div>
+		</StoryRefreshHistoryContext.Provider>
 	);
+}
+
+function useRefreshHistoryControls(history: StoryRefreshHistoryValue): RefreshHistoryControls {
+	const [latestRun] = history.runs;
+	const { open, toggle, isOpen } = history;
+
+	return useMemo(() => {
+		const counts = latestRun ? countRunQueries(latestRun) : null;
+		return {
+			isOpen,
+			onToggle: toggle,
+			latestRun:
+				latestRun && counts
+					? {
+							status: latestRun.status,
+							startedAt: latestRun.startedAt,
+							failedCount: counts.failed,
+							totalCount: counts.total,
+						}
+					: undefined,
+			onViewLatestRun: () => (latestRun ? open({ runId: latestRun.id }) : open()),
+		};
+	}, [isOpen, latestRun, open, toggle]);
 }
 
 function renderWithChartEditProvider(
