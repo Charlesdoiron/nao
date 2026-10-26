@@ -196,7 +196,7 @@ function ChatInputBase({
 		enabled: hasProject && selectedModel?.provider === 'nao',
 		refetchOnWindowFocus: false,
 	});
-	const allowanceExhaustedScope = parseChatAllowanceExhaustedError(error);
+	const allowanceExhaustedScope = hasProject ? null : parseChatAllowanceExhaustedError(error);
 	const isSendBlocked =
 		!!parseBudgetError(error) ||
 		!!allowanceExhaustedScope ||
@@ -586,7 +586,7 @@ function ChatAllowanceExhausted({ scope }: { scope: ChatAllowanceExhaustedScope 
 		<Callout icon={MessageCircleOff} className='mb-3 rounded-2xl px-4 py-3 text-sm shadow-xs' role='status'>
 			<p className='font-medium text-foreground'>Guided setup chat limit reached</p>
 			<p className='mt-1 text-muted-foreground'>
-				Your progress is safe, and setup actions on this page still work. Contact support if you need help.
+				Your progress is safe. Contact support if you need help completing setup.
 			</p>
 			<ContactSupportButton>Contact support</ContactSupportButton>
 		</Callout>

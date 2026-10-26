@@ -21,11 +21,14 @@ const mocks = vi.hoisted(() => {
 	const invalidateQueries = vi.fn();
 	return {
 		agentConfig: null as TestAgentConfig | null,
+		chatError: undefined as Error | undefined,
+		clearError: vi.fn(),
 		currentProject: { id: 'project-id' } as { id: string } | null,
 		initialModel: { provider: 'nao', modelId: 'managed-model' } as LlmSelectedModel,
 		invalidateQueries,
 		navigate: vi.fn(),
 		queryClient: { invalidateQueries },
+		sendMessage: vi.fn(),
 		setChat: vi.fn(),
 		transportConfig: null as TestTransportConfig | null,
 	};
@@ -43,9 +46,9 @@ vi.mock('@ai-sdk/react', () => ({
 	},
 	useChat: () => ({
 		status: 'ready',
-		error: undefined,
-		clearError: vi.fn(),
-		sendMessage: vi.fn(),
+		error: mocks.chatError,
+		clearError: mocks.clearError,
+		sendMessage: mocks.sendMessage,
 		setMessages: vi.fn(),
 		messages: [],
 	}),
@@ -106,6 +109,7 @@ vi.mock('@/lib/ai', () => ({
 	getTextFromUserMessageOrThrow: () => 'question',
 	NEW_CHAT_ID: 'new',
 	parseBudgetError: () => false,
+	parseChatAllowanceExhaustedError: (error: Error | undefined) => (error ? 'example' : null),
 	parseManagedCreditsError: () => false,
 	resolveImagesFromMessage: async () => [],
 }));
@@ -179,7 +183,10 @@ vi.mock('@/stores/chat-message-queue', () => ({
 describe('useAgent managed credit refresh', () => {
 	beforeEach(() => {
 		mocks.agentConfig = null;
+		mocks.chatError = undefined;
+		mocks.clearError.mockReset();
 		mocks.currentProject = { id: 'project-id' };
+		mocks.sendMessage.mockReset();
 		mocks.transportConfig = null;
 		mocks.invalidateQueries.mockReset();
 	});
@@ -213,5 +220,21 @@ describe('useAgent managed credit refresh', () => {
 		}) as { body: { model?: LlmSelectedModel } };
 
 		expect(request.body.model).toBeUndefined();
+	});
+
+	it('retries a project-less allowance error after the user creates a project', async () => {
+		mocks.currentProject = null;
+		mocks.chatError = new Error('allowance exhausted');
+		const { result, rerender } = renderHook(() => useAgent());
+
+		await act(() => result.current.queueOrSendMessage({ text: 'before project' }));
+		expect(mocks.sendMessage).not.toHaveBeenCalled();
+
+		mocks.currentProject = { id: 'project-id' };
+		rerender();
+		await act(() => result.current.queueOrSendMessage({ text: 'after project' }));
+
+		expect(mocks.clearError).toHaveBeenCalledOnce();
+		expect(mocks.sendMessage).toHaveBeenCalledWith({ text: 'after project', files: undefined });
 	});
 });

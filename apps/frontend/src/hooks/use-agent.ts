@@ -433,13 +433,13 @@ export const useAgent = ({
 
 	const handleSendMessage = useCallback<UseChatHelpers<UIMessage>['sendMessage']>(
 		async (...args) => {
-			if (parseChatAllowanceExhaustedError(error)) {
+			if (!hasProject && parseChatAllowanceExhaustedError(error)) {
 				return;
 			}
 			clearError();
 			return sendMessage(...args);
 		},
-		[sendMessage, clearError, error],
+		[sendMessage, clearError, error, hasProject],
 	);
 
 	const queueOrSendMessage = useCallback(

@@ -20,13 +20,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { usePermissions } from '@/hooks/use-permissions';
 import { useUsagePeriodSettings } from '@/hooks/use-usage-period-settings';
 import { trpc } from '@/main';
-import { requireContextAdminOrAdmin } from '@/lib/route-guards';
+import { requireNonViewer } from '@/lib/route-guards';
 import { buildUserUsageChart } from '@/lib/usage-by-user';
 import { formatUsageBucketLabel } from '@/lib/usage-date';
 import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/_sidebar-layout/settings/usage')({
-	beforeLoad: requireContextAdminOrAdmin,
+	beforeLoad: requireNonViewer,
 	validateSearch: validateUsageSearchWithStoredFilters,
 	component: UsagePage,
 });

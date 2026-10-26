@@ -84,12 +84,17 @@ describe('getProjectAvailableModels', () => {
 				category: 'chat',
 			}),
 		).resolves.not.toBeNull();
-		await expect(
-			resolveProviderModel('project-1', 'nao', 'gpt-5.6-terra', true, {
+		for (const [legacyModelId, currentModelId] of [
+			['gpt-5.6-luna', 'gpt-6-luna'],
+			['gpt-5.6-terra', 'gpt-6-sol'],
+			['gpt-5.6-sol', 'gpt-6-sol'],
+		]) {
+			const resolved = await resolveProviderModel('project-1', 'nao', legacyModelId, true, {
 				userId: 'user-1',
 				category: 'chat',
-			}),
-		).resolves.toBeNull();
+			});
+			expect(resolved?.model.modelId).toBe(currentModelId);
+		}
 
 		mocks.getProjectLlmConfigs.mockResolvedValue([
 			{

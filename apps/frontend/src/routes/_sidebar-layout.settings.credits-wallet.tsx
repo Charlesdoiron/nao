@@ -7,12 +7,17 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { requireOrganizationAdminCloud } from '@/lib/route-guards';
 
 export const Route = createFileRoute('/_sidebar-layout/settings/credits-wallet')({
-	beforeLoad: async () => {
+	beforeLoad: async ({ search }) => {
 		const config = await requireOrganizationAdminCloud();
 		if (config.cloudBillingEnabled) {
 			throw redirect({
 				to: '/settings/organization/billing',
-				search: { checkout: undefined, portal: undefined, creditCheckout: undefined },
+				search: {
+					checkout: undefined,
+					portal: undefined,
+					creditCheckout: undefined,
+					creditsTab: search.creditsTab,
+				},
 			});
 		}
 	},

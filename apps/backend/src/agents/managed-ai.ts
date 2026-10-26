@@ -34,6 +34,12 @@ export function isManagedAiEnabled(): boolean {
 	);
 }
 
+const LEGACY_MANAGED_MODEL_ALIASES: Record<string, string> = {
+	'gpt-5.6-luna': 'gpt-6-luna',
+	'gpt-5.6-terra': 'gpt-6-sol',
+	'gpt-5.6-sol': 'gpt-6-sol',
+};
+
 /** Serves the `nao` models on nao's own OpenAI key and bills every call to the organization's credit wallet. */
 export const managedAiSource: ModelSource = {
 	managed: true,
@@ -48,14 +54,19 @@ export const managedAiSource: ModelSource = {
 
 	async resolveModel({ projectId, provider, modelId, usageContext }) {
 		const apiKey = env.NAO_MANAGED_OPENAI_API_KEY;
-		if (!isManagedAiEnabled() || !apiKey || !usageContext?.userId || !isManagedModel(provider, modelId)) {
+		const resolvedModelId = LEGACY_MANAGED_MODEL_ALIASES[modelId] ?? modelId;
+		if (!isManagedAiEnabled() || !apiKey || !usageContext?.userId || !isManagedModel(provider, resolvedModelId)) {
 			return null;
 		}
 		const orgId = usageContext.orgId ?? (await projectQueries.getProjectById(projectId))?.orgId ?? undefined;
-		const result = createProviderModel(provider, { apiKey }, modelId);
+		const result = createProviderModel(provider, { apiKey }, resolvedModelId);
 		return {
 			...result,
-			model: withManagedAiUsageMetering(result.model, provider, modelId, { ...usageContext, projectId, orgId }),
+			model: withManagedAiUsageMetering(result.model, provider, resolvedModelId, {
+				...usageContext,
+				projectId,
+				orgId,
+			}),
 		};
 	},
 };
