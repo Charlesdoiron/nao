@@ -31,3 +31,7 @@ export type CreditLedgerEntryType = (typeof CREDIT_LEDGER_ENTRY_TYPES)[number];
 
 export const CREDIT_GRANT_TYPES = ['organization_setup', 'user_join'] as const;
 export type CreditGrantType = (typeof CREDIT_GRANT_TYPES)[number];
+
+export function creditGrantIdempotencyKey(grantType: CreditGrantType, subjectId: string): string {
+	return grantType === 'organization_setup' ? `organization-setup:v0:${subjectId}` : `user-join:v0:${subjectId}`;
+}

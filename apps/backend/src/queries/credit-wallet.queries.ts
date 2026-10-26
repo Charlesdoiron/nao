@@ -2,7 +2,7 @@ import { and, countDistinct, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
-import type { CreditGrantType } from '../types/managed-ai-usage';
+import { creditGrantIdempotencyKey, type CreditGrantType } from '../types/managed-ai-usage';
 import * as userQueries from './user.queries';
 
 export type CreditLedgerCursor = { createdAt: Date; id: string };
@@ -195,10 +195,6 @@ export interface CreditLedgerGroup {
 	entries: (typeof s.creditLedger.$inferSelect)[];
 	grantedForUserName: string | null;
 	usageUserName: string | null;
-}
-
-function creditGrantIdempotencyKey(grantType: CreditGrantType, subjectId: string): string {
-	return grantType === 'organization_setup' ? `organization-setup:v0:${subjectId}` : `user-join:v0:${subjectId}`;
 }
 
 function getGrantedForUserId(entry: typeof s.creditLedger.$inferSelect): string | null {

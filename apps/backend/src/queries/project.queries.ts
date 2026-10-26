@@ -20,7 +20,7 @@ import { and, asc, desc, eq, gt, gte, isNotNull, lte, ne, or, type SQL, sql } fr
 
 import type { AgentSettings, DBProject, DBProjectMember, NewProject, NewProjectMember } from '../db/abstractSchema';
 import s from '../db/abstractSchema';
-import { db, type DBExecutor, type DBTransaction } from '../db/db';
+import { db, type DBExecutor, type DBTransaction, type Lockable } from '../db/db';
 import dbConfig, { Dialect } from '../db/dbConfig';
 import { env, isCloud, isCloudBillingEnabled } from '../env';
 import { CLOUD_TRIAL_PROVISIONING_JOB_NAME } from '../types/billing';
@@ -458,8 +458,6 @@ const mutateCustomBoundaries = async (
 
 const lockForUpdate = <Query extends { execute(): unknown }>(query: Query): Query =>
 	dbConfig.dialect === Dialect.Postgres ? (query as Query & Lockable<Query>).for('update') : query;
-
-type Lockable<Query> = { for(strength: 'update'): Query };
 
 const createProjectWithDefaultGroup = (
 	project: NewProject,
