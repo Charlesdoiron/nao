@@ -10,7 +10,7 @@ export type TokenChartDisplayMode = 'tokens' | 'dollars';
 
 export type ReplayHighlight = 'tool-error' | 'feedback';
 
-export type ReplayOrigin = 'recommendations';
+export type ReplayOrigin = 'recommendations' | 'tests';
 
 export type UsageRouteSearch = {
 	provider: LlmProvider | 'all';
@@ -29,6 +29,7 @@ export type UsageRouteSearch = {
 	origin: ReplayOrigin | undefined;
 	recoId: string | undefined;
 	recoTab: RecommendationTab | undefined;
+	testRunId: string | undefined;
 };
 
 export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
@@ -48,6 +49,7 @@ export const DEFAULT_USAGE_SEARCH: UsageRouteSearch = {
 	origin: undefined,
 	recoId: undefined,
 	recoTab: undefined,
+	testRunId: undefined,
 };
 
 const tokenViews = ['tokens', 'dollars'] as const satisfies readonly TokenChartDisplayMode[];
@@ -117,7 +119,7 @@ export function clearStoredUsagePeriodSelection(projectId: string): void {
 }
 
 const replayHighlights = ['tool-error', 'feedback'] as const satisfies readonly ReplayHighlight[];
-const replayOrigins = ['recommendations'] as const satisfies readonly ReplayOrigin[];
+const replayOrigins = ['recommendations', 'tests'] as const satisfies readonly ReplayOrigin[];
 
 export function validateUsageSearch(search: Record<string, unknown>): UsageRouteSearch {
 	const period = parsePeriodSearch(search);
@@ -140,6 +142,7 @@ export function validateUsageSearch(search: Record<string, unknown>): UsageRoute
 		origin: parseOneOf(search.origin, replayOrigins),
 		recoId: typeof search.recoId === 'string' && search.recoId.length > 0 ? search.recoId : undefined,
 		recoTab: parseOneOf(search.recoTab, RECOMMENDATION_TABS),
+		testRunId: typeof search.testRunId === 'string' && search.testRunId.length > 0 ? search.testRunId : undefined,
 	};
 }
 
