@@ -69,6 +69,11 @@ import type Stripe from 'stripe';
 
 import { __reloadEnvForTesting } from '../src/env';
 import {
+	createCreditTopUpCheckoutSession,
+	getCreditTopUpPurchase,
+	validateCreditTopUpConfiguration,
+} from '../src/services/credit-top-up.service';
+import {
 	__resetStripeForTesting,
 	cloudSubscriptionProjection,
 	createCloudCheckoutSession,
@@ -77,14 +82,12 @@ import {
 	createCloudPortalSession,
 	createCloudResubscribeSession,
 	createCloudTrialPlaceholderSubscription,
-	createCreditTopUpCheckoutSession,
 	findCloudSubscription,
 	findManagedCloudSubscription,
 	getCloudBillingPlans,
 	getCloudPrice,
 	getCloudSubscriptionCurrency,
 	getCloudUpcomingInvoice,
-	getCreditTopUpPurchase,
 	getStripeClient,
 	listCloudInvoices,
 	listCloudSubscriptions,
@@ -347,6 +350,15 @@ describe('validateCloudBillingConfiguration', () => {
 		}));
 
 		await expect(validateCloudBillingConfiguration()).rejects.toThrow('fixed $0 recurring licensed Price');
+	});
+});
+
+describe('validateCreditTopUpConfiguration', () => {
+	it('validates distinct active credit Products', async () => {
+		await expect(validateCreditTopUpConfiguration()).resolves.toBeUndefined();
+
+		expect(stripeMocks.retrieveProduct).toHaveBeenCalledWith('prod_credits');
+		expect(stripeMocks.retrieveProduct).toHaveBeenCalledWith('prod_platform_fee');
 	});
 });
 

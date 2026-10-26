@@ -13,6 +13,7 @@ import { HandlerError } from '../utils/error';
 import { logger, serializeError } from '../utils/logger';
 import { reconcileCloudBillingCustomer } from './billing-reconciliation.service';
 import { isActiveTrialWithoutPaidPlan } from './cloud-billing-access.service';
+import { createCreditTopUpCheckoutSession, getCreditTopUpPurchase } from './credit-top-up.service';
 import { issueCreditPurchase } from './credit-wallet.service';
 import {
 	createCloudCheckoutSession,
@@ -20,9 +21,7 @@ import {
 	createCloudPaymentMethodSession,
 	createCloudPortalSession,
 	createCloudResubscribeSession,
-	createCreditTopUpCheckoutSession,
 	getCloudUpcomingInvoice,
-	getCreditTopUpPurchase,
 	listCloudInvoices,
 	resumeCloudSubscription,
 } from './stripe.service';

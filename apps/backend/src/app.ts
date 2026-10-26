@@ -87,6 +87,7 @@ import { logLicenseStatus } from './services/license-startup';
 import { mattermostService } from './services/mattermost';
 import { pingLicensesServer } from './services/ping';
 import { posthog, PostHogEvent } from './services/posthog';
+import { validateCreditTopUpConfiguration } from './services/credit-top-up.service';
 import { ensureRecurring, registerJob, startScheduler, stopScheduler } from './services/scheduler.service';
 import { slackService } from './services/slack';
 import { seedSlackConfigFromEnv } from './services/slack-env-seed';
@@ -453,7 +454,7 @@ app.setNotFoundHandler((request, reply) => {
 export const startServer = async (opts: { port: number; host: string }) => {
 	if (isCloud) {
 		if (isCloudBillingEnabled()) {
-			await validateCloudBillingConfiguration();
+			await Promise.all([validateCloudBillingConfiguration(), validateCreditTopUpConfiguration()]);
 		}
 		try {
 			await ensureSystemExampleProject();

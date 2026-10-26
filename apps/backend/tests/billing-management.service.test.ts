@@ -35,10 +35,13 @@ vi.mock('../src/services/cloud-billing-access.service', () => ({
 		billing?.billingPlan == null && billing?.billingStatus === 'trialing',
 }));
 
+vi.mock('../src/services/credit-top-up.service', () => ({
+	createCreditTopUpCheckoutSession: mocks.createCreditTopUpCheckout,
+}));
+
 vi.mock('../src/services/stripe.service', () => ({
 	CloudInitialCheckoutUnavailableError: class extends Error {},
 	createCloudCheckoutSession: mocks.createCheckout,
-	createCreditTopUpCheckoutSession: mocks.createCreditTopUpCheckout,
 	createCloudCustomer: mocks.createCustomer,
 	createCloudPaymentMethodSession: mocks.createPaymentMethod,
 	createCloudPortalSession: mocks.createPortal,

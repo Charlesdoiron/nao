@@ -45,9 +45,15 @@ vi.mock('../src/services/billing-reconciliation.service', () => ({
 	reconcileCloudBillingCustomer: mocks.reconcileCustomer,
 }));
 
+vi.mock('../src/services/credit-top-up.service', () => ({
+	getCreditTopUpPurchase: mocks.getCreditTopUpPurchase,
+	isCreditTopUpCheckoutSession: mocks.isCreditTopUp,
+	isCreditTopUpPaymentIntent: (paymentIntent: { metadata?: Record<string, string> }) =>
+		paymentIntent.metadata?.nao_checkout_kind === 'credit_top_up',
+}));
+
 vi.mock('../src/services/stripe.service', () => ({
 	findCloudSubscription: mocks.findSubscription,
-	getCreditTopUpPurchase: mocks.getCreditTopUpPurchase,
 	findManagedCloudSubscription: mocks.findManagedSubscription,
 	getCloudCheckoutSubscription: mocks.getCheckoutSubscription,
 	getStripeCharge: mocks.getCharge,
@@ -57,9 +63,6 @@ vi.mock('../src/services/stripe.service', () => ({
 	getStripeInvoice: mocks.getInvoice,
 	getStripePaymentIntent: mocks.getPaymentIntent,
 	getStripePaymentMethod: mocks.getPaymentMethod,
-	isCreditTopUpCheckoutSession: mocks.isCreditTopUp,
-	isCreditTopUpPaymentIntent: (paymentIntent: { metadata?: Record<string, string> }) =>
-		paymentIntent.metadata?.nao_checkout_kind === 'credit_top_up',
 }));
 
 import { stripeWebhookProcessHandler } from '../src/handlers/stripe-webhook.handler';
