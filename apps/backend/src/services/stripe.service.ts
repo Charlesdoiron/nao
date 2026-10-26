@@ -896,7 +896,7 @@ function checkoutTrialDaysMessage(trialDays: number): string {
 }
 
 function checkoutImmediateStartMessage(): string {
-	return 'Less than 48 hours remain on your free trial, so your subscription starts when you confirm. The recurring price shown, including any promotion code discount, is charged today.';
+	return 'Not enough time remains to preserve your free trial in Checkout, so your subscription starts when you confirm. The recurring price shown, including any promotion code discount, is charged today.';
 }
 
 function stripeTimestamp(date: Date): number {
