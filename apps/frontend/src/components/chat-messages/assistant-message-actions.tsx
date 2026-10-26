@@ -1,5 +1,16 @@
 import { useState } from 'react';
-import { ThumbsUp, ThumbsDown, Copy, Check, Ellipsis, ClipboardCopy, FileText, FileDown, Loader2 } from 'lucide-react';
+import {
+	ThumbsUp,
+	ThumbsDown,
+	Copy,
+	Check,
+	Ellipsis,
+	ClipboardCopy,
+	FileText,
+	FileDown,
+	FlaskConical,
+	Loader2,
+} from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import type { UIMessage } from '@nao/backend/chat';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -15,6 +26,9 @@ import { downloadBase64File, downloadTextFile, toFileSlug } from '@/lib/export-c
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { SaveAsTestDialog } from '@/components/chat-messages/save-as-test-dialog';
+import { usePermissions } from '@/hooks/use-permissions';
+import { getTestDraft } from '@/lib/test-draft';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -39,8 +53,11 @@ export function AssistantMessageActions({
 	const [includePython, setIncludePython] = useState(true);
 	const [isExportingPdf, setIsExportingPdf] = useState(false);
 	const [exportError, setExportError] = useState<string | null>(null);
+	const [isSaveAsTestOpen, setIsSaveAsTestOpen] = useState(false);
 	const { isCopied, copy } = useCopyToClipboard();
 	const getAgentMessages = useAgentMessagesGetter();
+	const { canManageTests } = usePermissions();
+	const testDraft = canManageTests ? getTestDraft(getAgentMessages(), message) : null;
 	const { data: chat } = useChatQuery({ chatId, select: selectChatExportMetadata });
 
 	const chatTitle = chat?.title ?? 'nao chat';
@@ -209,6 +226,15 @@ export function AssistantMessageActions({
 							{isExportingPdf ? <Loader2 className='animate-spin' /> : <FileDown />}
 							<span>{isExportingPdf ? 'Generating PDF…' : 'Export chat to PDF'}</span>
 						</DropdownMenuItem>
+						{testDraft && (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem onSelect={() => setIsSaveAsTestOpen(true)}>
+									<FlaskConical />
+									<span>Save as test</span>
+								</DropdownMenuItem>
+							</>
+						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 
@@ -226,6 +252,10 @@ export function AssistantMessageActions({
 				isPending={submitFeedback.isPending}
 				vote={feedbackDialogVote}
 			/>
+
+			{testDraft && (
+				<SaveAsTestDialog draft={testDraft} open={isSaveAsTestOpen} onOpenChange={setIsSaveAsTestOpen} />
+			)}
 		</>
 	);
 }
