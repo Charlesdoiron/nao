@@ -1,4 +1,4 @@
-import { type CustomBoundarySet, normalizeCitationMarkers } from '@nao/shared';
+import { type CustomBoundarySet, isSkillGranted, normalizeCitationMarkers } from '@nao/shared';
 import { fileExtension } from '@nao/shared/attachments';
 import { markSupersededExecuteSqlParts } from '@nao/shared/execute-sql-parts';
 import { story } from '@nao/shared/tools';
@@ -82,10 +82,11 @@ import { sanitizeTitle, TITLE_MAX_OUTPUT_TOKENS, titleFromPrompt, titleGeneratio
 import { isStoragePath } from '../utils/tools';
 import { formatErrorMessageForUI, truncateMiddle } from '../utils/utils';
 import { replaceForeignWebToolParts } from '../utils/web-tool-parts';
+import { assertUserIsActive } from './account-status.service';
 import { listChartPlugins } from './chart-plugin';
 import { appendChatArtifacts, collapseStoryToolOutputs, safeGetChatArtifacts } from './chat-artifacts';
 import { assertProjectCloudBillingAccess } from './cloud-billing-access.service';
-import { compactionService } from './compaction';
+import { compactionService, RunCompaction } from './compaction';
 import { hasFeature, LICENSE_FEATURES } from './license.service';
 import { mcpService } from './mcp';
 import { memoryService } from './memory';
@@ -297,6 +298,7 @@ async function _buildContextBase(opts: {
 		docsContextAccess: contextAccess.docsContextAccess,
 		filesContextAccess: contextAccess.filesContextAccess,
 		mcpAccess: contextAccess.mcpAccess,
+		skillsAccess: contextAccess.skillsAccess,
 		userGroupFeatures: contextAccess.userGroupFeatures,
 		userRulesGroupAccess: contextAccess.userRulesGroupAccess,
 		preloadedSkillNames: contextAccess.preloadedSkillNames,
@@ -371,6 +373,7 @@ export class AgentService {
 			projectAccessAlreadyAuthorized?: boolean;
 		} = {},
 	): Promise<AgentManager> {
+		await assertUserIsActive(chat.userId);
 		if (options.billingAccessVerifiedProjectId !== chat.projectId) {
 			await assertProjectCloudBillingAccess(chat.projectId);
 		}
@@ -503,6 +506,7 @@ export class AgentManager {
 	private _resolveFinished: (() => void) | undefined;
 	private _streamWriter?: UIMessageStreamWriter<UIMessage>;
 	private _systemPrompt = '';
+	private _runCompaction = new RunCompaction(compactionService);
 
 	constructor(
 		readonly chat: AgentChat,
@@ -564,7 +568,7 @@ export class AgentManager {
 			this._systemPrompt && messages[0]?.role !== 'system'
 				? [{ role: 'system', content: this._systemPrompt }, ...messages]
 				: messages;
-		await compactionService.compactConversationIfNeeded({
+		await this._runCompaction.apply({
 			chat: this.chat,
 			provider: this._modelSelection.provider,
 			modelId: this._modelSelection.modelId,
@@ -747,6 +751,7 @@ export class AgentManager {
 			this._systemPromptOverride ?? (await this._buildSystemPrompt(provider, timezone, chatUrl));
 		const systemPrompt = appendAgentUserGroupRestrictions(selectedSystemPrompt, this._userGroupAccess);
 		this._systemPrompt = systemPrompt;
+		this._runCompaction = new RunCompaction(compactionService);
 		const conversationMessages = uiMessagesWithResolvedAttachments.filter((message) => message.role !== 'system');
 
 		const modelMessages = await convertToModelMessages<UIMessage>(conversationMessages, {
@@ -776,7 +781,9 @@ export class AgentManager {
 		const configuredDatabases = extractConfiguredDatabases(this._toolContext.projectFolder);
 		const { repos, templates, presence: contextPresence } = readProjectContext(this._toolContext.projectFolder);
 		const repoNames = repos.map((repo) => repo.name);
-		const skills = skillService.getSkills(this.chat.projectId);
+		const skills = skillService
+			.getSkills(this.chat.projectId)
+			.filter((skill) => isSkillGranted(this._toolContext.skillsAccess, skill.name));
 		const preloadedSkills = skillService.getPreloadedSkills(
 			this.chat.projectId,
 			this._toolContext.preloadedSkillNames,
@@ -1052,7 +1059,9 @@ export class AgentManager {
 	}
 
 	private _addSkills(messages: UIMessage[], mentions?: Mention[]): UIMessage[] {
-		const skillMention = mentions?.find((m) => m.trigger === '/');
+		const skillMention = mentions?.find(
+			(m) => m.trigger === '/' && isSkillGranted(this._toolContext.skillsAccess, m.id),
+		);
 		const skillContent = skillMention
 			? skillService.getSkillContent(this.chat.projectId, skillMention.id)
 			: undefined;
