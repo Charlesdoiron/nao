@@ -1054,7 +1054,7 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		search: { tab: 'groups' },
 		title: 'Manage Groups',
 		description:
-			'Configure which features, database tables, docs, MCP servers, budget, and settings each group can use.',
+			'Configure which features, database tables, docs, MCP servers, skills, budget, and settings each group can use.',
 		keywords: [
 			'groups',
 			'permissions',
@@ -1066,6 +1066,7 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 			'mcp',
 			'mcp servers',
 			'mcp tools',
+			'skills',
 			'stories',
 			'custom stories',
 			'automations',
@@ -1094,9 +1095,23 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
 		pageLabel: 'Users & Groups',
 		section: 'Manage Groups',
 		search: { tab: 'groups' },
-		title: 'Preloaded skills',
-		description: 'Load project skills in full at the start of every chat for the members of a group.',
-		keywords: ['skill', 'skills', 'agent/skills', 'preload', 'auto-load', 'load_skill', 'playbook', 'groups'],
+		title: 'Skills',
+		description:
+			'Choose which project skills a group can use, and which ones load in full at the start of every chat.',
+		keywords: [
+			'skill',
+			'skills',
+			'agent/skills',
+			'skill access',
+			'skill permissions',
+			'restrict skills',
+			'preload',
+			'preloaded skills',
+			'auto-load',
+			'load_skill',
+			'playbook',
+			'groups',
+		],
 		adminOnly: true,
 	},
 	{
