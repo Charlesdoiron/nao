@@ -681,11 +681,14 @@ describe('cloud Checkout', () => {
 		);
 	});
 
-	it('rejects initial Checkout when Stripe cannot preserve the remaining trial', async () => {
+	it('starts the subscription immediately when Stripe cannot preserve the remaining trial', async () => {
 		const now = new Date('2026-10-01T00:00:00.000Z');
 		const localTrialEnd = new Date('2026-10-02T00:00:00.000Z');
 		vi.useFakeTimers();
 		vi.setSystemTime(now);
+		stripeMocks.createCheckoutSession.mockResolvedValue({
+			url: 'https://checkout.stripe.com/immediate',
+		});
 
 		try {
 			await expect(
@@ -695,12 +698,21 @@ describe('cloud Checkout', () => {
 					stripeCustomerId: 'cus_cloud',
 					trialEnd: localTrialEnd,
 				}),
-			).rejects.toThrow('Not enough time remains for Stripe Checkout to preserve this organization trial');
+			).resolves.toBe('https://checkout.stripe.com/immediate');
 		} finally {
 			vi.useRealTimers();
 		}
 
-		expect(stripeMocks.createCheckoutSession).not.toHaveBeenCalled();
+		const [params, options] = stripeMocks.createCheckoutSession.mock.calls[0] as [
+			Stripe.Checkout.SessionCreateParams,
+			{ idempotencyKey: string },
+		];
+		expect(params.subscription_data).toEqual({
+			metadata: { nao_org_id: 'org-id', nao_plan_key: 'cloud_monthly_v2' },
+		});
+		expect(params.metadata).not.toHaveProperty('nao_trial_end');
+		expect(params.custom_text?.submit?.message).toContain('Less than 48 hours remain');
+		expect(options.idempotencyKey).toBe('cloud-checkout-initial-v12:org-id:cloud_monthly_v2:usd:immediate');
 	});
 
 	it('expires an open monthly Checkout before creating a yearly Checkout', async () => {

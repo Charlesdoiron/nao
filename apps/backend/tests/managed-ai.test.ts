@@ -617,9 +617,10 @@ describe('managed AI usage and organization credits', () => {
 		expect(cancelSource).toHaveBeenCalledWith('consumer stopped');
 	});
 
-	it('records failed provider calls without replacing the provider error', async () => {
+	it('records failed provider calls without charging or replacing the provider error', async () => {
 		const providerError = new Error('provider unavailable');
 		const runId = crypto.randomUUID();
+		const before = await getCreditSummary(ORG_ID);
 		const model = withManagedAiUsageMetering(
 			createModel(async () => {
 				throw providerError;
@@ -638,7 +639,9 @@ describe('managed AI usage and organization credits', () => {
 			.select()
 			.from(s.managedAiUsage)
 			.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'failed')));
-		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated' })]);
+		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated', customerChargeMicroUsd: 0 })]);
+		expect(rows[0]?.upstreamCostMicroUsd).toBeGreaterThan(0);
+		expect((await getCreditSummary(ORG_ID)).balanceMicroUsd).toBe(before.balanceMicroUsd);
 	});
 
 	it('blocks an exhausted wallet before calling the provider', async () => {

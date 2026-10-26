@@ -52,6 +52,7 @@ const EXHAUSTED_USER_ID = 'exhausted-user';
 const RECOVERABLE_USER_ID = 'recoverable-user';
 const FALLBACK_EXAMPLE_USER_ID = 'fallback-example-user';
 const FALLBACK_ONBOARDING_USER_ID = 'fallback-onboarding-user';
+const PROVISIONING_USER_ID = 'provisioning-user';
 
 describe('example chat allowance', () => {
 	beforeAll(async () => {
@@ -66,6 +67,7 @@ describe('example chat allowance', () => {
 				name: 'Fallback Onboarding User',
 				email: 'fallback-onboarding@example.com',
 			},
+			{ id: PROVISIONING_USER_ID, name: 'Provisioning User', email: 'provisioning@example.com' },
 		]);
 		await db.insert(s.project).values({
 			id: SYSTEM_EXAMPLE_PROJECT_ID,
@@ -236,7 +238,7 @@ describe('example chat allowance', () => {
 		);
 	});
 
-	it('does not grant unbilled managed AI usage after project setup', async () => {
+	it('rejects example chat continuations after project setup', async () => {
 		const orgId = 'project-org';
 		await db.insert(s.organization).values({ id: orgId, name: 'Project Org', slug: orgId });
 		await db.insert(s.orgMember).values({ orgId, userId: PROJECT_USER_ID, role: 'admin' });
@@ -264,36 +266,95 @@ describe('example chat allowance', () => {
 			);
 		expect(rows).toHaveLength(0);
 
-		const setupError = new Error('Existing example chat reached agent setup');
 		vi.spyOn(chatQueries, 'isOnboardingChat').mockResolvedValue(false);
 		vi.spyOn(chatQueries, 'getChatProjectId').mockResolvedValue(SYSTEM_EXAMPLE_PROJECT_ID);
 		vi.spyOn(chatQueries, 'getChatOwnerId').mockResolvedValue(PROJECT_USER_ID);
+		const post = vi.fn();
+		await agentRoutes({ addHook: vi.fn(), post } as never);
+		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
+		const send = vi.fn();
+		const reply = { status: vi.fn().mockReturnValue({ send }) };
+
+		await handler(
+			{
+				user: { id: PROJECT_USER_ID },
+				project: { id: 'real-project' },
+				body: {
+					chatId: 'existing-example-chat',
+					message: { text: 'Continue the example conversation' },
+					mode: 'example',
+				},
+				headers: {},
+			},
+			reply,
+		);
+		expect(reply.status).toHaveBeenCalledWith(403);
+		expect(send).toHaveBeenCalledWith({ error: 'Example conversations are unavailable after project setup' });
+		expect(mocks.handleAgentRoute).not.toHaveBeenCalled();
+	});
+
+	it('allows onboarding while project setup is active and rejects it once setup is ready', async () => {
+		const orgId = 'provisioning-org';
+		const projectId = 'provisioning-project';
+		const chatId = crypto.randomUUID();
+		const jobId = crypto.randomUUID();
+		await db.insert(s.organization).values({ id: orgId, name: 'Provisioning Org', slug: orgId });
+		await db.insert(s.orgMember).values({ orgId, userId: PROVISIONING_USER_ID, role: 'admin' });
+		await db.insert(s.project).values({
+			id: projectId,
+			orgId,
+			name: 'Provisioning Project',
+			type: 'local',
+			path: '/tmp/provisioning-project',
+		});
+		await db.insert(s.warehouseProvisioningJob).values({
+			id: jobId,
+			userId: PROVISIONING_USER_ID,
+			orgId,
+			onboardingChatId: chatId,
+			projectId,
+			projectName: 'Provisioning Project',
+			provider: 'postgres',
+			status: 'awaiting_context',
+		});
+
+		const setupError = new Error('Active onboarding reached agent setup');
+		vi.spyOn(chatQueries, 'isOnboardingChat').mockResolvedValue(true);
+		vi.spyOn(chatQueries, 'getChatProjectId').mockResolvedValue(SYSTEM_EXAMPLE_PROJECT_ID);
 		mocks.handleAgentRoute.mockRejectedValue(setupError);
 		const post = vi.fn();
 		await agentRoutes({ addHook: vi.fn(), post } as never);
 		const handler = post.mock.calls[0][2] as (request: unknown, reply: unknown) => Promise<unknown>;
+		const request = {
+			user: { id: PROVISIONING_USER_ID },
+			project: { id: projectId },
+			body: {
+				chatId,
+				message: { text: 'Continue setup' },
+				mode: 'onboarding',
+			},
+			headers: {},
+		};
 
-		await expect(
-			handler(
-				{
-					user: { id: PROJECT_USER_ID },
-					project: { id: 'real-project' },
-					body: {
-						chatId: 'existing-example-chat',
-						message: { text: 'Continue the example conversation' },
-						mode: 'example',
-					},
-					headers: {},
-				},
-				{ status: vi.fn().mockReturnThis(), send: vi.fn() },
-			),
-		).rejects.toBe(setupError);
+		await expect(handler(request, {})).rejects.toBe(setupError);
 		expect(mocks.handleAgentRoute).toHaveBeenCalledWith(
 			expect.objectContaining({
 				projectId: SYSTEM_EXAMPLE_PROJECT_ID,
-				model: { provider: 'nao', modelId: 'gpt-6-sol' },
-				unbilledManagedAiUsage: false,
+				unbilledManagedAiUsage: true,
 			}),
 		);
+
+		await db
+			.update(s.warehouseProvisioningJob)
+			.set({ status: 'ready', finishedAt: new Date() })
+			.where(eq(s.warehouseProvisioningJob.id, jobId));
+		mocks.handleAgentRoute.mockReset();
+		const send = vi.fn();
+		const reply = { status: vi.fn().mockReturnValue({ send }) };
+
+		await handler(request, reply);
+		expect(reply.status).toHaveBeenCalledWith(403);
+		expect(send).toHaveBeenCalledWith({ error: 'Onboarding conversations are unavailable after project setup' });
+		expect(mocks.handleAgentRoute).not.toHaveBeenCalled();
 	});
 });

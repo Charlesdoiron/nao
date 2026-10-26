@@ -334,7 +334,8 @@ async function recordManagedAiUsage(options: RecordManagedAiUsageOptions): Promi
 		await creditWalletService.recordUnbilledManagedAiUsage(usage);
 		return;
 	}
-	await creditWalletService.recordManagedAiUsageAndChargeWallet(usage, costs.total ?? 0);
+	const customerChargeMicroUsd = options.status === 'failed' ? 0 : (costs.total ?? 0);
+	await creditWalletService.recordManagedAiUsageAndChargeWallet(usage, customerChargeMicroUsd);
 }
 
 function resolveRates(provider: LlmProvider, modelId: string, declaredCosts?: ModelCosts): ModelCosts | undefined {

@@ -9,6 +9,7 @@ import { authMiddleware } from '../middleware/auth';
 import * as chatQueries from '../queries/chat.queries';
 import { consumeExampleChatRun, releaseExampleChatRun } from '../queries/example-chat-allowance.queries';
 import * as projectQueries from '../queries/project.queries';
+import * as warehouseProvisioningJobQueries from '../queries/warehouse-provisioning-job.queries';
 import { assertProjectCloudBillingAccess } from '../services/cloud-billing-access.service';
 import {
 	getExampleProjectForUser,
@@ -95,9 +96,18 @@ export const agentRoutes = async (app: App) => {
 			await assertProjectCloudBillingAccess(projectId);
 		}
 
-		const usesExampleAllowance = await assertExampleChatAllowance({ userId: user.id, projectId, isOnboarding });
-		if (isExampleProject && !body.chatId && !usesExampleAllowance) {
-			return reply.status(403).send({ error: 'Example conversations are unavailable after project setup' });
+		const usesExampleAllowance = await assertExampleChatAllowance({
+			userId: user.id,
+			projectId,
+			chatId: body.chatId,
+			isOnboarding,
+		});
+		if (isExampleProject && !usesExampleAllowance) {
+			return reply.status(403).send({
+				error: isOnboarding
+					? 'Onboarding conversations are unavailable after project setup'
+					: 'Example conversations are unavailable after project setup',
+			});
 		}
 
 		const result = await handleAgentRoute({
@@ -159,14 +169,26 @@ function createAgentStreamResponse(stream: ReadableStream): Response {
 export async function assertExampleChatAllowance({
 	userId,
 	projectId,
+	chatId,
 	isOnboarding,
 }: {
 	userId: string;
 	projectId: string | undefined;
+	chatId?: string;
 	isOnboarding: boolean;
 }): Promise<boolean> {
-	if (projectId !== SYSTEM_EXAMPLE_PROJECT_ID || (await projectQueries.listUserProjects(userId)).length > 0) {
+	if (projectId !== SYSTEM_EXAMPLE_PROJECT_ID) {
 		return false;
+	}
+	const userHasProject = (await projectQueries.listUserProjects(userId)).length > 0;
+	if (userHasProject) {
+		const setupIsRunning =
+			isOnboarding &&
+			chatId !== undefined &&
+			Boolean(await warehouseProvisioningJobQueries.getActiveWarehouseProvisioningJob(userId, chatId));
+		if (!setupIsRunning) {
+			return false;
+		}
 	}
 	const scope = isOnboarding ? 'onboarding' : 'example';
 	if (!(await consumeExampleChatRun(userId, scope))) {

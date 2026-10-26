@@ -175,23 +175,22 @@ export async function createCloudCheckoutSession(
 	if (input.trialEnd && input.trialEnd.getTime() <= Date.now()) {
 		throw new CloudInitialCheckoutUnavailableError('This organization trial has expired');
 	}
-	if (
-		input.trialEnd &&
-		input.trialEnd.getTime() < Date.now() + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_CLOCK_SKEW_MS
-	) {
-		throw new CloudInitialCheckoutUnavailableError(
-			'Not enough time remains for Stripe Checkout to preserve this organization trial',
-		);
-	}
-	const sourceTrialEnd = input.trialEnd ? stripeTimestamp(input.trialEnd) : null;
-	const effectiveTrialEnd = sourceTrialEnd;
+	const preservesTrial =
+		input.trialEnd !== undefined &&
+		input.trialEnd.getTime() >= Date.now() + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_CLOCK_SKEW_MS;
+	const sourceTrialEnd = preservesTrial ? stripeTimestamp(input.trialEnd) : null;
 	return createSubscriptionCheckoutSession({
 		...input,
+		trialEnd: preservesTrial ? input.trialEnd : undefined,
 		currency: input.currency ?? 'usd',
 		kind: 'initial',
 		operationKey:
-			effectiveTrialEnd === null ? `trial-${input.trialDays}` : `trial-${sourceTrialEnd}-${effectiveTrialEnd}`,
-		effectiveTrialEnd,
+			input.trialDays !== undefined
+				? `trial-${input.trialDays}`
+				: sourceTrialEnd === null
+					? 'immediate'
+					: `trial-${sourceTrialEnd}-${sourceTrialEnd}`,
+		effectiveTrialEnd: sourceTrialEnd,
 	});
 }
 
@@ -239,7 +238,9 @@ async function createSubscriptionCheckoutSession(input: {
 			? checkoutTrialDaysMessage(input.trialDays)
 			: effectiveTrialEnd !== null
 				? checkoutTrialMessage(new Date(effectiveTrialEnd * 1_000))
-				: null;
+				: input.kind === 'initial'
+					? checkoutImmediateStartMessage()
+					: null;
 	const matchesCheckout = (session: Stripe.Checkout.Session) =>
 		session.mode === 'subscription' &&
 		session.currency === input.currency &&
@@ -892,6 +893,10 @@ function checkoutTrialMessage(trialEnd: Date): string {
 
 function checkoutTrialDaysMessage(trialDays: number): string {
 	return `Nothing is charged today. Your ${trialDays}-day free trial starts when you confirm. The recurring price shown, including any promotion code discount, starts after the trial.`;
+}
+
+function checkoutImmediateStartMessage(): string {
+	return 'Less than 48 hours remain on your free trial, so your subscription starts when you confirm. The recurring price shown, including any promotion code discount, is charged today.';
 }
 
 function stripeTimestamp(date: Date): number {
