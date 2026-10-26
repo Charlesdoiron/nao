@@ -96,8 +96,12 @@ const usage: LanguageModelV3Usage = {
 describe('managed AI usage and organization credits', () => {
 	beforeAll(async () => {
 		await db.insert(s.creditGrantPolicy).values([
-			{ grantType: 'organization_setup', amountMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD },
-			{ grantType: 'user_join', amountMicroUsd: USER_JOIN_GRANT_MICRO_USD },
+			{
+				grantType: 'organization_setup',
+				amountMicroUsd: ORGANIZATION_SETUP_GRANT_MICRO_USD,
+				maxGrantsPerOrg: 1,
+			},
+			{ grantType: 'user_join', amountMicroUsd: USER_JOIN_GRANT_MICRO_USD, maxGrantsPerOrg: 100 },
 		]);
 		await db.insert(s.user).values([
 			{ id: MANAGED_USER_ID, name: 'Managed User', email: 'managed@example.com' },
@@ -473,6 +477,85 @@ describe('managed AI usage and organization credits', () => {
 			const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'aborted'));
 			expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 2 });
 		});
+	});
+
+	it('records a failed stream that closes without a finish chunk', async () => {
+		const sourceModel = createModel();
+		sourceModel.doStream = async () => ({
+			stream: new ReadableStream<LanguageModelV3StreamPart>({
+				start(controller) {
+					controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
+					controller.close();
+				},
+			}),
+		});
+		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
+			userId: MANAGED_USER_ID,
+			orgId: ORG_ID,
+			category: 'chat',
+		});
+
+		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
+		await consume(stream);
+
+		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'failed'));
+		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+	});
+
+	it('records a failed stream when its source throws', async () => {
+		const providerError = new Error('stream failed');
+		const sourceModel = createModel();
+		let sent = false;
+		sourceModel.doStream = async () => ({
+			stream: new ReadableStream<LanguageModelV3StreamPart>({
+				pull(controller) {
+					if (!sent) {
+						sent = true;
+						controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
+						return;
+					}
+					controller.error(providerError);
+				},
+			}),
+		});
+		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
+			userId: MANAGED_USER_ID,
+			orgId: ORG_ID,
+			category: 'chat',
+		});
+
+		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
+		await expect(consume(stream)).rejects.toBe(providerError);
+
+		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'failed'));
+		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+	});
+
+	it('records an aborted stream when its consumer cancels without an abort signal', async () => {
+		const cancelSource = vi.fn();
+		const sourceModel = createModel();
+		sourceModel.doStream = async () => ({
+			stream: new ReadableStream<LanguageModelV3StreamPart>({
+				start(controller) {
+					controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
+				},
+				cancel: cancelSource,
+			}),
+		});
+		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
+			userId: MANAGED_USER_ID,
+			orgId: ORG_ID,
+			category: 'chat',
+		});
+
+		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
+		const reader = stream.getReader();
+		await reader.read();
+		await reader.cancel('consumer stopped');
+
+		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'aborted'));
+		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+		expect(cancelSource).toHaveBeenCalledWith('consumer stopped');
 	});
 
 	it('records failed provider calls without replacing the provider error', async () => {

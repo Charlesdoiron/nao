@@ -45,10 +45,9 @@ vi.mock('@/main', () => ({
 					...options,
 				}),
 			},
-			getCreditTopUpStatus: {
-				queryOptions: () => ({
-					queryKey: ['credit-top-up-status'],
-					queryFn: mocks.getCheckoutStatus,
+			confirmCreditTopUp: {
+				mutationOptions: () => ({
+					mutationFn: mocks.getCheckoutStatus,
 				}),
 			},
 			getInvoices: { queryKey: () => ['invoices'] },

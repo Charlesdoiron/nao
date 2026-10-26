@@ -8,6 +8,7 @@ import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
 import { logger, serializeError } from '../utils/logger';
+import { extractConfiguredDatabases } from '../utils/nao-config';
 import { assessProjectReadiness } from '../utils/project-readiness';
 import { issueCreditGrant } from './credit-wallet.service';
 import { getProjectRuntimeEnvVars } from './project-runtime-env';
@@ -38,11 +39,17 @@ async function reconcileOrganizationSetupGrantsUnsafe(): Promise<void> {
 			projectId: s.creditGrantCandidate.projectId,
 		})
 		.from(s.creditGrantCandidate)
+		.leftJoin(s.creditWallet, eq(s.creditWallet.orgId, s.creditGrantCandidate.orgId))
+		.leftJoin(
+			s.creditLedger,
+			and(eq(s.creditLedger.walletId, s.creditWallet.id), eq(s.creditLedger.grantType, 'organization_setup')),
+		)
 		.where(
 			and(
 				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
 				isNotNull(s.creditGrantCandidate.orgId),
 				isNotNull(s.creditGrantCandidate.projectId),
+				isNull(s.creditLedger.id),
 			),
 		)
 		.execute();
@@ -299,7 +306,11 @@ async function hasEligibleProjectAccess(orgId: string, userId: string): Promise<
 
 async function isProjectReady(project: Pick<DBProject, 'id' | 'path' | 'envVars'>): Promise<boolean> {
 	const envVars = await getProjectRuntimeEnvVars(project.id);
-	return assessProjectReadiness({ ...project, envVars }).ready;
+	return (
+		assessProjectReadiness({ ...project, envVars }).ready &&
+		project.path !== null &&
+		extractConfiguredDatabases(project.path).length > 0
+	);
 }
 
 async function getSetupCandidate(projectId: string) {

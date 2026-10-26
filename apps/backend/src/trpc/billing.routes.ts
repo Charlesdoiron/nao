@@ -200,9 +200,9 @@ export const billingRoutes = {
 			}
 		}),
 
-	getCreditTopUpStatus: cloudBillingAdminProcedure
+	confirmCreditTopUp: cloudBillingAdminProcedure
 		.input(z.object({ checkoutSessionId: z.string().min(1) }))
-		.query(async ({ ctx, input }) => {
+		.mutation(async ({ ctx, input }) => {
 			try {
 				const credited = await confirmCreditTopUpForAdmin({
 					userId: ctx.user.id,

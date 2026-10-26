@@ -1654,6 +1654,7 @@ export const creditWallet = sqliteTable(
 export const creditGrantPolicy = sqliteTable('credit_grant_policy', {
 	grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES }).$type<CreditGrantType>().primaryKey(),
 	amountMicroUsd: integer('amount_micro_usd').notNull(),
+	maxGrantsPerOrg: integer('max_grants_per_org'),
 	enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
@@ -1766,12 +1767,20 @@ export const creditLedger = sqliteTable(
 		transactionSequence: integer('transaction_sequence').notNull().default(0),
 		idempotencyKey: text('idempotency_key').notNull().unique(),
 		externalReference: text('external_reference'),
+		grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES })
+			.$type<CreditGrantType>()
+			.references(() => creditGrantPolicy.grantType),
+		purchasePaymentIntentId: text('purchase_payment_intent_id'),
 		metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>(),
 		createdAt: integer('created_at', { mode: 'timestamp_ms' })
 			.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 			.notNull(),
 	},
-	(t) => [index('credit_ledger_walletId_createdAt_idx').on(t.walletId, t.createdAt, t.id)],
+	(t) => [
+		index('credit_ledger_walletId_createdAt_idx').on(t.walletId, t.createdAt, t.id),
+		index('credit_ledger_walletId_grantType_idx').on(t.walletId, t.grantType),
+		index('credit_ledger_purchasePaymentIntentId_idx').on(t.purchasePaymentIntentId),
+	],
 );
 
 export const messageImage = sqliteTable('message_image', {

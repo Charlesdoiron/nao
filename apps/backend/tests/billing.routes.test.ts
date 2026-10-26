@@ -478,7 +478,7 @@ describe('billing.createTrialCheckoutSession', () => {
 	});
 });
 
-describe('billing.getCreditTopUpStatus', () => {
+describe('billing.confirmCreditTopUp', () => {
 	beforeEach(() => {
 		testState.billingEnabled = true;
 		testState.membership = membership({});
@@ -490,7 +490,7 @@ describe('billing.getCreditTopUpStatus', () => {
 			new Error('relation "credit_purchase" does not exist'),
 		);
 
-		await expect(caller().billing.getCreditTopUpStatus({ checkoutSessionId: 'cs_credit' })).rejects.toMatchObject({
+		await expect(caller().billing.confirmCreditTopUp({ checkoutSessionId: 'cs_credit' })).rejects.toMatchObject({
 			code: 'INTERNAL_SERVER_ERROR',
 			message: 'Unable to confirm credit Checkout',
 		});

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { trpc } from '@/main';
@@ -9,12 +9,11 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 	const queryClient = useQueryClient();
 	const checkoutSessionId = creditCheckout && creditCheckout !== 'canceled' ? creditCheckout : '';
 	const [isPolling, setIsPolling] = useState(Boolean(checkoutSessionId));
-	const status = useQuery({
-		...trpc.billing.getCreditTopUpStatus.queryOptions({ checkoutSessionId }),
-		enabled: Boolean(checkoutSessionId),
-		refetchInterval: (query) => (isPolling && query.state.data?.credited !== true ? 2_000 : false),
-		refetchOnWindowFocus: false,
-	});
+	const {
+		data: confirmationData,
+		mutateAsync: confirmTopUp,
+		reset: resetConfirmation,
+	} = useMutation(trpc.billing.confirmCreditTopUp.mutationOptions());
 	const checkout = useMutation(
 		trpc.billing.createCreditTopUpCheckoutSession.mutationOptions({
 			onSuccess: ({ url }) => {
@@ -24,11 +23,35 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 	);
 
 	useEffect(() => {
+		resetConfirmation();
 		setIsPolling(Boolean(checkoutSessionId));
-	}, [checkoutSessionId]);
+	}, [checkoutSessionId, resetConfirmation]);
 
 	useEffect(() => {
-		if (!status.data?.credited) {
+		if (!checkoutSessionId || !isPolling || confirmationData?.credited) {
+			return;
+		}
+		let timeout: number | undefined;
+		let cancelled = false;
+		const confirm = async () => {
+			const confirmed = await confirmTopUp({ checkoutSessionId })
+				.then(({ credited }) => credited)
+				.catch(() => false);
+			if (!cancelled && !confirmed) {
+				timeout = window.setTimeout(() => void confirm(), 2_000);
+			}
+		};
+		void confirm();
+		return () => {
+			cancelled = true;
+			if (timeout !== undefined) {
+				window.clearTimeout(timeout);
+			}
+		};
+	}, [checkoutSessionId, confirmationData?.credited, confirmTopUp, isPolling]);
+
+	useEffect(() => {
+		if (!confirmationData?.credited) {
 			return;
 		}
 		setIsPolling(false);
@@ -41,20 +64,20 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 			queryClient.invalidateQueries({ queryKey: trpc.project.getDefaultChatModel.queryKey() }),
 			queryClient.invalidateQueries({ queryKey: trpc.billing.getInvoices.queryKey() }),
 		]);
-	}, [queryClient, status.data?.credited]);
+	}, [confirmationData?.credited, queryClient]);
 
 	useEffect(() => {
-		if (!isPolling || status.data?.credited) {
+		if (!isPolling || confirmationData?.credited) {
 			return;
 		}
 		const timeout = window.setTimeout(() => setIsPolling(false), CONFIRMATION_TIMEOUT_MS);
 		return () => window.clearTimeout(timeout);
-	}, [checkoutSessionId, isPolling, status.data?.credited]);
+	}, [checkoutSessionId, confirmationData?.credited, isPolling]);
 
 	const feedback =
 		creditCheckout === 'canceled'
 			? 'Credit Checkout was canceled. No credits were added.'
-			: status.data?.credited
+			: confirmationData?.credited
 				? 'Credits were added to the organization wallet.'
 				: checkoutSessionId
 					? isPolling
@@ -70,8 +93,7 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 			checkout.mutate({ creditAmountCents, requestId: crypto.randomUUID() }),
 		retryConfirmation: () => {
 			setIsPolling(true);
-			void status.refetch();
 		},
-		showRetry: Boolean(checkoutSessionId && !status.data?.credited && !isPolling),
+		showRetry: Boolean(checkoutSessionId && !confirmationData?.credited && !isPolling),
 	};
 }

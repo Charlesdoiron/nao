@@ -13,14 +13,15 @@ CREATE TABLE "credit_grant_candidate" (
 CREATE TABLE "credit_grant_policy" (
 	"grant_type" text PRIMARY KEY NOT NULL,
 	"amount_micro_usd" bigint NOT NULL,
+	"max_grants_per_org" integer,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO "credit_grant_policy" ("grant_type", "amount_micro_usd") VALUES
-	('organization_setup', 20000000),
-	('user_join', 5000000);
+INSERT INTO "credit_grant_policy" ("grant_type", "amount_micro_usd", "max_grants_per_org") VALUES
+	('organization_setup', 20000000, 1),
+	('user_join', 5000000, 100);
 --> statement-breakpoint
 INSERT INTO "credit_grant_candidate" (
 	"id",
@@ -107,6 +108,8 @@ CREATE TABLE "credit_ledger" (
 	"transaction_sequence" bigint DEFAULT 0 NOT NULL,
 	"idempotency_key" text NOT NULL,
 	"external_reference" text,
+	"grant_type" text,
+	"purchase_payment_intent_id" text,
 	"metadata" jsonb,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "credit_ledger_usage_id_unique" UNIQUE("usage_id"),
@@ -169,6 +172,7 @@ ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_user
 ALTER TABLE "credit_grant_candidate" ADD CONSTRAINT "credit_grant_candidate_project_id_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."project"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_wallet_id_credit_wallet_id_fk" FOREIGN KEY ("wallet_id") REFERENCES "public"."credit_wallet"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_usage_id_managed_ai_usage_id_fk" FOREIGN KEY ("usage_id") REFERENCES "public"."managed_ai_usage"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_grant_type_credit_grant_policy_grant_type_fk" FOREIGN KEY ("grant_type") REFERENCES "public"."credit_grant_policy"("grant_type") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "credit_wallet" ADD CONSTRAINT "credit_wallet_org_id_organization_id_fk" FOREIGN KEY ("org_id") REFERENCES "public"."organization"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_wallet_id_credit_wallet_id_fk" FOREIGN KEY ("wallet_id") REFERENCES "public"."credit_wallet"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "managed_ai_usage" ADD CONSTRAINT "managed_ai_usage_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -179,6 +183,8 @@ CREATE INDEX "credit_grant_candidate_orgId_grantType_idx" ON "credit_grant_candi
 CREATE INDEX "credit_grant_candidate_userId_grantType_idx" ON "credit_grant_candidate" USING btree ("user_id","grant_type");--> statement-breakpoint
 CREATE INDEX "credit_grant_candidate_projectId_grantType_idx" ON "credit_grant_candidate" USING btree ("project_id","grant_type");--> statement-breakpoint
 CREATE INDEX "credit_ledger_walletId_createdAt_idx" ON "credit_ledger" USING btree ("wallet_id","created_at","id");--> statement-breakpoint
+CREATE INDEX "credit_ledger_walletId_grantType_idx" ON "credit_ledger" USING btree ("wallet_id","grant_type");--> statement-breakpoint
+CREATE INDEX "credit_ledger_purchasePaymentIntentId_idx" ON "credit_ledger" USING btree ("purchase_payment_intent_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "credit_wallet_orgId_idx" ON "credit_wallet" USING btree ("org_id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_orgId_startedAt_idx" ON "managed_ai_usage" USING btree ("org_id","started_at","id");--> statement-breakpoint
 CREATE INDEX "managed_ai_usage_userId_startedAt_idx" ON "managed_ai_usage" USING btree ("user_id","started_at","id");--> statement-breakpoint

@@ -61,6 +61,15 @@ export async function getOrganizationSetupCreditGrant(
 	return grant ?? null;
 }
 
+export async function getCreditBalance(orgId: string): Promise<number> {
+	const [wallet] = await db
+		.select({ balanceMicroUsd: s.creditWallet.balanceMicroUsd })
+		.from(s.creditWallet)
+		.where(eq(s.creditWallet.orgId, orgId))
+		.limit(1);
+	return wallet?.balanceMicroUsd ?? 0;
+}
+
 export async function getCreditSummary(orgId: string): Promise<{
 	balanceMicroUsd: number;
 	lifetimeCreditedMicroUsd: number;

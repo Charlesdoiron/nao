@@ -15,6 +15,7 @@ import * as creditWalletService from '../services/credit-wallet.service';
 import type { TokenUsage } from '../types/chat';
 import type { ModelCosts, ModelSource } from '../types/llm';
 import type { ManagedAiUsageCategory, ManagedAiUsageCostSource, ManagedAiUsageStatus } from '../types/managed-ai-usage';
+import { logger } from '../utils/logger';
 import { createProviderModel, getProviderMeta } from './providers';
 
 export type ManagedAiUsageContext = {
@@ -150,16 +151,14 @@ function createManagedAiUsageMiddleware(
 			const { stream, ...rest } = result;
 			return {
 				...rest,
-				stream: stream.pipeThrough(
-					createStreamMeter({
-						operationId,
-						startedAt,
-						modelId,
-						context,
-						rates,
-						params,
-					}),
-				),
+				stream: meterStream(stream, {
+					operationId,
+					startedAt,
+					modelId,
+					context,
+					rates,
+					params,
+				}),
 			};
 		},
 	};
@@ -174,38 +173,72 @@ type ManagedAiStreamMeterOptions = {
 	params: LanguageModelV3CallOptions;
 };
 
-function createStreamMeter(
+function meterStream(
+	stream: ReadableStream<LanguageModelV3StreamPart>,
 	options: ManagedAiStreamMeterOptions,
-): TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart> {
-	let recorded = false;
+): ReadableStream<LanguageModelV3StreamPart> {
 	let streamedChars = 0;
 	let providerRequestId: string | undefined;
+	let recording: Promise<void> | undefined;
 	const recordOnce = async (status: ManagedAiUsageStatus, usage: LanguageModelV3Usage, finishReason?: string) => {
-		if (recorded) {
-			return;
+		if (!recording) {
+			options.params.abortSignal?.removeEventListener('abort', recordAbort);
+			recording = recordManagedAiUsage({ ...options, status, usage, finishReason, providerRequestId });
 		}
-		recorded = true;
-		await recordManagedAiUsage({ ...options, status, usage, finishReason, providerRequestId });
+		await recording;
+	};
+	const estimatedUsage = () => estimateUsage(options.params, streamedChars);
+	const recordAbort = () => {
+		void recordOnce('aborted', estimatedUsage()).catch((error) => {
+			logger.error(`Failed to record aborted managed AI stream: ${String(error)}`, {
+				source: 'agent',
+				projectId: options.context.projectId,
+				context: { operationId: options.operationId },
+			});
+		});
 	};
 
-	options.params.abortSignal?.addEventListener(
-		'abort',
-		() => void recordOnce('aborted', estimateUsage(options.params, streamedChars)),
-		{ once: true },
-	);
+	options.params.abortSignal?.addEventListener('abort', recordAbort, { once: true });
 
-	return new TransformStream({
-		async transform(chunk, controller) {
-			if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' || chunk.type === 'tool-input-delta') {
-				streamedChars += chunk.delta.length;
-			} else if (chunk.type === 'response-metadata') {
-				providerRequestId = chunk.id;
-			} else if (chunk.type === 'finish') {
-				await recordOnce('completed', chunk.usage, chunk.finishReason.unified);
-			} else if (chunk.type === 'error') {
-				await recordOnce('failed', estimateUsage(options.params, streamedChars));
+	const reader = stream.getReader();
+	return new ReadableStream({
+		async pull(controller) {
+			try {
+				const result = await reader.read();
+				if (result.done) {
+					await recordOnce(options.params.abortSignal?.aborted ? 'aborted' : 'failed', estimatedUsage());
+					controller.close();
+					return;
+				}
+				const chunk = result.value;
+				if (
+					chunk.type === 'text-delta' ||
+					chunk.type === 'reasoning-delta' ||
+					chunk.type === 'tool-input-delta'
+				) {
+					streamedChars += chunk.delta.length;
+				} else if (chunk.type === 'response-metadata') {
+					providerRequestId = chunk.id;
+				} else if (chunk.type === 'finish') {
+					await recordOnce('completed', chunk.usage, chunk.finishReason.unified);
+				} else if (chunk.type === 'error') {
+					await recordOnce('failed', estimatedUsage());
+				}
+				controller.enqueue(chunk);
+			} catch (error) {
+				try {
+					await recordOnce(options.params.abortSignal?.aborted ? 'aborted' : 'failed', estimatedUsage());
+				} finally {
+					controller.error(error);
+				}
 			}
-			controller.enqueue(chunk);
+		},
+		async cancel(reason) {
+			try {
+				await recordOnce('aborted', estimatedUsage());
+			} finally {
+				await reader.cancel(reason);
+			}
 		},
 	});
 }
@@ -376,8 +409,7 @@ function toTokenUsage(usage: LanguageModelV3Usage): TokenUsage {
 
 async function hasWalletBalance(projectId: string): Promise<boolean> {
 	const project = await projectQueries.getProjectById(projectId);
-	const summary = project?.orgId ? await creditWalletQueries.getCreditSummary(project.orgId) : null;
-	return (summary?.balanceMicroUsd ?? 0) > 0;
+	return project?.orgId ? (await creditWalletQueries.getCreditBalance(project.orgId)) > 0 : false;
 }
 
 function isManagedModel(provider: LlmProvider, modelId: string): boolean {

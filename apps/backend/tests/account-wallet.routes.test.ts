@@ -128,21 +128,22 @@ describe('account wallet activity authorization', () => {
 		expect(mocks.listManagedAiUsage).toHaveBeenCalledWith({ orgId: 'org-id' }, { cursor: undefined, limit: 10 });
 	});
 
-	it('uses the selected project organization when no organization is selected', async () => {
-		await caller(null).account.getCreditSummary();
+	it('uses the selected project organization when a different organization is selected', async () => {
+		await caller('project-id', 'org-id').account.getCreditSummary();
 
 		expect(mocks.getUserOrgMembershipByProject).toHaveBeenCalledWith('user-id', 'project-id');
 		expect(mocks.getCreditSummary).toHaveBeenCalledWith('project-org-id');
+		expect(mocks.getUserOrgMembership).not.toHaveBeenCalled();
 	});
 });
 
-function caller(selectedOrganizationId: string | null = 'org-id') {
+function caller(selectedProjectId: string | null = null, selectedOrganizationId: string | null = 'org-id') {
 	return testRouter.createCaller({
 		session: {
 			user: { id: 'user-id', name: 'Admin', email: 'admin@example.com' },
 			session: { token: 'session-token' },
 		},
-		selectedProjectId: 'project-id',
+		selectedProjectId,
 		selectedOrganizationId,
 	} as never);
 }

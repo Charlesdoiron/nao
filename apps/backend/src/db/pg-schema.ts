@@ -1545,6 +1545,7 @@ export const creditWallet = pgTable(
 export const creditGrantPolicy = pgTable('credit_grant_policy', {
 	grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES }).$type<CreditGrantType>().primaryKey(),
 	amountMicroUsd: bigint('amount_micro_usd', { mode: 'number' }).notNull(),
+	maxGrantsPerOrg: integer('max_grants_per_org'),
 	enabled: boolean('enabled').notNull().default(true),
 	createdAt: timestamp('created_at').defaultNow().notNull(),
 	updatedAt: timestamp('updated_at')
@@ -1655,10 +1656,18 @@ export const creditLedger = pgTable(
 		transactionSequence: bigint('transaction_sequence', { mode: 'number' }).notNull().default(0),
 		idempotencyKey: text('idempotency_key').notNull().unique(),
 		externalReference: text('external_reference'),
+		grantType: text('grant_type', { enum: CREDIT_GRANT_TYPES })
+			.$type<CreditGrantType>()
+			.references(() => creditGrantPolicy.grantType),
+		purchasePaymentIntentId: text('purchase_payment_intent_id'),
 		metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 		createdAt: timestamp('created_at').defaultNow().notNull(),
 	},
-	(t) => [index('credit_ledger_walletId_createdAt_idx').on(t.walletId, t.createdAt, t.id)],
+	(t) => [
+		index('credit_ledger_walletId_createdAt_idx').on(t.walletId, t.createdAt, t.id),
+		index('credit_ledger_walletId_grantType_idx').on(t.walletId, t.grantType),
+		index('credit_ledger_purchasePaymentIntentId_idx').on(t.purchasePaymentIntentId),
+	],
 );
 
 export const messageImage = pgTable('message_image', {

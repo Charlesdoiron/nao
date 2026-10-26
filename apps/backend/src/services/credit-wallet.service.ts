@@ -1,4 +1,4 @@
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, count, eq, gte, lt, sql } from 'drizzle-orm';
 
 import s, { type DBCreditWallet, type DBManagedAiUsage, type NewManagedAiUsage } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -56,10 +56,21 @@ export async function issueCreditGrant({
 					return false;
 				}
 				validateGrantAmount(policy.amountMicroUsd, grantType);
+				validateGrantLimit(policy.maxGrantsPerOrg, grantType);
 				transaction.insert(s.creditWallet).values({ orgId }).onConflictDoNothing().run();
 				const wallet = transaction.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, orgId)).get();
 				if (!wallet) {
 					throw new Error(`Credit wallet could not be created for organization ${orgId}.`);
+				}
+				if (policy.maxGrantsPerOrg !== null) {
+					const grants = transaction
+						.select({ count: count() })
+						.from(s.creditLedger)
+						.where(and(eq(s.creditLedger.walletId, wallet.id), eq(s.creditLedger.grantType, grantType)))
+						.get();
+					if ((grants?.count ?? 0) >= policy.maxGrantsPerOrg) {
+						return false;
+					}
 				}
 				const entry = transaction
 					.insert(s.creditLedger)
@@ -112,14 +123,28 @@ export async function issueCreditGrant({
 			return false;
 		}
 		validateGrantAmount(policy.amountMicroUsd, grantType);
+		validateGrantLimit(policy.maxGrantsPerOrg, grantType);
 		await transaction.insert(s.creditWallet).values({ orgId }).onConflictDoNothing().execute();
-		const [wallet] = await transaction
-			.select()
-			.from(s.creditWallet)
-			.where(eq(s.creditWallet.orgId, orgId))
-			.limit(1);
+		const walletQuery = transaction.select().from(s.creditWallet).where(eq(s.creditWallet.orgId, orgId)).limit(1);
+		const [wallet] = await (
+			walletQuery as typeof walletQuery & {
+				for(strength: 'update'): typeof walletQuery;
+			}
+		)
+			.for('update')
+			.execute();
 		if (!wallet) {
 			throw new Error(`Credit wallet could not be created for organization ${orgId}.`);
+		}
+		if (policy.maxGrantsPerOrg !== null) {
+			const [grants] = await transaction
+				.select({ count: count() })
+				.from(s.creditLedger)
+				.where(and(eq(s.creditLedger.walletId, wallet.id), eq(s.creditLedger.grantType, grantType)))
+				.execute();
+			if ((grants?.count ?? 0) >= policy.maxGrantsPerOrg) {
+				return false;
+			}
 		}
 
 		const [entry] = await transaction
@@ -283,9 +308,8 @@ export async function setCreditPurchaseMovement(input: CreditPurchaseMovement): 
 				const linkedEntries = transaction
 					.select()
 					.from(s.creditLedger)
-					.where(eq(s.creditLedger.walletId, wallet.id))
-					.all()
-					.filter((entry) => entry.metadata?.purchasePaymentIntentId === input.paymentIntentId);
+					.where(eq(s.creditLedger.purchasePaymentIntentId, input.paymentIntentId))
+					.all();
 				const deltaMicroUsd = calculatePurchaseMovementDelta(
 					purchase.deltaMicroUsd,
 					linkedEntries,
@@ -357,9 +381,10 @@ export async function setCreditPurchaseMovement(input: CreditPurchaseMovement): 
 		if (!wallet) {
 			throw new Error(`Credit wallet ${purchase.walletId} was not found.`);
 		}
-		const linkedEntries = (
-			await transaction.select().from(s.creditLedger).where(eq(s.creditLedger.walletId, wallet.id))
-		).filter((entry) => entry.metadata?.purchasePaymentIntentId === input.paymentIntentId);
+		const linkedEntries = await transaction
+			.select()
+			.from(s.creditLedger)
+			.where(eq(s.creditLedger.purchasePaymentIntentId, input.paymentIntentId));
 		const deltaMicroUsd = calculatePurchaseMovementDelta(
 			purchase.deltaMicroUsd,
 			linkedEntries,
@@ -763,6 +788,12 @@ function validateGrantAmount(amountMicroUsd: number, grantType: CreditGrantType)
 	validatePositiveAmount(amountMicroUsd, `Credit grant policy ${grantType}`);
 }
 
+function validateGrantLimit(maxGrantsPerOrg: number | null, grantType: CreditGrantType): void {
+	if (maxGrantsPerOrg !== null && (!Number.isSafeInteger(maxGrantsPerOrg) || maxGrantsPerOrg <= 0)) {
+		throw new Error(`Credit grant policy ${grantType} must have a positive integer organization limit.`);
+	}
+}
+
 function validatePositiveAmount(amountMicroUsd: number, label: string): void {
 	if (!Number.isSafeInteger(amountMicroUsd) || amountMicroUsd <= 0) {
 		throw new Error(`${label} must have a positive integer amount.`);
@@ -784,6 +815,7 @@ function creditGrantEntry(
 		balanceAfterMicroUsd: wallet.balanceMicroUsd + amountMicroUsd,
 		transactionSequence: 0,
 		idempotencyKey,
+		grantType,
 		metadata: {
 			source: 'nao',
 			grantType,
@@ -879,6 +911,7 @@ function creditPurchaseMovementEntry(wallet: DBCreditWallet, input: CreditPurcha
 		transactionSequence: 0,
 		idempotencyKey: input.idempotencyKey,
 		externalReference: input.externalReference,
+		purchasePaymentIntentId: input.paymentIntentId,
 		metadata: {
 			...input.metadata,
 			source: 'stripe',

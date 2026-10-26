@@ -39,7 +39,7 @@ const walletProcedure = protectedProcedure.use(async ({ ctx, next }) => {
 	const membership = await resolveOrganizationMembership(
 		ctx.user.id,
 		ctx.selectedProjectId,
-		ctx.selectedOrganizationId,
+		ctx.selectedProjectId ? null : ctx.selectedOrganizationId,
 	);
 	return next({ ctx: { membership } });
 });

@@ -55,8 +55,8 @@ const tempDirectories: string[] = [];
 describe('automatic credit grants', () => {
 	beforeAll(async () => {
 		await db.insert(s.creditGrantPolicy).values([
-			{ grantType: 'organization_setup', amountMicroUsd: 20_000_000 },
-			{ grantType: 'user_join', amountMicroUsd: 5_000_000 },
+			{ grantType: 'organization_setup', amountMicroUsd: 20_000_000, maxGrantsPerOrg: 1 },
+			{ grantType: 'user_join', amountMicroUsd: 5_000_000, maxGrantsPerOrg: 100 },
 		]);
 	});
 
@@ -108,6 +108,16 @@ describe('automatic credit grants', () => {
 		expect(await getCreditGrant('organization_setup', 'warehouse-setup-org')).toEqual({
 			orgId: 'warehouse-setup-org',
 		});
+	});
+
+	it('does not grant setup credits for a project without a configured database', async () => {
+		const projectPath = createProjectDirectory('empty-setup', false);
+		fs.writeFileSync(path.join(projectPath, 'nao_config.yaml'), 'project_name: Test\n');
+		await insertOrganizationAndProject('empty-setup-org', 'empty-setup-project', projectPath, {});
+
+		await recordOrganizationSetupCandidate('empty-setup-project');
+
+		expect(await getCreditGrant('organization_setup', 'empty-setup-org')).toBeNull();
 	});
 
 	it('reconciles setup candidates backfilled for existing ready projects', async () => {
@@ -175,7 +185,7 @@ describe('automatic credit grants', () => {
 		const getProjectById = projectQueries.getProjectById;
 		const candidateProjectIds = new Set(['deduplicated-first-project', 'deduplicated-second-project']);
 		let lookupFailed = false;
-		vi.spyOn(projectQueries, 'getProjectById').mockImplementation(async (projectId) => {
+		const projectLookup = vi.spyOn(projectQueries, 'getProjectById').mockImplementation(async (projectId) => {
 			if (candidateProjectIds.has(projectId) && !lookupFailed) {
 				lookupFailed = true;
 				throw new Error('transient project lookup failure');
@@ -203,6 +213,10 @@ describe('automatic credit grants', () => {
 				([input]) => input.grantType === 'user_join' && input.userId === 'deduplicated-user',
 			),
 		).toHaveLength(1);
+
+		projectLookup.mockClear();
+		await reconcileOrganizationSetupGrants();
+		expect(projectLookup.mock.calls.filter(([projectId]) => candidateProjectIds.has(projectId))).toHaveLength(0);
 	});
 
 	it('reconciles join grants when another project becomes ready in a funded organization', async () => {
@@ -326,10 +340,42 @@ describe('automatic credit grants', () => {
 			role: 'user',
 		});
 
-		await recordOrganizationJoinCandidate('policy-org', 'later-user');
+		try {
+			await recordOrganizationJoinCandidate('policy-org', 'later-user');
 
-		expect(await getCreditGrant('user_join', 'later-user')).toEqual({ orgId: 'policy-org' });
-		expect((await getCreditSummary('policy-org')).balanceMicroUsd).toBe(26_000_000);
+			expect(await getCreditGrant('user_join', 'later-user')).toEqual({ orgId: 'policy-org' });
+			expect((await getCreditSummary('policy-org')).balanceMicroUsd).toBe(26_000_000);
+		} finally {
+			await db
+				.update(s.creditGrantPolicy)
+				.set({ amountMicroUsd: 5_000_000 })
+				.where(eq(s.creditGrantPolicy.grantType, 'user_join'));
+		}
+	});
+
+	it('caps user join grants per organization using the database policy', async () => {
+		await insertReadyFundedOrganization('capped-org', 'capped-project');
+		await db
+			.update(s.creditGrantPolicy)
+			.set({ maxGrantsPerOrg: 2 })
+			.where(eq(s.creditGrantPolicy.grantType, 'user_join'));
+		try {
+			for (const userId of ['capped-user-1', 'capped-user-2', 'capped-user-3']) {
+				await db.insert(s.user).values({ id: userId, name: userId, email: `${userId}@example.com` });
+				await db.insert(s.orgMember).values({ orgId: 'capped-org', userId, role: 'user' });
+				await recordOrganizationJoinCandidate('capped-org', userId);
+			}
+
+			expect(await getCreditGrant('user_join', 'capped-user-1')).toEqual({ orgId: 'capped-org' });
+			expect(await getCreditGrant('user_join', 'capped-user-2')).toEqual({ orgId: 'capped-org' });
+			expect(await getCreditGrant('user_join', 'capped-user-3')).toBeNull();
+			expect((await getCreditSummary('capped-org')).balanceMicroUsd).toBe(30_000_000);
+		} finally {
+			await db
+				.update(s.creditGrantPolicy)
+				.set({ maxGrantsPerOrg: 100 })
+				.where(eq(s.creditGrantPolicy.grantType, 'user_join'));
+		}
 	});
 
 	it('does not fail the originating operation when grant reconciliation fails', async () => {
@@ -398,7 +444,7 @@ function createProjectDirectory(name: string, requiresEnvironmentVariable: boole
 		path.join(directory, 'nao_config.yaml'),
 		requiresEnvironmentVariable
 			? 'project_name: Test\ndatabases:\n  - name: warehouse\n    connection: "{{ env(\'DATABASE_URL\') }}"\n'
-			: 'project_name: Test\n',
+			: 'project_name: Test\ndatabases:\n  - name: warehouse\n    connection: sqlite:///warehouse.db\n',
 	);
 	return directory;
 }
