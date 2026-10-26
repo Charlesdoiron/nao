@@ -11,10 +11,10 @@ import type { SearchPaginationInput } from '../types/backoffice';
 import type { OrgRole } from '../types/organization';
 import { HandlerError } from '../utils/error';
 import { extractConfiguredDatabases } from '../utils/nao-config';
-import { assessProjectReadiness } from './project-readiness.service';
 import { toBillingSummary } from './backoffice-billing.service';
 import { isLicenseExpired, verifyOrganizationLicense } from './license.service';
 import * as membershipService from './membership.service';
+import { assessProjectReadiness } from './project-readiness.service';
 
 export async function listOrganizations(input: SearchPaginationInput) {
 	const page = await backofficeQueries.listOrganizations(input);

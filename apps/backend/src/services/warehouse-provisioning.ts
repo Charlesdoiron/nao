@@ -30,8 +30,8 @@ import {
 	provisionManagedGithubRepository,
 } from './managed-github-repository';
 import { generateOnboardingRules } from './onboarding-rules';
-import { createNewProject, createTempProjectDir } from './project-import.service';
 import { reconcileProjectReadiness } from './project.service';
+import { createNewProject, createTempProjectDir } from './project-import.service';
 import { saveProjectWarehouseEnvVars } from './warehouse-credentials';
 
 const INIT_TIMEOUT_MS = 15 * 60_000;

@@ -6,7 +6,6 @@ import { z } from 'zod/v4';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
 import * as gitlabService from '../services/gitlab';
-import { logger, serializeError } from '../utils/logger';
 import {
 	createNewProject,
 	createTempProjectDir,
@@ -14,6 +13,7 @@ import {
 	readProjectNameFromConfig,
 	replaceExistingProject,
 } from '../services/project-import.service';
+import { logger, serializeError } from '../utils/logger';
 import {
 	adminProtectedProcedure,
 	cloudBillingAdminProcedure,

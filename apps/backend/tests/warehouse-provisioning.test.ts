@@ -194,8 +194,8 @@ import {
 	provisionManagedGithubRepository,
 } from '../src/services/managed-github-repository';
 import { generateOnboardingRules } from '../src/services/onboarding-rules';
-import { createNewProject, createTempProjectDir } from '../src/services/project-import.service';
 import { reconcileProjectReadiness } from '../src/services/project.service';
+import { createNewProject, createTempProjectDir } from '../src/services/project-import.service';
 import { saveProjectWarehouseEnvVars } from '../src/services/warehouse-credentials';
 import {
 	getPublicProvisioningError,
