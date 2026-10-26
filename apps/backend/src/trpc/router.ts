@@ -42,6 +42,7 @@ import { storyRoutes } from './story.routes';
 import { storyFolderRoutes } from './story-folder.routes';
 import { storyThemeRoutes } from './story-theme.routes';
 import { systemRoutes } from './system.routes';
+import { testRunRoutes } from './test-run.routes';
 import { transcribeRoutes } from './transcribe.routes';
 import { router } from './trpc';
 import { usageRoutes } from './usage.routes';
@@ -96,6 +97,7 @@ export const trpcRouter = router({
 	sandboxSecret: sandboxSecretRoutes,
 	system: systemRoutes,
 	skill: skillRoutes,
+	testRun: testRunRoutes,
 	transcribe: transcribeRoutes,
 });
 

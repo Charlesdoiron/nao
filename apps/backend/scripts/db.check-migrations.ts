@@ -200,6 +200,7 @@ function normalizeColumnType(columnType: string): string {
 	const equivalentTypes: Record<string, string> = {
 		Jsonb: 'Json',
 		TextJson: 'Json',
+		DoublePrecision: 'Real',
 	};
 
 	return equivalentTypes[stripped] ?? stripped;

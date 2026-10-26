@@ -73,7 +73,25 @@ describe('test routes', () => {
 			finishReason: 'stop',
 			durationMs: 1,
 		});
-		mocks.runVerification.mockResolvedValue({ matches: true });
+		mocks.runVerification.mockResolvedValue({ data: [], sql: null, error: null });
+	});
+
+	it('returns the verdict computed from the assertions and the verified data', async () => {
+		mocks.executeQuery.mockResolvedValue({ data: [{ total: 10 }], columns: ['total'] });
+		mocks.runVerification.mockResolvedValue({ data: [{ total: '10' }], sql: 'SELECT total FROM q1', error: null });
+		mocks.extractToolCalls.mockReturnValue([{ toolName: 'execute_sql', toolCallId: '1', args: {} }] as never);
+
+		const reply = await runExpectedQuery({
+			prompt: 'Question',
+			sql: 'SELECT 10 AS total',
+			assertions: [{ type: 'tool_call', tool: 'execute_sql' }],
+		});
+
+		expect(reply.send).toHaveBeenCalledWith(
+			expect.objectContaining({
+				verdict: { passed: true, message: 'tool_call: execute_sql; match', comparison: null },
+			}),
+		);
 	});
 
 	it('uses project credentials while keeping expected-query verification restricted', async () => {
@@ -128,7 +146,13 @@ describe('test routes', () => {
 	it('skips SQL verification when the request omits reference sql', async () => {
 		const reply = await runExpectedQuery({ prompt: 'Question' });
 
-		expect(mocks.runTest).toHaveBeenCalledWith('project-id', 'user-id', 'Question', undefined, undefined);
+		expect(mocks.runTest).toHaveBeenCalledWith(
+			'project-id',
+			'user-id',
+			'Question',
+			{ provider: 'openai', modelId: 'gpt-4.1' },
+			undefined,
+		);
 		expect(mocks.retrieveProjectById).not.toHaveBeenCalled();
 		expect(mocks.executeQuery).not.toHaveBeenCalled();
 		expect(mocks.runVerification).not.toHaveBeenCalled();
@@ -141,10 +165,12 @@ async function runExpectedQuery(
 	body: Record<string, unknown> = { prompt: 'Question', sql: 'SELECT 1', databaseId: 'warehouse' },
 ) {
 	let handler: (request: unknown, reply: unknown) => Promise<unknown> = async () => {};
+	let bodySchema: { parse: (value: unknown) => unknown } | undefined;
 	const app = {
 		addHook: vi.fn(),
-		post: vi.fn((_path, _options, routeHandler) => {
+		post: vi.fn((_path, options, routeHandler) => {
 			handler = routeHandler;
+			bodySchema = options.schema.body;
 		}),
 	};
 	await testRoutes(app as never);
@@ -154,7 +180,7 @@ async function runExpectedQuery(
 		{
 			project: { id: 'project-id' },
 			user: { id: 'user-id' },
-			body,
+			body: bodySchema?.parse({ model: { provider: 'openai', modelId: 'gpt-4.1' }, ...body }),
 		},
 		reply,
 	);

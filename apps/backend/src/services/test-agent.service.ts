@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { llmTelemetry } from '../agents/telemetry';
 import type { UIMessage } from '../types/chat';
 import type { ModelCosts } from '../types/llm';
-import { AgentRunResult, AgentService } from './agent';
+import { AgentChat, AgentRunResult, AgentService } from './agent';
 import { runSqlOverQueryResults } from './duckdb.service';
 import { buildVerificationMessages } from './test-agent-verification';
 
@@ -57,8 +57,25 @@ export class TestAgentService extends AgentService {
 			projectId,
 		};
 
-		const agent = await this.create(tempChat, modelSelection);
+		const agent = await this.create(tempChat, modelSelection, { withoutMemories: true });
 		return agent.generate([userMessage], { costs });
+	}
+
+	/**
+	 * Run a test prompt in a persisted chat, so the attempt can be replayed like any conversation.
+	 * The chat must already hold the user message.
+	 */
+	async runTestInChat(
+		chat: AgentChat,
+		messages: UIMessage[],
+		modelSelection: LlmSelectedModel,
+		options: { billingAccessVerifiedProjectId?: string } = {},
+	): Promise<AgentRunResult> {
+		const agent = await this.create(chat, modelSelection, {
+			withoutMemories: true,
+			billingAccessVerifiedProjectId: options.billingAccessVerifiedProjectId,
+		});
+		return agent.streamToCompletion(messages, { source: 'test' });
 	}
 
 	/**

@@ -11,6 +11,7 @@ import {
 	InferUIMessageChunk,
 	ModelMessage,
 	pruneMessages,
+	readUIMessageStream,
 	stepCountIs,
 	type StopCondition,
 	StreamTextResult,
@@ -359,6 +360,11 @@ export class AgentService {
 			isBudgetChecked?: boolean;
 			/** The request boundary has already authorized access to an internal system project. */
 			projectAccessAlreadyAuthorized?: boolean;
+			/**
+			 * Leaves the user's memories out of the prompt and skips memory extraction, for runs
+			 * whose outcome must not depend on who triggers them (e.g. tests).
+			 */
+			withoutMemories?: boolean;
 		} = {},
 	): Promise<AgentManager> {
 		await assertUserIsActive(chat.userId);
@@ -405,6 +411,7 @@ export class AgentService {
 			userGroupAccess,
 			stopWhen,
 			options.systemPrompt,
+			options.withoutMemories,
 		);
 		this._agents.set(chat.id, agent);
 		return agent;
@@ -476,6 +483,7 @@ export class AgentManager {
 	private _streamWriter?: UIMessageStreamWriter<UIMessage>;
 	private _systemPrompt = '';
 	private _runCompaction = new RunCompaction(compactionService);
+	private _streamResult?: StreamTextResult<AgentTools, never>;
 
 	constructor(
 		readonly chat: AgentChat,
@@ -488,6 +496,7 @@ export class AgentManager {
 		private readonly _userGroupAccess: AgentUserGroupAccess,
 		stopWhen: StopCondition<AgentTools>[] = interactiveStopConditions,
 		private readonly _systemPromptOverride?: string,
+		private readonly _withoutMemories = false,
 	) {
 		this._finished = new Promise((resolve) => {
 			this._resolveFinished = resolve;
@@ -641,9 +650,12 @@ export class AgentManager {
 					abortSignal: this._abortController.signal,
 					experimental_transform: normalizeCitationMarkersStream(),
 				});
+				this._streamResult = result;
 
 				// Extract memory immediately after the request to the agent is sent
-				this._scheduleMemoryExtraction(uiMessages);
+				if (!this._withoutMemories) {
+					this._scheduleMemoryExtraction(uiMessages);
+				}
 
 				if (opts.events?.newChat) {
 					this._scheduleTitleGeneration(getLastUserMessageText(uiMessages));
@@ -741,7 +753,9 @@ export class AgentManager {
 	}
 
 	private async _buildDefaultSystemPrompt(provider?: Provider, timezone?: string, chatUrl?: string): Promise<string> {
-		const memories = await memoryService.safeGetUserMemories(this.chat.userId, this.chat.projectId, this.chat.id);
+		const memories = this._withoutMemories
+			? []
+			: await memoryService.safeGetUserMemories(this.chat.userId, this.chat.projectId, this.chat.id);
 		const userRules = getUserRules(this._toolContext.projectFolder, this._toolContext.userRulesGroupAccess);
 		const connections = getConnections(this._toolContext.projectFolder);
 		const configuredDatabases = extractConfiguredDatabases(this._toolContext.projectFolder);
@@ -936,28 +950,13 @@ export class AgentManager {
 				abortSignal: this._abortController.signal,
 			});
 			const durationMs = Math.round(performance.now() - startTime);
-
 			const usage = convertToTokenUsage(result.totalUsage);
-			const customModels = await getProjectDeclaredModels(this.chat.projectId)
-				.then(
-					(sources) =>
-						sources.find((source) => source.provider === this._modelSelection.provider)?.models ?? [],
-				)
-				.catch(() => []);
-			const cost = convertToCost(
-				usage,
-				this._modelSelection.provider,
-				this._modelSelection.modelId,
-				customModels,
-				opts.costs,
-			);
-			const finishReason = result.finishReason ?? 'stop';
 
 			return {
 				text: normalizeCitationMarkers(result.text),
 				usage,
-				cost,
-				finishReason,
+				cost: await this._computeCost(usage, opts.costs),
+				finishReason: result.finishReason ?? 'stop',
 				durationMs,
 				responseMessages: result.response.messages,
 				steps: result.steps as AgentRunResult['steps'],
@@ -967,6 +966,53 @@ export class AgentManager {
 		} finally {
 			this._finish();
 		}
+	}
+
+	/**
+	 * Runs the agent like an interactive chat, so the answer is persisted and can be replayed,
+	 * and waits for the whole loop to finish. For background runs that need the outcome (e.g. tests).
+	 */
+	async streamToCompletion(uiMessages: UIMessage[], opts: { source: MessageSource }): Promise<AgentRunResult> {
+		const startTime = performance.now();
+		const stream = this.stream(uiMessages, { source: opts.source });
+		for await (const message of readUIMessageStream<UIMessage>({ stream, terminateOnError: true })) {
+			void message;
+		}
+		await this.waitUntilFinished();
+
+		const result = this._streamResult;
+		if (!result) {
+			throw new Error('The agent run did not start.');
+		}
+		const [text, totalUsage, finishReason, steps, response] = await Promise.all([
+			result.text,
+			result.totalUsage,
+			result.finishReason,
+			result.steps,
+			result.response,
+		]);
+		const usage = convertToTokenUsage(totalUsage);
+
+		return {
+			text: normalizeCitationMarkers(text),
+			usage,
+			cost: await this._computeCost(usage),
+			finishReason: finishReason ?? 'stop',
+			durationMs: Math.round(performance.now() - startTime),
+			responseMessages: response.messages,
+			steps: steps as AgentRunResult['steps'],
+			responseParts: [],
+			queryResults: this._toolContext.queryResults,
+		};
+	}
+
+	private async _computeCost(usage: TokenUsage, costs?: ModelCosts): Promise<TokenCost> {
+		const customModels = await getProjectDeclaredModels(this.chat.projectId)
+			.then(
+				(sources) => sources.find((source) => source.provider === this._modelSelection.provider)?.models ?? [],
+			)
+			.catch(() => []);
+		return convertToCost(usage, this._modelSelection.provider, this._modelSelection.modelId, customModels, costs);
 	}
 
 	checkIsUserOwner(userId: string): boolean {
