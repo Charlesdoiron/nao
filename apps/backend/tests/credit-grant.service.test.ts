@@ -31,6 +31,7 @@ vi.mock('../src/db/db', async () => {
 
 import s from '../src/db/abstractSchema';
 import { db } from '../src/db/db';
+import * as creditGrantQueries from '../src/queries/credit-grant.queries';
 import {
 	getCreditGrant,
 	getCreditSummary,
@@ -359,6 +360,7 @@ describe('automatic credit grants', () => {
 			await db.insert(s.user).values({ id: userId, name: userId, email: `${userId}@example.com` });
 			await db.insert(s.orgMember).values({ orgId: 'lifecycle-org', userId, role: 'user' });
 			await db.insert(s.creditGrantCandidate).values({
+				id: userId,
 				grantType: 'user_join',
 				orgId: 'lifecycle-org',
 				userId,
@@ -379,6 +381,23 @@ describe('automatic credit grants', () => {
 		await reconcileCreditGrants(cursor, 1);
 
 		expect(await getCreditGrant('user_join', '000-lifecycle-user-2')).toEqual({ orgId: 'lifecycle-org' });
+	});
+
+	it('preserves database timestamp precision between reconciliation batches', async () => {
+		const createdAt = '2026-10-26 15:18:00.123456';
+		const listCandidates = vi
+			.spyOn(creditGrantQueries, 'listActivatedUserJoinCandidateBatch')
+			.mockResolvedValueOnce([{ id: 'candidate-1', userId: null, cursorCreatedAt: createdAt }])
+			.mockResolvedValueOnce([]);
+
+		const cursor = await reconcileCreditGrants({}, 1);
+		expect(cursor.userJoinCandidate).toEqual({ createdAt, id: 'candidate-1' });
+
+		await reconcileCreditGrants(cursor, 1);
+		expect(listCandidates).toHaveBeenNthCalledWith(2, {
+			after: { createdAt, id: 'candidate-1' },
+			limit: 1,
+		});
 	});
 
 	it('reads the current database policy without changing earlier gifts', async () => {

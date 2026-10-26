@@ -50,7 +50,7 @@ export async function reconcileCreditGrants(
 	let userJoinCandidate = cursor.userJoinCandidate;
 	await runBestEffort('reconcile user join grants', {}, async () => {
 		const candidates = await creditGrantQueries.listActivatedUserJoinCandidateBatch({
-			after: toQueryCursor(cursor.userJoinCandidate),
+			after: cursor.userJoinCandidate,
 			limit,
 		});
 		const userIds = new Set(candidates.flatMap(({ userId }) => (userId ? [userId] : [])));
@@ -77,7 +77,7 @@ async function reconcileOrganizationSetupGrantBatch(
 	let nextCursor = after;
 	await runBestEffort('reconcile organization setup grants', {}, async () => {
 		const candidates = await creditGrantQueries.listPendingOrganizationSetupCandidates({
-			after: toQueryCursor(after),
+			after,
 			limit,
 		});
 		await reconcileOrganizationSetupCandidates(candidates);
@@ -297,16 +297,10 @@ async function isUserActive(userId: string): Promise<boolean> {
 	return !!user && (!user.requiresPasswordReset || hasSession);
 }
 
-function toQueryCursor(
-	cursor: ReconciliationCandidateCursor | undefined,
-): creditGrantQueries.CreditGrantCandidateCursor | undefined {
-	return cursor ? { createdAt: new Date(cursor.createdAt), id: cursor.id } : undefined;
-}
-
 function toReconciliationCursor(
-	candidate: { createdAt: Date; id: string } | undefined,
+	candidate: { cursorCreatedAt: string; id: string } | undefined,
 ): ReconciliationCandidateCursor | undefined {
-	return candidate ? { createdAt: candidate.createdAt.toISOString(), id: candidate.id } : undefined;
+	return candidate ? { createdAt: candidate.cursorCreatedAt, id: candidate.id } : undefined;
 }
 
 async function runBestEffort(

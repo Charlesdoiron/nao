@@ -471,7 +471,7 @@ export const startServer = async (opts: { port: number; host: string }) => {
 		await ensureOrganizationSetup();
 	}
 	await logLicenseStatus();
-	void reconcileOrganizationSetupGrants();
+	await reconcileOrganizationSetupGrants();
 
 	void runLogCleanup().catch((err) => {
 		logger.error(`Log cleanup failed: ${err instanceof Error ? err.message : String(err)}`, { source: 'system' });

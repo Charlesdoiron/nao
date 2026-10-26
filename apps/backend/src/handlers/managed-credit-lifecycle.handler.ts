@@ -30,7 +30,11 @@ function parseCandidateCursor(value: unknown): ReconciliationCandidateCursor | u
 		return undefined;
 	}
 	const { createdAt, id } = value as Record<string, unknown>;
-	if (typeof createdAt !== 'string' || Number.isNaN(Date.parse(createdAt)) || typeof id !== 'string') {
+	if (
+		typeof createdAt !== 'string' ||
+		(!/^\d+$/.test(createdAt) && Number.isNaN(Date.parse(createdAt))) ||
+		typeof id !== 'string'
+	) {
 		return undefined;
 	}
 	return { createdAt, id };

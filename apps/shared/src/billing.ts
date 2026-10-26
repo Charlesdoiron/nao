@@ -28,11 +28,11 @@ export function formatMicroUsd(
 	{ locale, ...options }: Intl.NumberFormatOptions & { locale?: string | string[] } = {},
 ): string {
 	return new Intl.NumberFormat(locale, {
-		style: 'currency',
-		currency: 'USD',
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 		...options,
+		style: 'currency',
+		currency: 'USD',
 	}).format(microUsd / 1_000_000);
 }
 

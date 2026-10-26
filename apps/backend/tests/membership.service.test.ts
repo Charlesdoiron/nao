@@ -49,7 +49,12 @@ describe('membership service', () => {
 		await addOrganizationMemberIfMissing(member);
 
 		expect(mocks.addOrgMemberIfMissing).toHaveBeenCalledWith(member);
+		expect(mocks.addOrgMemberIfMissing).toHaveBeenCalledTimes(1);
 		expect(mocks.recordOrganizationJoinCandidate).toHaveBeenCalledWith('org-1', 'user-1');
+		expect(mocks.recordOrganizationJoinCandidate).toHaveBeenCalledTimes(1);
+		expect(mocks.addOrgMemberIfMissing.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.recordOrganizationJoinCandidate.mock.invocationCallOrder[0],
+		);
 	});
 
 	it.each([
@@ -60,6 +65,7 @@ describe('membership service', () => {
 
 		await addProjectMember(member, groupIds);
 
+		const persistMember = groupIds.length ? mocks.addProjectMemberWithUserGroups : mocks.addProjectMember;
 		if (groupIds.length) {
 			expect(mocks.addProjectMemberWithUserGroups).toHaveBeenCalledWith(member, groupIds);
 			expect(mocks.addProjectMember).not.toHaveBeenCalled();
@@ -67,6 +73,11 @@ describe('membership service', () => {
 			expect(mocks.addProjectMember).toHaveBeenCalledWith(member);
 			expect(mocks.addProjectMemberWithUserGroups).not.toHaveBeenCalled();
 		}
+		expect(persistMember).toHaveBeenCalledTimes(1);
 		expect(mocks.recordProjectJoinCandidate).toHaveBeenCalledWith('project-1', 'user-1');
+		expect(mocks.recordProjectJoinCandidate).toHaveBeenCalledTimes(1);
+		expect(persistMember.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.recordProjectJoinCandidate.mock.invocationCallOrder[0],
+		);
 	});
 });

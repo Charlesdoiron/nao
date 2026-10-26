@@ -1,23 +1,24 @@
-import { and, asc, eq, gt, isNotNull, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import type { DBCreditGrantCandidate, NewCreditGrantCandidate } from '../db/abstractSchema';
 import s from '../db/abstractSchema';
 import { db } from '../db/db';
+import dbConfig, { Dialect } from '../db/dbConfig';
 
 export interface CreditGrantCandidateCursor {
-	createdAt: Date;
+	createdAt: string;
 	id: string;
 }
 
 export async function listPendingOrganizationSetupCandidates(
 	input: { after?: CreditGrantCandidateCursor; limit?: number } = {},
-): Promise<Array<{ id: string; orgId: string | null; projectId: string | null; createdAt: Date }>> {
+): Promise<Array<{ id: string; orgId: string | null; projectId: string | null; cursorCreatedAt: string }>> {
 	const query = db
 		.selectDistinct({
 			id: s.creditGrantCandidate.id,
 			orgId: s.creditGrantCandidate.orgId,
 			projectId: s.creditGrantCandidate.projectId,
-			createdAt: s.creditGrantCandidate.createdAt,
+			cursorCreatedAt: sql<string>`cast(${s.creditGrantCandidate.createdAt} as text)`,
 		})
 		.from(s.creditGrantCandidate)
 		.leftJoin(s.creditWallet, eq(s.creditWallet.orgId, s.creditGrantCandidate.orgId))
@@ -31,15 +32,7 @@ export async function listPendingOrganizationSetupCandidates(
 				isNotNull(s.creditGrantCandidate.orgId),
 				isNotNull(s.creditGrantCandidate.projectId),
 				isNull(s.creditLedger.id),
-				input.after
-					? or(
-							gt(s.creditGrantCandidate.createdAt, input.after.createdAt),
-							and(
-								eq(s.creditGrantCandidate.createdAt, input.after.createdAt),
-								gt(s.creditGrantCandidate.id, input.after.id),
-							),
-						)
-					: undefined,
+				afterCandidateCursor(input.after),
 			),
 		)
 		.orderBy(asc(s.creditGrantCandidate.createdAt), asc(s.creditGrantCandidate.id));
@@ -123,12 +116,12 @@ export async function listActivatedUserJoinCandidateUserIds(orgId?: string): Pro
 export async function listActivatedUserJoinCandidateBatch(input: {
 	after?: CreditGrantCandidateCursor;
 	limit: number;
-}): Promise<Array<{ id: string; userId: string | null; createdAt: Date }>> {
+}): Promise<Array<{ id: string; userId: string | null; cursorCreatedAt: string }>> {
 	return db
 		.select({
 			id: s.creditGrantCandidate.id,
 			userId: s.creditGrantCandidate.userId,
-			createdAt: s.creditGrantCandidate.createdAt,
+			cursorCreatedAt: sql<string>`cast(${s.creditGrantCandidate.createdAt} as text)`,
 		})
 		.from(s.creditGrantCandidate)
 		.where(
@@ -136,15 +129,7 @@ export async function listActivatedUserJoinCandidateBatch(input: {
 				eq(s.creditGrantCandidate.grantType, 'user_join'),
 				isNotNull(s.creditGrantCandidate.userId),
 				isNotNull(s.creditGrantCandidate.activatedAt),
-				input.after
-					? or(
-							gt(s.creditGrantCandidate.createdAt, input.after.createdAt),
-							and(
-								eq(s.creditGrantCandidate.createdAt, input.after.createdAt),
-								gt(s.creditGrantCandidate.id, input.after.id),
-							),
-						)
-					: undefined,
+				afterCandidateCursor(input.after),
 			),
 		)
 		.orderBy(asc(s.creditGrantCandidate.createdAt), asc(s.creditGrantCandidate.id))
@@ -165,4 +150,18 @@ export async function listOrganizationSetupCandidateProjectIds(orgId: string): P
 		)
 		.execute();
 	return candidates.flatMap(({ projectId }) => (projectId ? [projectId] : []));
+}
+
+function afterCandidateCursor(cursor: CreditGrantCandidateCursor | undefined) {
+	if (!cursor) {
+		return undefined;
+	}
+	const createdAt =
+		dbConfig.dialect === Dialect.Postgres
+			? sql<Date>`cast(${cursor.createdAt} as timestamp)`
+			: new Date(/^\d+$/.test(cursor.createdAt) ? Number(cursor.createdAt) : cursor.createdAt);
+	return or(
+		gt(s.creditGrantCandidate.createdAt, createdAt),
+		and(eq(s.creditGrantCandidate.createdAt, createdAt), gt(s.creditGrantCandidate.id, cursor.id)),
+	);
 }

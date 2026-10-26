@@ -14,6 +14,7 @@ describe('micro USD formatting', () => {
 		[1_234_567, {}, '$1.23'],
 		[20_000_000, { minimumFractionDigits: 0, maximumFractionDigits: 2 }, '$20'],
 		[20_500_000, { minimumFractionDigits: 0, maximumFractionDigits: 2 }, '$20.5'],
+		[1_234_567, { style: 'percent' as const, currency: 'EUR' }, '$1.23'],
 	])('formats %i micro USD', (microUsd, options, expected) => {
 		expect(formatMicroUsd(microUsd, { locale: 'en-US', ...options })).toBe(expected);
 	});
