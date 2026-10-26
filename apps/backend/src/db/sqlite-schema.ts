@@ -117,6 +117,7 @@ export const user = sqliteTable('user', {
 	messagingProviderCode: text('messaging_provider_code').unique(),
 	githubAccessToken: text('github_access_token'),
 	gitlabAccessToken: text('gitlab_access_token'),
+	deactivatedAt: integer('deactivated_at', { mode: 'timestamp_ms' }),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
 		.notNull(),
@@ -2183,6 +2184,7 @@ export const analyticsEvent = sqliteTable(
 		index('analytics_event_sharedStoryId_idx').on(t.sharedStoryId),
 		index('analytics_event_actorUserId_idx').on(t.actorUserId),
 		index('analytics_event_type_createdAt_idx').on(t.type, t.createdAt),
+		index('analytics_event_project_type_asset_story_idx').on(t.projectId, t.type, t.assetType, t.storyId),
 		check(
 			'analytics_event_asset_id_required',
 			sql`CASE WHEN asset_type = 'chat' THEN chat_id IS NOT NULL WHEN asset_type = 'story' THEN story_id IS NOT NULL ELSE TRUE END`,
