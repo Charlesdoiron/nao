@@ -1,16 +1,13 @@
-import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
-
 import type { DBProject } from '../db/abstractSchema';
-import s from '../db/abstractSchema';
-import { db } from '../db/db';
 import { isCloud } from '../env';
+import * as creditGrantQueries from '../queries/credit-grant.queries';
 import * as creditWalletQueries from '../queries/credit-wallet.queries';
 import * as projectQueries from '../queries/project.queries';
 import * as userQueries from '../queries/user.queries';
 import { logger, serializeError } from '../utils/logger';
 import { extractConfiguredDatabases } from '../utils/nao-config';
-import { assessProjectReadiness } from '../utils/project-readiness';
 import { issueCreditGrant } from './credit-wallet.service';
+import { assessProjectReadiness } from './project-readiness.service';
 import { getProjectRuntimeEnvVars } from './project-runtime-env';
 
 export async function recordOrganizationSetupCandidate(projectId: string): Promise<void> {
@@ -29,30 +26,21 @@ export async function reconcileOrganizationSetupGrants(): Promise<void> {
 	await runBestEffort('reconcile organization setup grants', {}, reconcileOrganizationSetupGrantsUnsafe);
 }
 
+export async function reconcileCreditGrants(): Promise<void> {
+	await reconcileOrganizationSetupGrants();
+	await runBestEffort('reconcile user join grants', {}, async () => {
+		const userIds = await creditGrantQueries.listActivatedUserJoinCandidateUserIds();
+		for (const userId of userIds) {
+			await reconcileUserJoinGrant(userId);
+		}
+	});
+}
+
 async function reconcileOrganizationSetupGrantsUnsafe(): Promise<void> {
 	if (!isCloud) {
 		return;
 	}
-	const candidates = await db
-		.selectDistinct({
-			orgId: s.creditGrantCandidate.orgId,
-			projectId: s.creditGrantCandidate.projectId,
-		})
-		.from(s.creditGrantCandidate)
-		.leftJoin(s.creditWallet, eq(s.creditWallet.orgId, s.creditGrantCandidate.orgId))
-		.leftJoin(
-			s.creditLedger,
-			and(eq(s.creditLedger.walletId, s.creditWallet.id), eq(s.creditLedger.grantType, 'organization_setup')),
-		)
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
-				isNotNull(s.creditGrantCandidate.orgId),
-				isNotNull(s.creditGrantCandidate.projectId),
-				isNull(s.creditLedger.id),
-			),
-		)
-		.execute();
+	const candidates = await creditGrantQueries.listPendingOrganizationSetupCandidates();
 	const projectIdsByOrganization = new Map<string, string[]>();
 	for (const { orgId, projectId } of candidates) {
 		if (orgId && projectId) {
@@ -99,16 +87,12 @@ async function recordOrganizationSetupCandidateUnsafe(projectId: string): Promis
 	if (!project?.orgId) {
 		return;
 	}
-	await db
-		.insert(s.creditGrantCandidate)
-		.values({
-			grantType: 'organization_setup',
-			orgId: project.orgId,
-			projectId,
-			sourceKey: `project:${projectId}`,
-		})
-		.onConflictDoNothing()
-		.execute();
+	await creditGrantQueries.addCreditGrantCandidate({
+		grantType: 'organization_setup',
+		orgId: project.orgId,
+		projectId,
+		sourceKey: `project:${projectId}`,
+	});
 	await reconcileOrganizationSetupGrantUnsafe(projectId);
 }
 
@@ -117,7 +101,7 @@ async function reconcileOrganizationSetupGrantUnsafe(projectId: string): Promise
 		return;
 	}
 	const [candidate, project] = await Promise.all([
-		getSetupCandidate(projectId),
+		creditGrantQueries.getOrganizationSetupCandidate(projectId),
 		projectQueries.getProjectById(projectId),
 	]);
 	if (!candidate?.orgId || !project || !(await isProjectReady(project))) {
@@ -171,26 +155,10 @@ async function activateUserJoinCandidatesUnsafe(userId: string): Promise<void> {
 	if (await creditWalletQueries.getCreditGrant('user_join', userId)) {
 		return;
 	}
-	const [candidate] = await db
-		.select({ id: s.creditGrantCandidate.id })
-		.from(s.creditGrantCandidate)
-		.where(and(eq(s.creditGrantCandidate.grantType, 'user_join'), eq(s.creditGrantCandidate.userId, userId)))
-		.limit(1)
-		.execute();
-	if (!candidate) {
+	if (!(await creditGrantQueries.hasUserJoinCandidate(userId))) {
 		return;
 	}
-	await db
-		.update(s.creditGrantCandidate)
-		.set({ activatedAt: new Date() })
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'user_join'),
-				eq(s.creditGrantCandidate.userId, userId),
-				isNull(s.creditGrantCandidate.activatedAt),
-			),
-		)
-		.execute();
+	await creditGrantQueries.activateUserJoinCandidates(userId);
 	await reconcileUserJoinGrantUnsafe(userId, true);
 }
 
@@ -198,18 +166,7 @@ async function reconcileUserJoinGrantUnsafe(userId: string, grantKnownAbsent = f
 	if (!isCloud || (!grantKnownAbsent && (await creditWalletQueries.getCreditGrant('user_join', userId)))) {
 		return;
 	}
-	const candidates = await db
-		.select()
-		.from(s.creditGrantCandidate)
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'user_join'),
-				eq(s.creditGrantCandidate.userId, userId),
-				isNotNull(s.creditGrantCandidate.activatedAt),
-			),
-		)
-		.orderBy(asc(s.creditGrantCandidate.createdAt), asc(s.creditGrantCandidate.id))
-		.execute();
+	const candidates = await creditGrantQueries.listActivatedUserJoinCandidates(userId);
 	for (const candidate of candidates) {
 		if (!candidate.orgId || !(await hasEligibleProjectAccess(candidate.orgId, userId))) {
 			continue;
@@ -239,36 +196,21 @@ async function recordUserJoinCandidate({
 		return;
 	}
 	const active = await isUserActive(userId);
-	await db
-		.insert(s.creditGrantCandidate)
-		.values({
-			grantType: 'user_join',
-			orgId,
-			userId,
-			projectId,
-			sourceKey,
-			activatedAt: active ? new Date() : null,
-		})
-		.onConflictDoNothing()
-		.execute();
+	await creditGrantQueries.addCreditGrantCandidate({
+		grantType: 'user_join',
+		orgId,
+		userId,
+		projectId,
+		sourceKey,
+		activatedAt: active ? new Date() : null,
+	});
 	if (active || (await isUserActive(userId))) {
 		await activateUserJoinCandidatesUnsafe(userId);
 	}
 }
 
 async function reconcileOrganizationUserJoinGrants(orgId: string): Promise<void> {
-	const candidates = await db
-		.select({ userId: s.creditGrantCandidate.userId })
-		.from(s.creditGrantCandidate)
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'user_join'),
-				eq(s.creditGrantCandidate.orgId, orgId),
-				isNotNull(s.creditGrantCandidate.activatedAt),
-			),
-		)
-		.execute();
-	const userIds = new Set(candidates.flatMap(({ userId }) => (userId ? [userId] : [])));
+	const userIds = await creditGrantQueries.listActivatedUserJoinCandidateUserIds(orgId);
 	for (const userId of userIds) {
 		await reconcileUserJoinGrantUnsafe(userId);
 	}
@@ -278,21 +220,8 @@ async function hasEligibleProjectAccess(orgId: string, userId: string): Promise<
 	if (!(await creditWalletQueries.getCreditGrant('organization_setup', orgId))) {
 		return false;
 	}
-	const candidates = await db
-		.select({ projectId: s.creditGrantCandidate.projectId })
-		.from(s.creditGrantCandidate)
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
-				eq(s.creditGrantCandidate.orgId, orgId),
-				isNotNull(s.creditGrantCandidate.projectId),
-			),
-		)
-		.execute();
-	for (const { projectId } of candidates) {
-		if (!projectId) {
-			continue;
-		}
+	const projectIds = await creditGrantQueries.listOrganizationSetupCandidateProjectIds(orgId);
+	for (const projectId of projectIds) {
 		const [project, role] = await Promise.all([
 			projectQueries.getProjectById(projectId),
 			projectQueries.getUserRoleInProject(projectId, userId),
@@ -312,28 +241,12 @@ async function isProjectReady(project: Pick<DBProject, 'id' | 'path' | 'envVars'
 		extractConfiguredDatabases(project.path).length > 0
 	);
 }
-
-async function getSetupCandidate(projectId: string) {
-	const [candidate] = await db
-		.select()
-		.from(s.creditGrantCandidate)
-		.where(
-			and(
-				eq(s.creditGrantCandidate.grantType, 'organization_setup'),
-				eq(s.creditGrantCandidate.projectId, projectId),
-			),
-		)
-		.limit(1)
-		.execute();
-	return candidate ?? null;
-}
-
 async function isUserActive(userId: string): Promise<boolean> {
-	const [user, sessions] = await Promise.all([
+	const [user, hasSession] = await Promise.all([
 		userQueries.getUser({ id: userId }),
-		db.select({ id: s.session.id }).from(s.session).where(eq(s.session.userId, userId)).limit(1).execute(),
+		userQueries.hasUserSession(userId),
 	]);
-	return !!user && (!user.requiresPasswordReset || sessions.length > 0);
+	return !!user && (!user.requiresPasswordReset || hasSession);
 }
 
 async function runBestEffort(

@@ -21,11 +21,12 @@ import * as projectQueries from './queries/project.queries';
 import * as userQueries from './queries/user.queries';
 import { DEACTIVATED_ACCOUNT_MESSAGE } from './services/account-status.service';
 import { initializeSelfHostedUserAfterCreation } from './services/auth-user-onboarding.service';
-import { activateUserJoinCandidates, recordOrganizationJoinCandidate } from './services/credit-grant.service';
+import { activateUserJoinCandidates } from './services/credit-grant.service';
 import { emailService } from './services/email';
 import { githubOAuthConfig } from './services/github';
 import * as gitlabService from './services/gitlab';
 import { hasFeature, LICENSE_FEATURES } from './services/license.service';
+import { addOrganizationMemberIfMissing } from './services/membership.service';
 import {
 	augmentSocialProvidersWithMicrosoft,
 	getTrustedProvidersForMicrosoft,
@@ -293,12 +294,11 @@ async function createAuthInstance(baseURL: string) {
 										? await orgQueries.findOrganizationByEmailDomain(user.email)
 										: null;
 								if (matchedOrg) {
-									await orgQueries.addOrgMemberIfMissing({
+									await addOrganizationMemberIfMissing({
 										orgId: matchedOrg.id,
 										userId: user.id,
 										role: env.DEFAULT_USER_ROLE,
 									});
-									await recordOrganizationJoinCandidate(matchedOrg.id, user.id);
 								} else {
 									await orgQueries.initializePersonalOrganization(user.id);
 								}

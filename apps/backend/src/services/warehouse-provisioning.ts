@@ -24,14 +24,14 @@ import {
 } from '../types/warehouse';
 import { decryptSecret, encryptSecret } from '../utils/encryption';
 import { logger, serializeError } from '../utils/logger';
-import { createNewProject, createTempProjectDir } from '../utils/project-import.utils';
-import { reconcileOrganizationSetupGrant } from './credit-grant.service';
 import {
 	deleteManagedGithubRepository,
 	getManagedGithubRepositoryFullName,
 	provisionManagedGithubRepository,
 } from './managed-github-repository';
 import { generateOnboardingRules } from './onboarding-rules';
+import { createNewProject, createTempProjectDir } from './project-import.service';
+import { reconcileProjectReadiness } from './project.service';
 import { saveProjectWarehouseEnvVars } from './warehouse-credentials';
 
 const INIT_TIMEOUT_MS = 15 * 60_000;
@@ -560,7 +560,7 @@ async function finalizeWarehouseProvisioning(jobId: string): Promise<void> {
 			temporaryDirectory: null,
 			finishedAt: new Date(),
 		});
-		await reconcileOrganizationSetupGrant(job.projectId);
+		await reconcileProjectReadiness(job.projectId);
 	} catch (error) {
 		const serializedError = serializeError(error);
 		const errorMessage = typeof serializedError.message === 'string' ? serializedError.message : 'Unknown error';

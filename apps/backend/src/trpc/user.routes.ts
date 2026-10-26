@@ -11,10 +11,9 @@ import * as userQueries from '../queries/user.queries';
 import * as userGroupQueries from '../queries/user-group.queries';
 import * as userPreferenceQueries from '../queries/user-preference.queries';
 import { cleanupContextWorktree } from '../services/context-explorer-git.service';
-import { recordProjectJoinCandidate } from '../services/credit-grant.service';
 import { discordService } from '../services/discord';
 import { canUseDiscordInProject } from '../services/discord-helpers';
-import { addProjectMemberWithUserGroups } from '../services/project-user-group-membership.service';
+import { addProjectMember } from '../services/membership.service';
 import { addTeamMember } from '../services/team-member';
 import { validateAssignableUserGroupIds } from '../services/user-group-availability.service';
 import type { StoredUserPreferences } from '../types/usage';
@@ -113,16 +112,7 @@ export const userRoutes = {
 				name: input.name,
 				checkExisting: async (userId) => !!(await projectQueries.getProjectMember(projectId, userId)),
 				addMember: async (userId) => {
-					if (groupIds.length > 0) {
-						await addProjectMemberWithUserGroups(
-							{ userId, projectId, role: env.DEFAULT_USER_ROLE },
-							groupIds,
-						);
-						await recordProjectJoinCandidate(projectId, userId);
-						return;
-					}
-					await projectQueries.addProjectMember({ userId, projectId, role: env.DEFAULT_USER_ROLE });
-					await recordProjectJoinCandidate(projectId, userId);
+					await addProjectMember({ userId, projectId, role: env.DEFAULT_USER_ROLE }, groupIds);
 				},
 				buildEmail: (user, password) =>
 					buildUserAddedEmail(user, ctx.project.name, 'project', password, ctx.user.email),

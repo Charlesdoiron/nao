@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { assessProjectReadiness } from '../src/utils/project-readiness';
+import { assessProjectReadiness } from '../src/services/project-readiness.service';
 
 describe('assessProjectReadiness', () => {
 	it('rejects a directory at the nao config path', () => {

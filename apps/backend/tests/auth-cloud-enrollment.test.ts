@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
 	addOrgMemberIfMissing: vi.fn(),
 	betterAuth: vi.fn(),
 	findOrganizationByEmailDomain: vi.fn(),
-	recordOrganizationJoinCandidate: vi.fn(),
 }));
 
 vi.mock('better-auth', () => ({
@@ -39,7 +38,6 @@ vi.mock('../src/env', () => ({
 	MCP_VALID_AUDIENCES: [],
 }));
 vi.mock('../src/queries/organization.queries', () => ({
-	addOrgMemberIfMissing: mocks.addOrgMemberIfMissing,
 	findOrganizationByEmailDomain: mocks.findOrganizationByEmailDomain,
 	getGoogleConfig: vi.fn().mockResolvedValue({ authDomains: '', clientId: '', clientSecret: '' }),
 	initializePersonalOrganization: vi.fn(),
@@ -51,7 +49,6 @@ vi.mock('../src/services/auth-user-onboarding.service', () => ({
 }));
 vi.mock('../src/services/credit-grant.service', () => ({
 	activateUserJoinCandidates: vi.fn(),
-	recordOrganizationJoinCandidate: mocks.recordOrganizationJoinCandidate,
 }));
 vi.mock('../src/services/email', () => ({ emailService: { sendEmail: vi.fn() } }));
 vi.mock('../src/services/github', () => ({ githubOAuthConfig: vi.fn(() => null) }));
@@ -63,6 +60,9 @@ vi.mock('../src/services/license.service', () => ({
 vi.mock('../src/services/microsoft-auth.service', () => ({
 	augmentSocialProvidersWithMicrosoft: vi.fn(),
 	getTrustedProvidersForMicrosoft: vi.fn(() => []),
+}));
+vi.mock('../src/services/membership.service', () => ({
+	addOrganizationMemberIfMissing: mocks.addOrgMemberIfMissing,
 }));
 vi.mock('../src/services/oidc-auth.service', () => ({
 	augmentPluginsWithOidc: vi.fn(),
@@ -85,10 +85,9 @@ describe('Cloud Google organization enrollment', () => {
 		mocks.addOrgMemberIfMissing.mockReset();
 		mocks.betterAuth.mockReset().mockReturnValue({});
 		mocks.findOrganizationByEmailDomain.mockReset().mockResolvedValue({ id: 'matched-org' });
-		mocks.recordOrganizationJoinCandidate.mockReset();
 	});
 
-	it('records a join grant candidate for the matched organization', async () => {
+	it('adds a matched organization member through the membership service', async () => {
 		await getAuth();
 		const options = mocks.betterAuth.mock.calls[0]?.[0] as {
 			databaseHooks: {
@@ -113,6 +112,5 @@ describe('Cloud Google organization enrollment', () => {
 			userId: 'google-user',
 			role: 'user',
 		});
-		expect(mocks.recordOrganizationJoinCandidate).toHaveBeenCalledWith('matched-org', 'google-user');
 	});
 });

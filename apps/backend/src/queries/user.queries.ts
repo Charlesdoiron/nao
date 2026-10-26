@@ -18,6 +18,16 @@ export const getUser = async (identifier: { id: string } | { email: string }): P
 	return user ?? null;
 };
 
+export const hasUserSession = async (userId: string): Promise<boolean> => {
+	const [session] = await db
+		.select({ id: s.session.id })
+		.from(s.session)
+		.where(eq(s.session.userId, userId))
+		.limit(1)
+		.execute();
+	return Boolean(session);
+};
+
 export const getUserProfile = async (
 	userId: string,
 ): Promise<{ id: string; name: string; email: string; image: string | null } | null> => {

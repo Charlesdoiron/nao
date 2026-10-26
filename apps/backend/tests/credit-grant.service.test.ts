@@ -40,6 +40,7 @@ import * as projectQueries from '../src/queries/project.queries';
 import * as userQueries from '../src/queries/user.queries';
 import {
 	activateUserJoinCandidates,
+	reconcileCreditGrants,
 	reconcileOrganizationSetupGrant,
 	reconcileOrganizationSetupGrants,
 	recordOrganizationJoinCandidate,
@@ -321,6 +322,31 @@ describe('automatic credit grants', () => {
 		await recordProjectJoinCandidate('concurrent-project', 'concurrent-user');
 
 		expect(await getCreditGrant('user_join', 'concurrent-user')).toEqual({ orgId: 'concurrent-org' });
+	});
+
+	it('reconciles activated join candidates from the lifecycle sweep', async () => {
+		await insertReadyFundedOrganization('lifecycle-org', 'lifecycle-project');
+		await db.insert(s.user).values({
+			id: 'lifecycle-user',
+			name: 'Lifecycle User',
+			email: 'lifecycle@example.com',
+		});
+		await db.insert(s.orgMember).values({
+			orgId: 'lifecycle-org',
+			userId: 'lifecycle-user',
+			role: 'user',
+		});
+		await db.insert(s.creditGrantCandidate).values({
+			grantType: 'user_join',
+			orgId: 'lifecycle-org',
+			userId: 'lifecycle-user',
+			sourceKey: 'org-member:lifecycle-org:lifecycle-user',
+			activatedAt: new Date(),
+		});
+
+		await reconcileCreditGrants();
+
+		expect(await getCreditGrant('user_join', 'lifecycle-user')).toEqual({ orgId: 'lifecycle-org' });
 	});
 
 	it('reads the current database policy without changing earlier gifts', async () => {

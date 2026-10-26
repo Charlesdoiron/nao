@@ -13,7 +13,7 @@ import {
 	getProjectNameFromPath,
 	readProjectNameFromConfig,
 	replaceExistingProject,
-} from '../utils/project-import.utils';
+} from '../services/project-import.service';
 import {
 	adminProtectedProcedure,
 	cloudBillingAdminProcedure,

@@ -2,11 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	addProjectMember: vi.fn(),
-	addProjectMemberWithUserGroups: vi.fn(),
 	addTeamMember: vi.fn(),
 	hasFeature: vi.fn(),
 	organizationRoleMappingActive: false,
-	recordProjectJoinCandidate: vi.fn(),
 	updateProjectMemberRole: vi.fn(),
 	UserGroupQueryError: class UserGroupQueryError extends Error {
 		constructor(
@@ -22,7 +20,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/auth', () => ({ getAuth: vi.fn() }));
 vi.mock('../src/queries/memory', () => ({}));
 vi.mock('../src/queries/project.queries', () => ({
-	addProjectMember: mocks.addProjectMember,
 	getProjectByUserId: vi.fn(async () => ({ id: 'project-id', name: 'Project', path: '/project' })),
 	getProjectMember: vi.fn(),
 	getUserRoleInProject: vi.fn(async () => 'admin'),
@@ -39,15 +36,12 @@ vi.mock('../src/queries/user-group.queries', () => ({
 }));
 vi.mock('../src/queries/user-preference.queries', () => ({}));
 vi.mock('../src/services/context-explorer-git.service', () => ({ cleanupContextWorktree: vi.fn() }));
-vi.mock('../src/services/credit-grant.service', () => ({
-	recordProjectJoinCandidate: mocks.recordProjectJoinCandidate,
-}));
 vi.mock('../src/services/license.service', () => ({
 	hasFeature: mocks.hasFeature,
 	LICENSE_FEATURES: { userGroups: 'user-groups' },
 }));
-vi.mock('../src/services/project-user-group-membership.service', () => ({
-	addProjectMemberWithUserGroups: mocks.addProjectMemberWithUserGroups,
+vi.mock('../src/services/membership.service', () => ({
+	addProjectMember: mocks.addProjectMember,
 }));
 vi.mock('../src/services/team-member', () => ({ addTeamMember: mocks.addTeamMember }));
 vi.mock('../src/services/user-group-availability.service', () => ({
@@ -107,9 +101,10 @@ describe('add user to project groups', () => {
 		});
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 		expect(mocks.validateAssignableUserGroupIds).not.toHaveBeenCalled();
-		expect(mocks.addProjectMember).toHaveBeenCalledOnce();
-		expect(mocks.recordProjectJoinCandidate).toHaveBeenCalledWith('project-id', 'added-user-id');
-		expect(mocks.addProjectMemberWithUserGroups).not.toHaveBeenCalled();
+		expect(mocks.addProjectMember).toHaveBeenCalledWith(
+			{ userId: 'added-user-id', projectId: 'project-id', role: expect.any(String) },
+			[],
+		);
 	});
 
 	it('adds a user with selected groups without unlimited entitlement', async () => {
@@ -120,9 +115,10 @@ describe('add user to project groups', () => {
 		).resolves.toMatchObject({ newUser: { id: 'added-user-id' } });
 		expect(mocks.validateAssignableUserGroupIds).toHaveBeenCalledWith('project-id', ['analysts']);
 		expect(mocks.addTeamMember).toHaveBeenCalledOnce();
-		expect(mocks.addProjectMember).not.toHaveBeenCalled();
-		expect(mocks.addProjectMemberWithUserGroups).toHaveBeenCalledOnce();
-		expect(mocks.recordProjectJoinCandidate).toHaveBeenCalledWith('project-id', 'added-user-id');
+		expect(mocks.addProjectMember).toHaveBeenCalledWith(
+			{ userId: 'added-user-id', projectId: 'project-id', role: expect.any(String) },
+			['analysts'],
+		);
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
 
@@ -141,7 +137,6 @@ describe('add user to project groups', () => {
 			).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 			expect(mocks.addTeamMember).not.toHaveBeenCalled();
 			expect(mocks.addProjectMember).not.toHaveBeenCalled();
-			expect(mocks.addProjectMemberWithUserGroups).not.toHaveBeenCalled();
 		},
 	);
 
@@ -153,7 +148,7 @@ describe('add user to project groups', () => {
 
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 		expect(mocks.validateAssignableUserGroupIds).toHaveBeenCalledWith('project-id', ['analysts', 'finance']);
-		expect(mocks.addProjectMemberWithUserGroups).toHaveBeenCalledWith(
+		expect(mocks.addProjectMember).toHaveBeenCalledWith(
 			{
 				userId: 'added-user-id',
 				projectId: 'project-id',
@@ -161,7 +156,6 @@ describe('add user to project groups', () => {
 			},
 			['analysts', 'finance'],
 		);
-		expect(mocks.addProjectMember).not.toHaveBeenCalled();
 	});
 });
 
