@@ -89,7 +89,7 @@ import { TrpcRouter, trpcRouter } from './trpc/router';
 import { createContext } from './trpc/trpc';
 import { BudgetExceededError, HandlerError, ManagedCreditsExhaustedError } from './utils/error';
 import { closeBrowser } from './utils/headless-browser';
-import { logger } from './utils/logger';
+import { describeError, logger } from './utils/logger';
 import { drainInFlightRequests, isDraining, trackInFlightRequests } from './utils/request-drain';
 import { FRONTEND_DEV_ORIGIN, staticRoot } from './utils/static-root';
 
@@ -127,12 +127,11 @@ trackInFlightRequests(app);
 
 // Map HandlerError to HTTP status code
 app.setErrorHandler((error, request, reply) => {
-	const message = error instanceof Error ? error.message : String(error);
 	const statusCode =
 		typeof (error as Record<string, unknown>).statusCode === 'number'
 			? (error as Record<string, unknown>).statusCode
 			: undefined;
-	logger.error(message, {
+	logger.error(describeError(error), {
 		source: 'http',
 		context: { method: request.method, url: request.url, statusCode },
 	});
@@ -185,7 +184,7 @@ app.register(fastifyTRPCPlugin, {
 		router: trpcRouter,
 		createContext,
 		onError({ path, error }) {
-			logger.error(`tRPC error on ${path}: ${error.message}`, {
+			logger.error(`tRPC error on ${path}: ${describeError(error)}`, {
 				source: 'http',
 				context: { path, code: error.code },
 			});
