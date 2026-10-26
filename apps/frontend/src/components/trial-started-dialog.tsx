@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { formatMicroUsd } from '@nao/shared/billing';
 import type { CSSProperties } from 'react';
 
 import { NyanCat } from '@/components/icons/nyan-cat';
@@ -194,12 +195,11 @@ function prefersReducedMotion(): boolean {
 
 function formatCreditAmount(amountMicroUsd: number, finalAmountMicroUsd: number): string {
 	const showCents = finalAmountMicroUsd % 1_000_000 !== 0;
-	return new Intl.NumberFormat('en-US', {
-		style: 'currency',
-		currency: 'USD',
+	return formatMicroUsd(amountMicroUsd, {
+		locale: 'en-US',
 		minimumFractionDigits: showCents ? 2 : 0,
 		maximumFractionDigits: showCents ? 2 : 0,
-	}).format(amountMicroUsd / 1_000_000);
+	});
 }
 
 function getSeenSetupCreditGrantIds(): string[] {

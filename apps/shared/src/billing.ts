@@ -23,6 +23,19 @@ export const CREDIT_TOP_UP_MIN_CENTS = 2_000;
 export const CREDIT_TOP_UP_MAX_CENTS = 50_000;
 export const CREDIT_TOP_UP_PLATFORM_FEE_BASIS_POINTS = 500;
 
+export function formatMicroUsd(
+	microUsd: number,
+	{ locale, ...options }: Intl.NumberFormatOptions & { locale?: string | string[] } = {},
+): string {
+	return new Intl.NumberFormat(locale, {
+		style: 'currency',
+		currency: 'USD',
+		minimumFractionDigits: 2,
+		maximumFractionDigits: 2,
+		...options,
+	}).format(microUsd / 1_000_000);
+}
+
 export function calculateCreditTopUp(creditAmountCents: number): {
 	creditAmountCents: number;
 	platformFeeCents: number;

@@ -10,7 +10,7 @@ import { getProjectAvailableModels, resolveProviderModel } from '../src/utils/ll
 const mocks = vi.hoisted(() => ({
 	getProjectById: vi.fn(),
 	getProjectLlmConfigs: vi.fn(),
-	getCreditSummary: vi.fn(),
+	getCreditBalance: vi.fn(),
 }));
 
 vi.mock('../src/queries/project.queries', () => ({
@@ -23,7 +23,7 @@ vi.mock('../src/queries/project-llm-config.queries', () => ({
 }));
 
 vi.mock('../src/queries/credit-wallet.queries', () => ({
-	getCreditSummary: mocks.getCreditSummary,
+	getCreditBalance: mocks.getCreditBalance,
 }));
 
 vi.mock('../src/utils/logger', () => ({
@@ -56,7 +56,7 @@ describe('getProjectAvailableModels', () => {
 		__reloadEnvForTesting();
 		vi.clearAllMocks();
 		mocks.getProjectLlmConfigs.mockResolvedValue([]);
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
+		mocks.getCreditBalance.mockResolvedValue(0);
 	});
 
 	afterEach(() => {
@@ -70,14 +70,14 @@ describe('getProjectAvailableModels', () => {
 	it('keeps the curated nao models available after BYOK is configured', async () => {
 		enableManagedAi();
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 480_000 });
+		mocks.getCreditBalance.mockResolvedValue(480_000);
 
 		const managed = await getProjectAvailableModels('project-1');
 		expect(managed.map(({ provider, modelId }) => ({ provider, modelId }))).toEqual([
 			{ provider: 'nao', modelId: 'gpt-6-luna' },
 			{ provider: 'nao', modelId: 'gpt-6-sol' },
 		]);
-		expect(mocks.getCreditSummary).toHaveBeenCalledWith('org-1');
+		expect(mocks.getCreditBalance).toHaveBeenCalledWith('org-1');
 		await expect(
 			resolveProviderModel('project-1', 'nao', 'gpt-6-luna', true, {
 				userId: 'user-1',
@@ -130,7 +130,7 @@ describe('getProjectAvailableModels', () => {
 	it('hides managed models when the wallet has no credits', async () => {
 		enableManagedAi();
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 0 });
+		mocks.getCreditBalance.mockResolvedValue(0);
 
 		const models = await getProjectAvailableModels('project-1');
 
@@ -141,7 +141,7 @@ describe('getProjectAvailableModels', () => {
 		enableManagedAi();
 		process.env.OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:8000/v1';
 		mocks.getProjectById.mockResolvedValue({ id: 'project-1', orgId: 'org-1', path: null, envVars: {} });
-		mocks.getCreditSummary.mockResolvedValue({ balanceMicroUsd: 19_200 });
+		mocks.getCreditBalance.mockResolvedValue(19_200);
 
 		const models = await getProjectAvailableModels('project-1');
 

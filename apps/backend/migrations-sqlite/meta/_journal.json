@@ -631,6 +631,13 @@
       "when": 1793009162861,
       "tag": "0089_example_chat_allowance",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "6",
+      "when": 1793020743726,
+      "tag": "0090_managed_ai_credit_ledger_fields",
+      "breakpoints": true
     }
   ]
 }

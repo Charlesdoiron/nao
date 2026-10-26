@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { PROVIDER_META } from '@nao/backend/provider-meta';
+import { formatMicroUsd } from '@nao/shared/billing';
 import { providerLabel, providerLabels } from '@nao/shared/types';
 import { useQuery } from '@tanstack/react-query';
 import { ProviderCard } from './llm-provider-card';
@@ -83,7 +84,7 @@ export function LlmProvidersSection({ isAdmin, providerToEdit, onProviderToEditO
 					enabledModels={managedModelIds}
 					status={
 						managedCreditSummary.data
-							? `Remaining credits: $${(managedCreditSummary.data.balanceMicroUsd / 1_000_000).toFixed(2)} of $${(managedCreditSummary.data.lifetimeCreditedMicroUsd / 1_000_000).toFixed(2)}.`
+							? `Remaining credits: ${formatMicroUsd(managedCreditSummary.data.balanceMicroUsd)} of ${formatMicroUsd(managedCreditSummary.data.lifetimeCreditedMicroUsd)}.`
 							: managedCreditStatus.data.hasCredits
 								? 'Credits available.'
 								: 'No credits remaining.'

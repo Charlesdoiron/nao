@@ -1,6 +1,6 @@
 import type { MemberStatus } from '@nao/shared/types';
 import crypto from 'crypto';
-import { and, count, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import s, { NewAccount, NewUser, User } from '../db/abstractSchema';
 import { db } from '../db/db';
@@ -22,7 +22,7 @@ export const hasUserSession = async (userId: string): Promise<boolean> => {
 	const [session] = await db
 		.select({ id: s.session.id })
 		.from(s.session)
-		.where(eq(s.session.userId, userId))
+		.where(and(eq(s.session.userId, userId), gt(s.session.expiresAt, new Date())))
 		.limit(1)
 		.execute();
 	return Boolean(session);

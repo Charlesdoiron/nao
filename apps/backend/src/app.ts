@@ -80,6 +80,7 @@ import { teamsRoutes } from './routes/teams';
 import { telegramRoutes } from './routes/telegram';
 import { testRoutes } from './routes/test';
 import { whatsappRoutes } from './routes/whatsapp';
+import { reconcileOrganizationSetupGrants } from './services/credit-grant.service';
 import { validateCreditTopUpConfiguration } from './services/credit-top-up.service';
 import { discordService } from './services/discord';
 import { ensureSystemExampleProject } from './services/example-project';
@@ -470,6 +471,7 @@ export const startServer = async (opts: { port: number; host: string }) => {
 		await ensureOrganizationSetup();
 	}
 	await logLicenseStatus();
+	void reconcileOrganizationSetupGrants();
 
 	void runLogCleanup().catch((err) => {
 		logger.error(`Log cleanup failed: ${err instanceof Error ? err.message : String(err)}`, { source: 'system' });

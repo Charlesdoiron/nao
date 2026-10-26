@@ -298,6 +298,33 @@ describe('automatic credit grants', () => {
 		expect((await getCreditSummary('invited-org')).balanceMicroUsd).toBe(25_000_000);
 	});
 
+	it('does not activate a provisioned project member with an expired session', async () => {
+		await insertReadyFundedOrganization('expired-session-org', 'expired-session-project');
+		await db.insert(s.user).values({
+			id: 'expired-session-user',
+			name: 'Expired Session User',
+			email: 'expired-session@example.com',
+			requiresPasswordReset: true,
+		});
+		await db.insert(s.projectMember).values({
+			projectId: 'expired-session-project',
+			userId: 'expired-session-user',
+			role: 'user',
+		});
+		await db.insert(s.session).values({
+			id: 'expired-session',
+			token: 'expired-session-token',
+			userId: 'expired-session-user',
+			expiresAt: new Date(Date.now() - 60_000),
+			updatedAt: new Date(),
+		});
+
+		await recordProjectJoinCandidate('expired-session-project', 'expired-session-user');
+
+		expect(await getCreditGrant('user_join', 'expired-session-user')).toBeNull();
+		expect((await getCreditSummary('expired-session-org')).balanceMicroUsd).toBe(20_000_000);
+	});
+
 	it('rechecks activity after recording a pending join candidate', async () => {
 		await insertReadyFundedOrganization('concurrent-org', 'concurrent-project');
 		await db.insert(s.user).values({
@@ -324,29 +351,34 @@ describe('automatic credit grants', () => {
 		expect(await getCreditGrant('user_join', 'concurrent-user')).toEqual({ orgId: 'concurrent-org' });
 	});
 
-	it('reconciles activated join candidates from the lifecycle sweep', async () => {
+	it('reconciles activated join candidates in checkpointed batches', async () => {
 		await insertReadyFundedOrganization('lifecycle-org', 'lifecycle-project');
-		await db.insert(s.user).values({
-			id: 'lifecycle-user',
-			name: 'Lifecycle User',
-			email: 'lifecycle@example.com',
-		});
-		await db.insert(s.orgMember).values({
-			orgId: 'lifecycle-org',
-			userId: 'lifecycle-user',
-			role: 'user',
-		});
-		await db.insert(s.creditGrantCandidate).values({
-			grantType: 'user_join',
-			orgId: 'lifecycle-org',
-			userId: 'lifecycle-user',
-			sourceKey: 'org-member:lifecycle-org:lifecycle-user',
-			activatedAt: new Date(),
-		});
+		const sweepStartedAt = new Date();
+		const candidateCreatedAt = new Date(sweepStartedAt.getTime() + 1_000);
+		for (const userId of ['000-lifecycle-user-1', '000-lifecycle-user-2']) {
+			await db.insert(s.user).values({ id: userId, name: userId, email: `${userId}@example.com` });
+			await db.insert(s.orgMember).values({ orgId: 'lifecycle-org', userId, role: 'user' });
+			await db.insert(s.creditGrantCandidate).values({
+				grantType: 'user_join',
+				orgId: 'lifecycle-org',
+				userId,
+				sourceKey: `org-member:lifecycle-org:${userId}`,
+				activatedAt: new Date(),
+				createdAt: candidateCreatedAt,
+			});
+		}
 
-		await reconcileCreditGrants();
+		const cursor = await reconcileCreditGrants(
+			{ userJoinCandidate: { createdAt: sweepStartedAt.toISOString(), id: '' } },
+			1,
+		);
 
-		expect(await getCreditGrant('user_join', 'lifecycle-user')).toEqual({ orgId: 'lifecycle-org' });
+		expect(await getCreditGrant('user_join', '000-lifecycle-user-1')).toEqual({ orgId: 'lifecycle-org' });
+		expect(await getCreditGrant('user_join', '000-lifecycle-user-2')).toBeNull();
+
+		await reconcileCreditGrants(cursor, 1);
+
+		expect(await getCreditGrant('user_join', '000-lifecycle-user-2')).toEqual({ orgId: 'lifecycle-org' });
 	});
 
 	it('reads the current database policy without changing earlier gifts', async () => {

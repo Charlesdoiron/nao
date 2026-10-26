@@ -2554,13 +2554,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "max_grants_per_org": {
-          "name": "max_grants_per_org",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "enabled": {
           "name": "enabled",
           "type": "integer",
@@ -2659,20 +2652,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "grant_type": {
-          "name": "grant_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "purchase_payment_intent_id": {
-          "name": "purchase_payment_intent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "metadata": {
           "name": "metadata",
           "type": "text",
@@ -2712,21 +2691,6 @@
             "id"
           ],
           "isUnique": false
-        },
-        "credit_ledger_walletId_grantType_idx": {
-          "name": "credit_ledger_walletId_grantType_idx",
-          "columns": [
-            "wallet_id",
-            "grant_type"
-          ],
-          "isUnique": false
-        },
-        "credit_ledger_purchasePaymentIntentId_idx": {
-          "name": "credit_ledger_purchasePaymentIntentId_idx",
-          "columns": [
-            "purchase_payment_intent_id"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -2754,19 +2718,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "credit_ledger_grant_type_credit_grant_policy_grant_type_fk": {
-          "name": "credit_ledger_grant_type_credit_grant_policy_grant_type_fk",
-          "tableFrom": "credit_ledger",
-          "tableTo": "credit_grant_policy",
-          "columnsFrom": [
-            "grant_type"
-          ],
-          "columnsTo": [
-            "grant_type"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

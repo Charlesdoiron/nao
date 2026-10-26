@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowUpRight } from 'lucide-react';
-import { calculateCreditTopUp, CREDIT_TOP_UP_MAX_CENTS, CREDIT_TOP_UP_MIN_CENTS } from '@nao/shared/billing';
+import {
+	calculateCreditTopUp,
+	CREDIT_TOP_UP_MAX_CENTS,
+	CREDIT_TOP_UP_MIN_CENTS,
+	formatMicroUsd,
+} from '@nao/shared/billing';
 import type { inferRouterOutputs } from '@trpc/server';
 
 import type { TrpcRouter } from '@nao/backend/trpc';
@@ -176,7 +181,7 @@ function CreditHistoryContent() {
 										{formatSignedUsd(entry.deltaMicroUsd)}
 									</td>
 									<td className='py-2 text-right font-mono'>
-										{formatUsd(entry.balanceAfterMicroUsd)}
+										{formatMicroUsd(entry.balanceAfterMicroUsd)}
 									</td>
 								</tr>
 							);
@@ -388,7 +393,7 @@ function UsageRun({ run, canViewReplay }: { run: UsageRunData; canViewReplay: bo
 				</div>
 				<div className='font-mono'>{formatTokens(summary.totalTokens)} tokens</div>
 				<div className='text-right font-mono'>
-					{summary.charge > 0 ? formatUsd(summary.charge) : summary.cost}
+					{summary.charge > 0 ? formatMicroUsd(summary.charge) : summary.cost}
 				</div>
 			</summary>
 			<div className='border-t border-border p-3'>
@@ -434,7 +439,7 @@ function UsageRun({ run, canViewReplay }: { run: UsageRunData; canViewReplay: bo
 									<td className='py-2 text-right font-mono'>
 										{event.upstreamCostMicroUsd === null
 											? 'Unknown'
-											: formatUsd(event.upstreamCostMicroUsd)}
+											: formatMicroUsd(event.upstreamCostMicroUsd)}
 									</td>
 								</tr>
 							))}
@@ -460,9 +465,9 @@ function summarizeRun(run: UsageRunData) {
 		totalTokens: events.reduce((total, event) => total + (event.totalTokens ?? 0), 0),
 		cost:
 			knownCosts.length === events.length
-				? formatUsd(knownCost)
+				? formatMicroUsd(knownCost)
 				: knownCosts.length > 0
-					? `${formatUsd(knownCost)}+`
+					? `${formatMicroUsd(knownCost)}+`
 					: 'Unknown',
 		charge: events.reduce((total, event) => total + event.customerChargeMicroUsd, 0),
 		status: summarizeRunStatus(events),
@@ -491,7 +496,7 @@ function CreditMetric({ label, value }: { label: string; value: number }) {
 	return (
 		<div className='rounded-md border border-border p-3'>
 			<div className='text-xs text-muted-foreground'>{label}</div>
-			<div className='text-lg font-semibold'>{formatUsd(value)}</div>
+			<div className='text-lg font-semibold'>{formatMicroUsd(value)}</div>
 		</div>
 	);
 }
@@ -634,22 +639,14 @@ function formatUsdCents(cents: number): string {
 }
 
 function formatGiftUsd(microUsd: number): string {
-	return new Intl.NumberFormat(undefined, {
-		style: 'currency',
-		currency: 'USD',
+	return formatMicroUsd(microUsd, {
 		minimumFractionDigits: 0,
 		maximumFractionDigits: 2,
-	}).format(microUsd / 1_000_000);
-}
-
-function formatUsd(microUsd: number): string {
-	return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(
-		microUsd / 1_000_000,
-	);
+	});
 }
 
 function formatSignedUsd(microUsd: number): string {
-	return `${microUsd > 0 ? '+' : ''}${formatUsd(microUsd)}`;
+	return formatMicroUsd(microUsd, { signDisplay: 'exceptZero' });
 }
 
 function formatTokens(tokens: number): string {

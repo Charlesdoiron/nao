@@ -4,9 +4,20 @@ import {
 	calculateCreditTopUp,
 	CREDIT_TOP_UP_MAX_CENTS,
 	CREDIT_TOP_UP_MIN_CENTS,
+	formatMicroUsd,
 	isTerminalBillingStatus,
 	isTrialAvailable,
 } from './billing';
+
+describe('micro USD formatting', () => {
+	it.each([
+		[1_234_567, {}, '$1.23'],
+		[20_000_000, { minimumFractionDigits: 0, maximumFractionDigits: 2 }, '$20'],
+		[20_500_000, { minimumFractionDigits: 0, maximumFractionDigits: 2 }, '$20.5'],
+	])('formats %i micro USD', (microUsd, options, expected) => {
+		expect(formatMicroUsd(microUsd, { locale: 'en-US', ...options })).toBe(expected);
+	});
+});
 
 describe('credit top-up pricing', () => {
 	it.each([

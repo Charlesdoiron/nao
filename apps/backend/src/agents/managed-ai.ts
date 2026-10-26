@@ -189,7 +189,7 @@ function meterStream(
 	};
 	const estimatedUsage = () => estimateUsage(options.params, streamedChars);
 	const recordAbort = () => {
-		void recordOnce('aborted', estimatedUsage()).catch((error) => {
+		recording = recordOnce('aborted', estimatedUsage()).catch((error) => {
 			logger.error(`Failed to record aborted managed AI stream: ${String(error)}`, {
 				source: 'agent',
 				projectId: options.context.projectId,
@@ -234,11 +234,7 @@ function meterStream(
 			}
 		},
 		async cancel(reason) {
-			try {
-				await recordOnce('aborted', estimatedUsage());
-			} finally {
-				await reader.cancel(reason);
-			}
+			await Promise.all([reader.cancel(reason), recordOnce('aborted', estimatedUsage())]);
 		},
 	});
 }

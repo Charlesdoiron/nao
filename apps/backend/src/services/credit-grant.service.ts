@@ -10,6 +10,16 @@ import { issueCreditGrant } from './credit-wallet.service';
 import { assessProjectReadiness } from './project-readiness.service';
 import { getProjectRuntimeEnvVars } from './project-runtime-env';
 
+export interface CreditGrantReconciliationCursor {
+	organizationSetupCandidate?: ReconciliationCandidateCursor;
+	userJoinCandidate?: ReconciliationCandidateCursor;
+}
+
+export interface ReconciliationCandidateCursor {
+	createdAt: string;
+	id: string;
+}
+
 export async function recordOrganizationSetupCandidate(projectId: string): Promise<void> {
 	await runBestEffort('record organization setup candidate', { projectId }, () =>
 		recordOrganizationSetupCandidateUnsafe(projectId),
@@ -26,14 +36,30 @@ export async function reconcileOrganizationSetupGrants(): Promise<void> {
 	await runBestEffort('reconcile organization setup grants', {}, reconcileOrganizationSetupGrantsUnsafe);
 }
 
-export async function reconcileCreditGrants(): Promise<void> {
-	await reconcileOrganizationSetupGrants();
+export async function reconcileCreditGrants(
+	cursor: CreditGrantReconciliationCursor,
+	limit: number,
+): Promise<CreditGrantReconciliationCursor> {
+	if (!isCloud) {
+		return cursor;
+	}
+	const organizationSetupCandidate = await reconcileOrganizationSetupGrantBatch(
+		cursor.organizationSetupCandidate,
+		limit,
+	);
+	let userJoinCandidate = cursor.userJoinCandidate;
 	await runBestEffort('reconcile user join grants', {}, async () => {
-		const userIds = await creditGrantQueries.listActivatedUserJoinCandidateUserIds();
+		const candidates = await creditGrantQueries.listActivatedUserJoinCandidateBatch({
+			after: toQueryCursor(cursor.userJoinCandidate),
+			limit,
+		});
+		const userIds = new Set(candidates.flatMap(({ userId }) => (userId ? [userId] : [])));
 		for (const userId of userIds) {
 			await reconcileUserJoinGrant(userId);
 		}
+		userJoinCandidate = candidates.length === limit ? toReconciliationCursor(candidates.at(-1)) : undefined;
 	});
+	return { organizationSetupCandidate, userJoinCandidate };
 }
 
 async function reconcileOrganizationSetupGrantsUnsafe(): Promise<void> {
@@ -41,6 +67,28 @@ async function reconcileOrganizationSetupGrantsUnsafe(): Promise<void> {
 		return;
 	}
 	const candidates = await creditGrantQueries.listPendingOrganizationSetupCandidates();
+	await reconcileOrganizationSetupCandidates(candidates);
+}
+
+async function reconcileOrganizationSetupGrantBatch(
+	after: ReconciliationCandidateCursor | undefined,
+	limit: number,
+): Promise<ReconciliationCandidateCursor | undefined> {
+	let nextCursor = after;
+	await runBestEffort('reconcile organization setup grants', {}, async () => {
+		const candidates = await creditGrantQueries.listPendingOrganizationSetupCandidates({
+			after: toQueryCursor(after),
+			limit,
+		});
+		await reconcileOrganizationSetupCandidates(candidates);
+		nextCursor = candidates.length === limit ? toReconciliationCursor(candidates.at(-1)) : undefined;
+	});
+	return nextCursor;
+}
+
+async function reconcileOrganizationSetupCandidates(
+	candidates: Array<{ orgId: string | null; projectId: string | null }>,
+): Promise<void> {
 	const projectIdsByOrganization = new Map<string, string[]>();
 	for (const { orgId, projectId } of candidates) {
 		if (orgId && projectId) {
@@ -247,6 +295,18 @@ async function isUserActive(userId: string): Promise<boolean> {
 		userQueries.hasUserSession(userId),
 	]);
 	return !!user && (!user.requiresPasswordReset || hasSession);
+}
+
+function toQueryCursor(
+	cursor: ReconciliationCandidateCursor | undefined,
+): creditGrantQueries.CreditGrantCandidateCursor | undefined {
+	return cursor ? { createdAt: new Date(cursor.createdAt), id: cursor.id } : undefined;
+}
+
+function toReconciliationCursor(
+	candidate: { createdAt: Date; id: string } | undefined,
+): ReconciliationCandidateCursor | undefined {
+	return candidate ? { createdAt: candidate.createdAt.toISOString(), id: candidate.id } : undefined;
 }
 
 async function runBestEffort(

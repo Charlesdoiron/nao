@@ -105,6 +105,7 @@ describe('add user to project groups', () => {
 			{ userId: 'added-user-id', projectId: 'project-id', role: expect.any(String) },
 			[],
 		);
+		expect(mocks.addProjectMember).toHaveBeenCalledOnce();
 	});
 
 	it('adds a user with selected groups without unlimited entitlement', async () => {
@@ -119,6 +120,7 @@ describe('add user to project groups', () => {
 			{ userId: 'added-user-id', projectId: 'project-id', role: expect.any(String) },
 			['analysts'],
 		);
+		expect(mocks.addProjectMember).toHaveBeenCalledOnce();
 		expect(mocks.hasFeature).not.toHaveBeenCalled();
 	});
 

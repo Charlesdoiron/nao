@@ -25,6 +25,7 @@ import { listManagedAiUsage } from '../src/queries/managed-ai-usage.queries';
 import { listProjectChats } from '../src/queries/project.queries';
 import * as creditWalletService from '../src/services/credit-wallet.service';
 import { ManagedCreditsExhaustedError } from '../src/utils/error';
+import { logger } from '../src/utils/logger';
 
 const {
 	issueCreditGrant,
@@ -454,6 +455,7 @@ describe('managed AI usage and organization credits', () => {
 
 	it('records an estimated charge when a stream is aborted', async () => {
 		const controller = new AbortController();
+		const runId = crypto.randomUUID();
 		const model = withManagedAiUsageMetering(
 			createModel(undefined, [
 				{ type: 'text-delta', id: 'text-1', delta: 'done' },
@@ -461,7 +463,7 @@ describe('managed AI usage and organization credits', () => {
 			]),
 			'nao',
 			'gpt-6-luna',
-			{ userId: MANAGED_USER_ID, orgId: ORG_ID, category: 'chat' },
+			{ userId: MANAGED_USER_ID, orgId: ORG_ID, runId, category: 'chat' },
 		);
 		const { stream } = await model.doStream({
 			prompt: [{ role: 'user', content: [{ type: 'text', text: 'x'.repeat(4_000) }] }],
@@ -474,12 +476,39 @@ describe('managed AI usage and organization credits', () => {
 		await reader.cancel();
 
 		await vi.waitFor(async () => {
-			const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'aborted'));
-			expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 2 });
+			const rows = await db
+				.select()
+				.from(s.managedAiUsage)
+				.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'aborted')));
+			expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated', outputTotalTokens: 2 })]);
 		});
 	});
 
+	it('does not propagate abort settlement failures through stream cancellation', async () => {
+		const settlementError = new Error('wallet settlement failed');
+		vi.spyOn(creditWalletService, 'recordManagedAiUsageAndChargeWallet').mockRejectedValueOnce(settlementError);
+		const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+		const controller = new AbortController();
+		const model = withManagedAiUsageMetering(
+			createModel(undefined, [{ type: 'text-delta', id: 'text-1', delta: 'done' }]),
+			'nao',
+			'gpt-6-luna',
+			{ userId: MANAGED_USER_ID, orgId: ORG_ID, category: 'chat' },
+		);
+		const { stream } = await model.doStream({
+			abortSignal: controller.signal,
+		} as LanguageModelV3CallOptions);
+		const reader = stream.getReader();
+		await reader.read();
+
+		controller.abort();
+
+		await expect(reader.cancel()).resolves.toBeUndefined();
+		expect(logError).toHaveBeenCalledOnce();
+	});
+
 	it('records a failed stream that closes without a finish chunk', async () => {
+		const runId = crypto.randomUUID();
 		const sourceModel = createModel();
 		sourceModel.doStream = async () => ({
 			stream: new ReadableStream<LanguageModelV3StreamPart>({
@@ -492,18 +521,23 @@ describe('managed AI usage and organization credits', () => {
 		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
 			userId: MANAGED_USER_ID,
 			orgId: ORG_ID,
+			runId,
 			category: 'chat',
 		});
 
 		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
 		await consume(stream);
 
-		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'failed'));
-		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+		const rows = await db
+			.select()
+			.from(s.managedAiUsage)
+			.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'failed')));
+		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated', outputTotalTokens: 1 })]);
 	});
 
 	it('records a failed stream when its source throws', async () => {
 		const providerError = new Error('stream failed');
+		const runId = crypto.randomUUID();
 		const sourceModel = createModel();
 		let sent = false;
 		sourceModel.doStream = async () => ({
@@ -521,18 +555,30 @@ describe('managed AI usage and organization credits', () => {
 		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
 			userId: MANAGED_USER_ID,
 			orgId: ORG_ID,
+			runId,
 			category: 'chat',
 		});
 
 		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
 		await expect(consume(stream)).rejects.toBe(providerError);
 
-		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'failed'));
-		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+		const rows = await db
+			.select()
+			.from(s.managedAiUsage)
+			.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'failed')));
+		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated', outputTotalTokens: 1 })]);
 	});
 
 	it('records an aborted stream when its consumer cancels without an abort signal', async () => {
 		const cancelSource = vi.fn();
+		const settlement = Promise.withResolvers<void>();
+		const settleUsage = vi
+			.spyOn(creditWalletService, 'recordManagedAiUsageAndChargeWallet')
+			.mockImplementationOnce(async (...args) => {
+				await settlement.promise;
+				return recordManagedAiUsageAndChargeWallet(...args);
+			});
+		const runId = crypto.randomUUID();
 		const sourceModel = createModel();
 		sourceModel.doStream = async () => ({
 			stream: new ReadableStream<LanguageModelV3StreamPart>({
@@ -545,28 +591,42 @@ describe('managed AI usage and organization credits', () => {
 		const model = withManagedAiUsageMetering(sourceModel, 'nao', 'gpt-6-luna', {
 			userId: MANAGED_USER_ID,
 			orgId: ORG_ID,
+			runId,
 			category: 'chat',
 		});
 
 		const { stream } = await model.doStream({} as LanguageModelV3CallOptions);
 		const reader = stream.getReader();
 		await reader.read();
-		await reader.cancel('consumer stopped');
+		const cancellation = reader.cancel('consumer stopped');
+		try {
+			await vi.waitFor(() => {
+				expect(settleUsage).toHaveBeenCalledOnce();
+			});
+			expect(cancelSource).toHaveBeenCalledWith('consumer stopped');
+		} finally {
+			settlement.resolve();
+			await cancellation;
+		}
 
-		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'aborted'));
-		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated', outputTotalTokens: 1 });
+		const rows = await db
+			.select()
+			.from(s.managedAiUsage)
+			.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'aborted')));
+		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated', outputTotalTokens: 1 })]);
 		expect(cancelSource).toHaveBeenCalledWith('consumer stopped');
 	});
 
 	it('records failed provider calls without replacing the provider error', async () => {
 		const providerError = new Error('provider unavailable');
+		const runId = crypto.randomUUID();
 		const model = withManagedAiUsageMetering(
 			createModel(async () => {
 				throw providerError;
 			}),
 			'nao',
 			'gpt-6-luna',
-			{ userId: MANAGED_USER_ID, orgId: ORG_ID, category: 'chat' },
+			{ userId: MANAGED_USER_ID, orgId: ORG_ID, runId, category: 'chat' },
 		);
 
 		await expect(
@@ -574,8 +634,11 @@ describe('managed AI usage and organization credits', () => {
 				prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
 			} as LanguageModelV3CallOptions),
 		).rejects.toBe(providerError);
-		const rows = await db.select().from(s.managedAiUsage).where(eq(s.managedAiUsage.status, 'failed'));
-		expect(rows.at(-1)).toMatchObject({ costSource: 'estimated' });
+		const rows = await db
+			.select()
+			.from(s.managedAiUsage)
+			.where(and(eq(s.managedAiUsage.runId, runId), eq(s.managedAiUsage.status, 'failed')));
+		expect(rows).toEqual([expect.objectContaining({ costSource: 'estimated' })]);
 	});
 
 	it('blocks an exhausted wallet before calling the provider', async () => {
@@ -686,6 +749,10 @@ describe('managed AI usage and organization credits', () => {
 				entryType: 'adjustment',
 			}),
 		).toBe(true);
+		await db
+			.update(s.creditLedger)
+			.set({ purchasePaymentIntentId: null })
+			.where(eq(s.creditLedger.idempotencyKey, 'dispute:dp_purchase:needs_response'));
 		expect(
 			await setCreditPurchaseMovement({
 				paymentIntentId,

@@ -53,6 +53,24 @@ describe('useCreditTopUp', () => {
 		vi.useRealTimers();
 	});
 
+	it('stops polling after 15 seconds despite pending confirmation updates', () => {
+		const { result, rerender } = renderHook(() => useCreditTopUp('cs_test'));
+
+		act(() => vi.advanceTimersByTime(5_000));
+		act(() => {
+			mocks.statusData = { credited: false };
+			rerender();
+		});
+		act(() => vi.advanceTimersByTime(5_000));
+		act(() => {
+			mocks.statusData = undefined;
+			rerender();
+		});
+		act(() => vi.advanceTimersByTime(5_000));
+
+		expect(result.current.showRetry).toBe(true);
+	});
+
 	it('refreshes wallet data when confirmation arrives after polling times out', () => {
 		const { result, rerender } = renderHook(() => useCreditTopUp('cs_test'));
 

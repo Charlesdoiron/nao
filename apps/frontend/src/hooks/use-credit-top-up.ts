@@ -28,7 +28,7 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 	}, [checkoutSessionId, resetConfirmation]);
 
 	useEffect(() => {
-		if (!checkoutSessionId || !isPolling || confirmationData?.credited) {
+		if (!checkoutSessionId || !isPolling) {
 			return;
 		}
 		let timeout: number | undefined;
@@ -48,7 +48,7 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 				window.clearTimeout(timeout);
 			}
 		};
-	}, [checkoutSessionId, confirmationData?.credited, confirmTopUp, isPolling]);
+	}, [checkoutSessionId, confirmTopUp, isPolling]);
 
 	useEffect(() => {
 		if (!confirmationData?.credited) {
@@ -67,12 +67,12 @@ export function useCreditTopUp(creditCheckout: string | undefined) {
 	}, [confirmationData?.credited, queryClient]);
 
 	useEffect(() => {
-		if (!isPolling || confirmationData?.credited) {
+		if (!isPolling) {
 			return;
 		}
 		const timeout = window.setTimeout(() => setIsPolling(false), CONFIRMATION_TIMEOUT_MS);
 		return () => window.clearTimeout(timeout);
-	}, [checkoutSessionId, confirmationData?.credited, isPolling]);
+	}, [checkoutSessionId, isPolling]);
 
 	const feedback =
 		creditCheckout === 'canceled'

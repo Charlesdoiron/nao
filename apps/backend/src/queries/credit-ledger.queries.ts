@@ -206,8 +206,9 @@ function setSqliteCreditPurchaseMovement(transaction: DBTransaction, input: Cred
 	const linkedEntries = transaction
 		.select()
 		.from(s.creditLedger)
-		.where(eq(s.creditLedger.purchasePaymentIntentId, input.paymentIntentId))
-		.all();
+		.where(eq(s.creditLedger.walletId, wallet.id))
+		.all()
+		.filter((entry) => isCreditPurchaseMovementFor(entry, input.paymentIntentId));
 	const deltaMicroUsd = calculatePurchaseMovementDelta(
 		purchase.deltaMicroUsd,
 		linkedEntries,
@@ -236,11 +237,11 @@ async function setPostgresCreditPurchaseMovement(
 	const linkedEntries = await transaction
 		.select()
 		.from(s.creditLedger)
-		.where(eq(s.creditLedger.purchasePaymentIntentId, input.paymentIntentId))
+		.where(eq(s.creditLedger.walletId, wallet.id))
 		.execute();
 	const deltaMicroUsd = calculatePurchaseMovementDelta(
 		purchase.deltaMicroUsd,
-		linkedEntries,
+		linkedEntries.filter((entry) => isCreditPurchaseMovementFor(entry, input.paymentIntentId)),
 		input.movementGroupId,
 		input.targetDeltaMicroUsd,
 	);
@@ -780,6 +781,13 @@ function calculatePurchaseMovementDelta(
 	);
 	const currentAggregateDelta = linkedEntries.reduce((total, entry) => total + entry.deltaMicroUsd, 0);
 	return aggregateTargetDelta - currentAggregateDelta;
+}
+
+function isCreditPurchaseMovementFor(entry: DBCreditLedger, paymentIntentId: string): boolean {
+	return (
+		entry.purchasePaymentIntentId === paymentIntentId ||
+		(entry.purchasePaymentIntentId === null && entry.metadata?.purchasePaymentIntentId === paymentIntentId)
+	);
 }
 
 function validateGrantPolicy(amountMicroUsd: number, maxGrantsPerOrg: number | null, grantType: CreditGrantType): void {

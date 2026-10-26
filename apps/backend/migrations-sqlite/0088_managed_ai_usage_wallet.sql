@@ -20,15 +20,14 @@ CREATE INDEX `credit_grant_candidate_projectId_grantType_idx` ON `credit_grant_c
 CREATE TABLE `credit_grant_policy` (
 	`grant_type` text PRIMARY KEY NOT NULL,
 	`amount_micro_usd` integer NOT NULL,
-	`max_grants_per_org` integer,
 	`enabled` integer DEFAULT true NOT NULL,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `credit_grant_policy` (`grant_type`, `amount_micro_usd`, `max_grants_per_org`) VALUES
-	('organization_setup', 20000000, 1),
-	('user_join', 5000000, 100);
+INSERT INTO `credit_grant_policy` (`grant_type`, `amount_micro_usd`) VALUES
+	('organization_setup', 20000000),
+	('user_join', 5000000);
 --> statement-breakpoint
 INSERT OR IGNORE INTO `credit_grant_candidate` (
 	`id`,
@@ -112,20 +111,15 @@ CREATE TABLE `credit_ledger` (
 	`transaction_sequence` integer DEFAULT 0 NOT NULL,
 	`idempotency_key` text NOT NULL,
 	`external_reference` text,
-	`grant_type` text,
-	`purchase_payment_intent_id` text,
 	`metadata` text,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	FOREIGN KEY (`wallet_id`) REFERENCES `credit_wallet`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`usage_id`) REFERENCES `managed_ai_usage`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`grant_type`) REFERENCES `credit_grant_policy`(`grant_type`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`usage_id`) REFERENCES `managed_ai_usage`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `credit_ledger_usage_id_unique` ON `credit_ledger` (`usage_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `credit_ledger_idempotency_key_unique` ON `credit_ledger` (`idempotency_key`);--> statement-breakpoint
 CREATE INDEX `credit_ledger_walletId_createdAt_idx` ON `credit_ledger` (`wallet_id`,`created_at`,`id`);--> statement-breakpoint
-CREATE INDEX `credit_ledger_walletId_grantType_idx` ON `credit_ledger` (`wallet_id`,`grant_type`);--> statement-breakpoint
-CREATE INDEX `credit_ledger_purchasePaymentIntentId_idx` ON `credit_ledger` (`purchase_payment_intent_id`);--> statement-breakpoint
 CREATE TABLE `credit_wallet` (
 	`id` text PRIMARY KEY NOT NULL,
 	`org_id` text,
